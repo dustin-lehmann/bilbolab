@@ -110,6 +110,42 @@ core_utils_RegisterEntry<twipr_control_configuration_t, void> reg_get_ctrl_conf(
 		&twipr_firmware.control,
 		&TWIPR_ControlManager::getControlConfiguration);
 
+/* Leg Actuators */
+
+// SINGLE MOTORS
+// Enable / Disable Torque
+core_utils_RegisterEntry<void,dynamixel_bool_state_single_motor_t> regentry_function_actuators_set_torque_single_motor(&register_map, REG_ADDRESS_F_ACTUATORS_SET_TORQUE_SINGLE, &twipr_firmware.handler, &DynamixelHandler::set_torque_single_motor);
+// Send a ping to a motor
+core_utils_RegisterEntry<void,uint8_t> regentry_function_actuators_send_ping_single_motor(&register_map, REG_ADDRESS_F_ACTUATORS_SEND_PING_SINGLE, &twipr_firmware.handler, &DynamixelHandler::send_ping_single_motor);
+// Set LED single motor
+core_utils_RegisterEntry<void,dynamixel_bool_state_single_motor_t> regentry_function_actuators_set_led_single_motor(&register_map, REG_ADDRESS_F_ACTUATORS_SET_LED_SINGLE, &twipr_firmware.handler, &DynamixelHandler::set_led_single_motor);
+// Set position single motor
+core_utils_RegisterEntry<void,dynamixel_position_single_motor_t> regentry_function_actuators_set_position_single_motor(&register_map, REG_ADDRESS_F_ACTUATORS_SET_POSITION_SINGLE, &twipr_firmware.handler, &DynamixelHandler::send_position_single_motor);
+
+// get the current voltage
+core_utils_RegisterEntry<float,uint8_t> regentry_function_actuators_get_voltage_single_motor(&register_map, REG_ADDRESS_R_ACTUATORS_GET_VOLTAGE_SINGLE, &twipr_firmware.handler, &DynamixelHandler::get_voltage_single_motor);
+// get the current temperature
+core_utils_RegisterEntry<float,uint8_t> regentry_function_actuators_get_temperature_single_motor(&register_map, REG_ADDRESS_R_ACTUATORS_GET_TEMPERATURE_SINGLE, &twipr_firmware.handler, &DynamixelHandler::get_temperature_single_motor);
+
+// get the current goal position
+core_utils_RegisterEntry<uint32_t,uint8_t> regentry_function_actuators_get_goal_position_single_motor(&register_map, REG_ADDRESS_R_ACTUATORS_GET_GOAL_POSITION_SINGLE, &twipr_firmware.handler, &DynamixelHandler::get_goal_position_single_motor);
+// get the present position
+core_utils_RegisterEntry<uint32_t,uint8_t> regentry_function_actuators_get_present_position_single_motor(&register_map, REG_ADDRESS_R_ACTUATORS_GET_PRESENT_POSITION_SINGLE, &twipr_firmware.handler, &DynamixelHandler::get_present_position_single_motor);
+
+// ALL MOTORS
+// Enable / Disable Torque
+core_utils_RegisterEntry<void,bool> regentry_function_actuators_set_torque_all_motors(&register_map, REG_ADDRESS_F_ACTUATORS_SET_TORQUE_ALL, &twipr_firmware.handler, &DynamixelHandler::set_torque_all_motors);
+// Set LED all motors
+core_utils_RegisterEntry<void,bool> regentry_function_actuators_set_led_all_motors(&register_map, REG_ADDRESS_F_ACTUATORS_SET_LED_ALL, &twipr_firmware.handler, &DynamixelHandler::set_led_all_motors);
+// Set position all motors
+core_utils_RegisterEntry<void,uint32_t> regentry_function_actuators_set_position_all_motors(&register_map, REG_ADDRESS_F_ACTUATORS_SET_POSITION_ALL, &twipr_firmware.handler, &DynamixelHandler::send_position_all_motors);
+
+// get the current goal positions as array
+core_utils_RegisterEntry<void, uint32_t *> regentry_function_actuators_get_goal_position_all_motors(&register_map, REG_ADDRESS_R_ACTUATORS_GET_GOAL_POSITION_SINGLE, &twipr_firmware.handler, &DynamixelHandler::get_goal_position_all_motors);
+// get the present positions as array
+core_utils_RegisterEntry<void, uint32_t *> regentry_function_actuators_get_present_position_all_motors(&register_map, REG_ADDRESS_R_ACTUATORS_GET_PRESENT_POSITION_SINGLE, &twipr_firmware.handler, &DynamixelHandler::get_present_position_all_motors);
+
+
 /* Sequencer */
 
 /* Load Sequence Function Register Entry */
@@ -160,6 +196,9 @@ const osThreadAttr_t control_task_attributes = { .name = "control",
 elapsedMillis activityTimer;
 elapsedMillis infoTimer;
 
+// Initialize the pool where dynamixel internal requests are stored as memory pool
+osMemoryPoolId_t dynamixel_request_pool = osMemoryPoolNew(REQUEST_POOL_SIZE, sizeof(dynamixel_request_t), NULL);
+
 /**
  * @brief Initializes and starts the firmware task.
  *
@@ -181,6 +220,71 @@ void start_firmware_task(void *argument) {
 	// Start the helper task (core firmware loop)
 	firmware->helperTask();
 }
+
+/**
+ * @brief Task for testing the motors.
+ *
+ * This function initializes the motor control and enters a loop to set torque
+ * and LED states.
+ *
+ * @param argument Pointer to the firmware object.
+ */
+/*
+void mab_motors_test_task(void * argument){
+
+	TWIPR_Sequencer sequencer;
+	TWIPR_CommunicationManager comm;
+
+	// Communication module setup
+	twipr_communication_config_t twipr_comm_config = {
+			.huart = BOARD_CM4_UART,
+			.hspi = BOARD_SPI_CM4,
+			.sample_notification_gpio = core_utils_GPIO(CM4_SAMPLE_NOTIFICATION_PORT, CM4_SAMPLE_NOTIFICATION_PIN),
+			.sequence_rx_buffer = sequencer.rx_buffer,
+			.len_sequence_buffer = TWIPR_SEQUENCE_BUFFER_SIZE,
+			.reset_uart_exti = CM4_UART_RESET_EXTI,
+	};
+
+	comm.init(twipr_comm_config);
+	comm.start();
+
+
+
+	MabMotor_FDCAN motor1;
+
+	mab_motor_config_t mab_config = {
+			.can = &comm.can,
+			.drive_id = 99,
+			.can_watchdog_timeout = 300,
+			.torque_limit = 0.3,
+			.velocity_limit = 100
+	};
+
+	motor1.init(mab_config);
+
+	motor1.start(MAB_MOTOR_MODE_RAW_TORQUE);
+	osDelay(300);
+	//motor1.setMode(MAB_MOTOR_MODE_IMPEDANCE);
+	osDelay(300);
+	//motor1.setTorque(0.01f);
+
+	while(true){
+		osDelay(100);
+		motor1.setTorque(0.1f);
+ 		osDelay(100);
+		motor1.setLEDBlink(1);
+		osDelay(500);
+		motor1.setTorque(0.0f);
+		osDelay(400);
+		motor1.setTorque(-0.1f);
+		osDelay(500);
+		motor1.setTorque(0.0f);
+		osDelay(400);
+	}
+
+
+}
+*/
 
 /**
  * @brief Constructor for TWIPR_Firmware.
@@ -343,6 +447,15 @@ HAL_StatusTypeDef TWIPR_Firmware::init() {
 
 	this->drive.init(drive_config, &this->motor_left, &this->motor_right);
 
+	// Actuator module initialization
+	dynamixel_handler_config_t handler_config = {
+			.huart = &huart8,
+			.request_mem_pool = dynamixel_request_pool
+	};
+
+	this->handler.init(handler_config);
+
+
 	// Safety module initialization
 	twipr_supervisor_config_t supervisor_config = { .estimation =
 			&this->estimation, .drive = &this->drive, .control = &this->control,
@@ -388,6 +501,9 @@ HAL_StatusTypeDef TWIPR_Firmware::start() {
 			nop();
 		}
 	}
+
+	// Start the actuators
+	this->handler.start();
 
 	// Start control and safety modules
 	this->control.start();

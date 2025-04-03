@@ -19,11 +19,18 @@
 #include "twipr_sequencer.h"
 #include "io.h"
 
+#include "dynamixel.h"
+
 #include "bilbo_drive.h"
 #include "simplexmotion_can.h"
 #include "simplexmotion_rs485.h"
 
 #include "twipr_errors.h"
+
+
+extern UART_HandleTypeDef huart8;
+
+extern FDCAN_HandleTypeDef hfdcan1;
 
 class TWIPR_Firmware {
 
@@ -61,6 +68,7 @@ public:
 	TWIPR_Sensors sensors;
 	TWIPR_Logging logging;
 	BILBO_Drive drive;
+	DynamixelHandler handler;
 	BILBO_ErrorHandler error_handler;
 
 #ifdef BILBO_DRIVE_SIMPLEXMOTION_CAN
