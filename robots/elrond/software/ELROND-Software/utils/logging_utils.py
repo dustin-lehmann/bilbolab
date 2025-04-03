@@ -34,6 +34,9 @@ redirections = []
 # Global variable to manage file logging state
 log_files: dict = {}
 
+# Global dictionary to store custom Logger instances to prevent duplicates.
+custom_loggers = {}
+
 
 @atexit.register
 def cleanup(*args, **kwargs):
@@ -308,32 +311,36 @@ class Logger:
     name: str
     color: list
 
-    def __init__(self, name, level: str = 'INFO', info_color=colors.LIGHT_GREY, background=None, color=None):
-        """
-        Initializes a new Logger instance.
+    def __new__(cls, name, *args, **kwargs):
+        global custom_loggers
+        if name in custom_loggers:
+            return custom_loggers[name]
+        instance = super(Logger, cls).__new__(cls)
+        custom_loggers[name] = instance
+        return instance
 
-        Parameters:
-            name (str): The name of the logger.
-            level (str): The initial logging level (e.g., 'DEBUG', 'INFO').
-            info_color: The color to use for INFO level messages.
-            background: Optional background color.
-            color: Additional color settings.
-        """
+    def __init__(self, name, level: str = 'INFO', info_color=colors.LIGHT_GREY, background=None, color=None):
         self.name = name
         self._logger = logging.getLogger(name)
-        self.setLevel(level)
+        # Check if the underlying logger has already been configured.
+        if getattr(self._logger, '_custom_initialized', False):
+            self.setLevel(level)
+            return
 
+        self.setLevel(level)
         self.color = color
 
-        # Convert RGB tuple/list to 256-color escape if necessary
+        # Convert RGB tuple/list to 256-color escape if necessary.
         if isinstance(info_color, tuple) or isinstance(info_color, list):
             info_color = string_utils.rgb_to_256color_escape(info_color, background)
 
+        # Create a new formatter and add a stream handler only once.
         self.formatter = CustomFormatter(info_color=info_color)
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(self.formatter)
         self._logger.addHandler(stream_handler)
         self._logger.propagate = False
+        self._logger._custom_initialized = True
 
     @staticmethod
     def getFileName():

@@ -1,5 +1,6 @@
 import time
 
+from core.communication.wifi.data_link import CommandArgument
 # === OWN PACKAGES =====================================================================================================
 from core.communication.wifi.wifi_interface import WIFI_Interface
 from utils.callbacks import Callback, callback_handler, CallbackContainer
@@ -57,8 +58,8 @@ class BILBO_WIFI_Interface:
         self.interface.addCommands(commands)
 
     # ------------------------------------------------------------------------------------------------------------------
-    def addCommand(self, identifier: str, callback: (callable, Callback), arguments: list[str], description: str):
-        self.interface.addCommand(identifier, callback, arguments, description)
+    def addCommand(self, identifier: str, callback: (callable, Callback), arguments: list[(CommandArgument, str)], description: str, execute_in_thread: bool = False):
+        self.interface.addCommand(identifier, callback, arguments, description, execute_in_thread)
 
     # ==================================================================================================================
     def _connectedCallback(self, *args, **kwargs):

@@ -14,9 +14,9 @@ def main():
     global x
     event = ConditionEvent()
 
-    listener1 = EventListener(event, callback=Callback(function=testfunction1,parameters={'id': 1}), once=False)
+    listener1 = EventListener(event, callback=Callback(function=testfunction1, inputs={'id': 1}), once=False)
     listener1.start()
-    listener2 = EventListener(event, callback=Callback(function=testfunction1, parameters={'id': 2}), once=False)
+    listener2 = EventListener(event, callback=Callback(function=testfunction1, inputs={'id': 2}), once=False)
     listener2.start()
 
     while True:

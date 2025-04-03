@@ -1,5 +1,13 @@
+import os
 import signal
+import sys
 
+
+def stop_program(force: bool = False):
+    if force:
+        os._exit(0)
+    else:
+        sys.exit()
 
 class ExitHandler:
     _signal_received = False

@@ -1,8 +1,7 @@
 from utils.files import fileExists, deleteFile, relativeToFullPath
 from utils.json_utils import readJSON, writeJSON
 from paths import config_path
-
-#
+import math
 # hardware_definition = {
 #     'electronics': {
 #         'board_revision': 'v4',
@@ -39,7 +38,83 @@ from paths import config_path
 #         }
 #     }
 
-hardware_definition = {
+hardware_definition_big_bilbo = {
+    'model': {
+        'type': 'big'
+    },
+    'settings': {
+      'theta_offset': math.radians(2.0),
+    },
+    'electronics': {
+        'board_revision': 'v4.1',
+        'shield': None,
+        'display': 'oled_bw_128x64',
+        'sound': {
+            'active': False,
+            'gain': 0.5,
+        },
+        'buttons': {
+            'primary': {
+                'exists': True,
+                'type': 'internal',
+                'pin': 5,
+                'led': {
+                    'exists': True,
+                    'type': 'internal',
+                    'pin': 4,
+                }
+            },
+            'secondary': {
+                'exists': False,
+            },
+        },
+        'leds': {},
+        'sensors': {},
+    }
+}
+
+hardware_definition_small_bilbo = {
+    'model': {
+        'type': 'small'
+    },
+    'settings': {
+        'theta_offset': math.radians(0),
+    },
+    'electronics': {
+        'board_revision': 'v4',
+        'shield': None,
+        'display': 'oled_bw_128x64',
+        'sound': {
+            'active': False,
+            'gain': 0.5,
+        },
+        'buttons': {
+            'primary': {
+                'exists': True,
+                'type': 'internal',
+                'pin': 5,
+                'led': {
+                    'exists': True,
+                    'type': 'internal',
+                    'pin': 4,
+                }
+            },
+            'secondary': {
+                'exists': False,
+            },
+        },
+        'leds': {},
+        'sensors': {},
+    }
+}
+
+hardware_definition_normal_bilbo = {
+    'model': {
+        'type': 'normal'
+    },
+    'settings': {
+        'theta_offset': math.radians(0),
+    },
     'electronics': {
         'board_revision': 'v4',
         'shield': None,
@@ -68,11 +143,19 @@ hardware_definition = {
     }
 }
 
-
-def generate_hardware_definition():
+def generate_hardware_definition(size:str):
     file = relativeToFullPath(f"{config_path}hardware.json")
     if fileExists(file):
         deleteFile(file)
+
+    if size == 'small':
+        hardware_definition = hardware_definition_small_bilbo
+    elif size == 'big':
+        hardware_definition = hardware_definition_big_bilbo
+    elif size == 'normal':
+        hardware_definition = hardware_definition_normal_bilbo
+    else:
+        raise ValueError("Size must be either 'small' or 'big'")
 
     writeJSON(file, hardware_definition)
 
@@ -87,4 +170,4 @@ def get_hardware_definition():
 
 
 if __name__ == '__main__':
-    generate_hardware_definition()
+    generate_hardware_definition(size='normal')

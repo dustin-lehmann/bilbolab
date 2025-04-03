@@ -92,6 +92,44 @@ def generate_board_config(rev):
             }
 
         }
+    elif rev == 'rev4.1':
+        board_config = {
+            'rev': 'rev4.1',
+            'pins': {
+                'status_led':
+                    {
+                        'type': 'sx1509',
+                        'pin': 8
+                    },
+                'new_samples_interrupt': {
+                    'type': 'internal',
+                    'pin': 6
+                },
+                'uart_reset': {
+                    'type': 'sx1509',
+                    'pin': 10
+                },
+                'stm32_reset': {
+                    'type': 'sx1509',
+                    'pin': 11,
+                },
+                'stm32_boot0': {
+                    'type': 'sx1509',
+                    'pin': 14
+                },
+            },
+
+            'communication': {
+                'RC_PARAMS_BOARD_STM32_UART': '/dev/ttyAMA1',
+                'RC_PARAMS_BOARD_STM32_UART_BAUD': 1000000,
+            },
+            'devices': {
+                'GPIO_EXTENDER_I2C_ADDRESS': 0x3E,
+                'IO_EXTENSION_I2C_ADDRESS': 0x01,
+                'SHIELD_EEPROM_I2C_ADDRESS': 0x53,
+            }
+
+        }
     else:
         return
 
@@ -104,4 +142,4 @@ def generate_board_config(rev):
 
 
 if __name__ == '__main__':
-    generate_board_config('rev3')
+    generate_board_config('rev4')

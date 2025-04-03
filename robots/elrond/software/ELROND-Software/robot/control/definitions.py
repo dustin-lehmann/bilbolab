@@ -45,9 +45,9 @@ class BILBO_Control_Mode(enum.IntEnum):
     # TWIPR_CONTROL_MODE_POS = 4
 
 
-class TWIPR_Control_Status(enum.IntEnum):
-    TWIPR_CONTROL_STATE_ERROR = 0
-    TWIPR_CONTROL_STATE_NORMAL = 1
+class BILBO_Control_Status(enum.IntEnum):
+    ERROR = 0
+    NORMAL = 1
 
 
 @dataclasses.dataclass
@@ -75,10 +75,11 @@ class BILBO_Control_Input:
     velocity: BILBO_Control_Input_Velocity = dataclasses.field(default_factory=BILBO_Control_Input_Velocity)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class TWIPR_Control_Sample:
-    status: TWIPR_Control_Status = dataclasses.field(
-        default=TWIPR_Control_Status(TWIPR_Control_Status.TWIPR_CONTROL_STATE_ERROR))
+    status: BILBO_Control_Status = dataclasses.field(
+        default=BILBO_Control_Status(BILBO_Control_Status.ERROR)
+    )
     mode: BILBO_Control_Mode = dataclasses.field(default=BILBO_Control_Mode(BILBO_Control_Mode.OFF))
     configuration: str = ''
     input: BILBO_Control_Input = dataclasses.field(default_factory=BILBO_Control_Input)

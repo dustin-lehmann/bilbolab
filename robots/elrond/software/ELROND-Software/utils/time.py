@@ -167,7 +167,6 @@ class TimeoutTimer:
         """
         Starts the timer. If already running, it continues without resetting the time.
         """
-        print("Start the timer")
         if not self._is_running.is_set():
             self._is_running.set()
             self._last_reset_time = time.time()
@@ -176,7 +175,6 @@ class TimeoutTimer:
         """
         Resets the timer by updating the last reset time.
         """
-        print("Reset")
         if self._is_running.is_set():
             self._last_reset_time = time.time()
 
@@ -210,6 +208,20 @@ def performance_analyzer(func):
     return wrapper
 
 
+class PerformanceTimer:
+    def __init__(self, name: str = None, unit: str = 'ms', print_output: bool = True):
+        assert unit in ['ms', 's']
+        self.unit = unit
+        self.factor = 1000 if unit == 'ms' else 1
+        self.start_time = time.perf_counter()
+        self.print_output = print_output
+        self.name = name
+
+    def stop(self):
+        elapsed_time = time.perf_counter() - self.start_time
+        if self.print_output:
+            print(f"[Timer {self.name}] Elapsed time: {elapsed_time * self.factor:.1f} {self.unit}")
+        return elapsed_time
 # ======================================================================================================================
 def example_precise_sleep():
     while True:
@@ -221,4 +233,6 @@ def example_precise_sleep():
 
 
 if __name__ == '__main__':
-    example_precise_sleep()
+    timer = PerformanceTimer()
+    precise_sleep(0.1)
+    timer.stop()

@@ -5,6 +5,7 @@ from robot.bilbo import BILBO
 
 from utils.teleplot import sendValue
 
+
 def main():
     twipr = BILBO(reset_stm32=False)
     joystick_control = StandaloneJoystickControl(bilbo=twipr)
@@ -15,11 +16,9 @@ def main():
 
     try:
         while True:
-            sendValue('theta', twipr.)
             time.sleep(0.1)
     except KeyboardInterrupt:
         exit(0)
-
 
 if __name__ == '__main__':
     main()

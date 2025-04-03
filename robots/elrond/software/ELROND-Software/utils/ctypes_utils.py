@@ -1,6 +1,7 @@
 import ctypes
 from dataclasses import is_dataclass, fields
 from typing import List, Dict, Tuple, Union, Type, Any
+
 # import graphviz
 
 
@@ -16,12 +17,12 @@ INT32 = ctypes.c_int32
 
 # Define a broad type hint for ctypes types and instances
 CType = Union[
-    Type[ctypes._SimpleCData],    # Scalar types like c_float, c_int
-    Type[ctypes.Array],           # Array types like c_float * 8
-    Type[ctypes.Structure],       # Structure types
-    ctypes._SimpleCData,          # Instances of scalar types
-    ctypes.Array,                 # Instances of array types
-    ctypes.Structure              # Instances of structures
+    Type[ctypes._SimpleCData],  # Scalar types like c_float, c_int
+    Type[ctypes.Array],  # Array types like c_float * 8
+    Type[ctypes.Structure],  # Structure types
+    ctypes._SimpleCData,  # Instances of scalar types
+    ctypes.Array,  # Instances of array types
+    ctypes.Structure  # Instances of structures
 ]
 
 
@@ -30,7 +31,7 @@ class ConversionError(Exception):
     pass
 
 
-def struct_to_dict(struct: ctypes.Structure, ctype_type: ctypes.Structure) -> dict:
+def struct_to_dict(struct: ctypes.Structure, ctype_type: (Any, ctypes.Structure)) -> dict:
     """
     Converts a ctypes.Structure instance to a dictionary.
 
@@ -51,7 +52,9 @@ def struct_to_dict(struct: ctypes.Structure, ctype_type: ctypes.Structure) -> di
 
         # Handle arrays
         elif hasattr(value, "_length_") and hasattr(value, "_type_"):
-            result[field] = [struct_to_dict(v, field_type._type_) if issubclass(field_type._type_, ctypes.Structure) else v for v in value]
+            result[field] = [
+                struct_to_dict(v, field_type._type_) if issubclass(field_type._type_, ctypes.Structure) else v for v in
+                value]
 
         # Handle nested structures
         elif issubclass(field_type, ctypes.Structure):
@@ -230,6 +233,7 @@ def ctype_to_bytes(ctype_value):
     """
     return ctypes.string_at(ctypes.addressof(ctype_value), ctypes.sizeof(ctype_value))
 
+
 def bytes_to_ctype(byte_data, ctype_type):
     """
     Convert raw bytes into a ctypes instance.
@@ -251,8 +255,10 @@ def bytes_to_ctype(byte_data, ctype_type):
 def value_to_bytes(value, ctype_type):
     return ctype_to_bytes(ctype_value=value_to_ctype(value, ctype_type))
 
+
 def bytes_to_value(byte_data, ctype_type):
     return ctype_to_value(ctype_value=bytes_to_ctype(byte_data=byte_data, ctype_type=ctype_type), ctype_type=ctype_type)
+
 
 def STRUCTURE(cls):
     """
@@ -288,6 +294,7 @@ def STRUCTURE(cls):
 
     return cls
 
+
 def struct_to_dataclass(ctypes_instance: ctypes.Structure, dataclass_type: Type) -> Any:
     """
     Recursively converts a ctypes Structure to a dataclass instance. Assumes that the dataclass and the struct have
@@ -321,7 +328,6 @@ def struct_to_dataclass(ctypes_instance: ctypes.Structure, dataclass_type: Type)
             kwargs[field_name] = ctypes_value
 
     return dataclass_type(**kwargs)
-
 
 
 def analyze_ctype_structure(

@@ -1,6 +1,6 @@
 pygame~=2.6.1
 evdev~=1.7.1
-pillow~=11.0.0
+pillow~=11.1.0
 graphviz~=0.20.3
 cobs~=1.2.1
 orjson~=3.10.5
@@ -14,3 +14,6 @@ pydub ~= 0.25.1
 pyttsx3 ~= 2.98
 h5py~=3.12.1
 dacite~=1.8.1
+pexpect~=4.9.0
+requests~=2.32.3
+scipy ~= 1.13.1

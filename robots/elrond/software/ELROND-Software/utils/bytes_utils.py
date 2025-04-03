@@ -1,21 +1,24 @@
+from typing import Literal
+
+
 def bytes_(val: int):
     assert (val < 2e8)
     return bytes([val])
 
 
-def byteArrayToInt(b: (list, bytearray, bytes)):
+def byteArrayToInt(b: (list, bytearray, bytes), byteorder: Literal["little", "big"] = "big"):
     if isinstance(b, list):
         b = bytes(b)
     assert (isinstance(b, (list, bytes, bytearray)))
-    return int.from_bytes(b, 'big')
+    return int.from_bytes(b, byteorder=byteorder)
 
 
-def intToByte(i: int, num_bytes):
-    return i.to_bytes(length=num_bytes, byteorder='big')
+def intToByte(i: int, num_bytes, byteorder: Literal["little", "big"] = "big"):
+    return i.to_bytes(length=num_bytes, byteorder=byteorder)
 
 
-def intToByteList(i: int, num_bytes):
-    return list(intToByte(i, num_bytes))
+def intToByteList(i: int, num_bytes, byteorder: Literal["little", "big"] = "big"):
+    return list(intToByte(i, num_bytes, byteorder=byteorder))
 
 
 def setBit(number, bit):

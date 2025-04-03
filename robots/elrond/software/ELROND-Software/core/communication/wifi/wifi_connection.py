@@ -34,6 +34,7 @@ class WIFI_Connection_Callbacks:
     connected: CallbackContainer
     disconnected: CallbackContainer
 
+
 # ======================================================================================================================
 class WIFI_Connection:
     callbacks: WIFI_Connection_Callbacks
@@ -111,6 +112,11 @@ class WIFI_Connection:
         self._thread.join()
 
     # ------------------------------------------------------------------------------------------------------------------
+    def disconnect(self):
+        self._tcp_socket.disconnect()
+        self.connected = False
+
+    # ------------------------------------------------------------------------------------------------------------------
     def send(self, message: Message):
         self._send(message)
 
@@ -125,7 +131,7 @@ class WIFI_Connection:
                     logger.warning(f'Cannot connect to server. Retry in 5s ...')
                     time.sleep(1)
 
-            time.sleep(0.0001)
+            time.sleep(0.1)
 
     # ------------------------------------------------------------------------------------------------------------------
     def _connect(self) -> bool:
@@ -144,12 +150,14 @@ class WIFI_Connection:
             logger.debug(f"Sending handshake to server {self._server_data.address}:{self._server_data.port} ...")
             self._sendHandshake()
         else:
-            print("OH NOSY")
+            logger.error(f"Cannot connect to server {self._server_data.address}:{self._server_data.port}")
+            return False
+
+        logger.info(f"Connected to server {self._server_data.address}:{self._server_data.port}")
 
         for callback in self.callbacks.connected:
             callback()
 
-        logger.info(f"Connected to server {self._server_data.address}:{self._server_data.port}")
         return self.connected
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -175,7 +183,7 @@ class WIFI_Connection:
 
         # Check if the tcp socket is connected
         if not self._tcp_socket.connected:
-            logger.error(f"Cannot send message over TCP: Not connected")
+            # logger.error(f"Cannot send message over TCP: Not connected")
             return
 
         # Check if the protocol of the message is supported
@@ -191,10 +199,6 @@ class WIFI_Connection:
         tcp_msg.data_protocol_id = message._protocol.identifier
         tcp_msg.source = self.address
 
-        # # Send the message to the server if not specified differently
-        # if address is None:
-        #     address = addresses.server
-
         tcp_msg.address = self._server_data.address
 
         # Generate the buffer from the base message
@@ -208,8 +212,8 @@ class WIFI_Connection:
         # Generate the handshake message
         handshake_message = TCP_JSON_Message()
         handshake_message.type = 'event'
+        handshake_message.event = 'handshake'
         handshake_message.data = {
-            'event': 'handshake',
             'address': self.address,
             'name': self.id
         }

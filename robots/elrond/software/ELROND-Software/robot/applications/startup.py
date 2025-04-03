@@ -19,7 +19,7 @@ from control_board.board_config import getBoardConfig
 from robot.utilities.display.display import Display
 from robot.utilities.display.pages import StatusPage
 from utils.singletonlock.singletonlock import terminate, check_for_running_lock_holder, get_lock_mode
-# from utils.sound.sound import SoundSystem
+from utils.sound.sound import SoundSystem
 from robot.hardware import get_hardware_definition
 
 
@@ -70,7 +70,7 @@ class Startup:
     _exit = False
 
     joystick_pattern = '8BitDo'
-    # sound_system: SoundSystem
+    sound_system: SoundSystem
 
     def __init__(self):
         self.display = Display()
@@ -100,7 +100,7 @@ class Startup:
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
 
-        # self.sound_system = SoundSystem(volume=0.4)
+        self.sound_system = SoundSystem(volume=0.4)
 
         self._thread = threading.Thread(target=self.task, daemon=True)
         self._joystick_thread = threading.Thread(target=self.joystick_task, daemon=True)
@@ -108,16 +108,16 @@ class Startup:
     # ------------------------------------------------------------------------------------------------------------------
     def init(self):
         self.update_status_page()
-        self.setLED(1)
+        self.setLED(0)
 
     # ------------------------------------------------------------------------------------------------------------------
     def start(self):
-        # self.sound_system.start()
+        self.sound_system.start()
         self.display.change_page('Status', start_thread=False)
         self.display.start()
         self._thread.start()
         self._joystick_thread.start()
-        # self.sound_system.play('startup', volume=0.4)
+        self.sound_system.play('startup', volume=0.4)
 
     # ------------------------------------------------------------------------------------------------------------------
     def task(self):
@@ -125,10 +125,9 @@ class Startup:
 
             # Check the Joystick:
             if self.joystick_connected:
-                self.setLED(0)
-                print("Connected")
-            else:
                 self.setLED(1)
+            else:
+                self.setLED(0)
 
             self.update_status_page()
 
@@ -136,15 +135,14 @@ class Startup:
                 self.long_press_detected = False
 
                 if check_for_running_lock_holder(lock_file='/tmp/twipr.lock'):
-                    # self.sound_system.speak("Terminate running application")
+                    self.sound_system.speak("Terminate running application")
                     terminate('/tmp/twipr.lock')
                 else:
                     if self.joystick_connected:
-                        # self.sound_system.speak("Start Standalone Mode")
+                        self.sound_system.speak("Start Standalone Mode")
                         process = start_script_in_new_process(script_path=get_full_path('./standalone/standalone.py'))
                     else:
-                        ...
-                        # self.sound_system.speak("Please connect a joystick before starting standalone mode")
+                        self.sound_system.speak("Please connect a joystick before starting standalone mode")
 
             time.sleep(2)
 
@@ -157,12 +155,12 @@ class Startup:
         connected_joystick = find_connected_device_with_pattern(self.joystick_pattern)
         if connected_joystick is not None:
             if not self.joystick_connected:
-                # self.sound_system.speak('Joystick connected')
+                self.sound_system.speak('Joystick connected')
                 self.joystick_connected = True
         else:
             if self.joystick_connected:
                 self.joystick_connected = False
-                # self.sound_system.speak('Joystick disconnected')
+                self.sound_system.speak('Joystick disconnected')
 
     def update_status_page(self):
         # Check the network things:
@@ -221,7 +219,7 @@ class Startup:
 
     def shutdown(self):
         self._exit = True  # Set the exit flag to stop threads
-        # self.sound_system.speak("Shutdown")
+        self.sound_system.speak("Shutdown")
         time.sleep(2)
         print("Signal received, shutting down...")
         time.sleep(0.5)

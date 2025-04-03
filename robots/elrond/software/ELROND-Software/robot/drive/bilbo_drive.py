@@ -19,13 +19,13 @@ class TWIPR_Drive_Data:
     input: float = 0.0
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class TWIPR_Drive_Sample:
     left: TWIPR_Drive_Data = dataclasses.field(default_factory=TWIPR_Drive_Data)
     right: TWIPR_Drive_Data = dataclasses.field(default_factory=TWIPR_Drive_Data)
 
 
-class TWIPR_Drive:
+class BILBO_Drive:
     _comm: BILBO_Communication
     left: TWIPR_Drive_Data
     right: TWIPR_Drive_Data
@@ -40,9 +40,26 @@ class TWIPR_Drive:
 
     # ------------------------------------------------------------------------------------------------------------------
     def getSample(self) -> TWIPR_Drive_Sample:
-        sample = TWIPR_Drive_Sample()
-        sample.left = self.left
-        sample.right = self.right
+
+        # sample = TWIPR_Drive_Sample(
+        #     left=self.left,
+        #     right=self.right
+        # )
+
+        sample = {
+            'left': {
+                'speed': self.left.speed,
+                'torque': self.left.torque,
+                'input': self.left.input,
+                'status': self.left.status
+            },
+            'right': {
+                'speed': self.right.speed,
+                'torque': self.right.torque,
+                'input': self.right.input,
+                'status': self.right.status
+            }
+        }
         return sample
 
     def _onSample(self, sample: BILBO_LL_Sample, *args, **kwargs):

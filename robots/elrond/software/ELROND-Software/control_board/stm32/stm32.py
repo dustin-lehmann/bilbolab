@@ -23,10 +23,10 @@ def resetSTM32():
 
     elif board_config['rev'] == 'rev4':
         sx = SX1508(reset=False)
-        sx.configureGPIO(gpio=board_config['pins']['RC_SX1508_STM32_RESET'], mode=SX1508_GPIO_MODE.OUTPUT, pullup=False, pulldown=True)
-        sx.writeGPIO(board_config['pins']['RC_SX1508_STM32_RESET'], 1)
+        sx.configureGPIO(gpio=board_config['pins']['stm32_reset']['pin'], mode=SX1508_GPIO_MODE.OUTPUT, pullup=False, pulldown=True)
+        sx.writeGPIO(board_config['pins']['stm32_reset']['pin'], 1)
         time.sleep(1)
-        sx.writeGPIO(board_config['pins']['RC_SX1508_STM32_RESET'], 0)
+        sx.writeGPIO(board_config['pins']['stm32_reset']['pin'], 0)
         time.sleep(1)
 
 

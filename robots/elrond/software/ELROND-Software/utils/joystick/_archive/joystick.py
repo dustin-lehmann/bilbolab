@@ -131,7 +131,7 @@ class Joystick:
         """
 
         # Events
-        for event in pygame.event.get():
+        for event in pygame.event_a.get():
             if event.type == pygame.JOYDEVICEADDED and not self.connected:
                 try:
                     self.joystick = pygame.joystick.Joystick(registered_joysticks)

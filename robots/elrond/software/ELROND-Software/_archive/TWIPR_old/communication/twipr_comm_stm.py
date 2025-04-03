@@ -208,7 +208,7 @@ class TWIPR_Communication_STM32:
         for req in self._readRequests:
             if req.module == msg.address[0] and req.address == bytes([msg.address[1], msg.address[2]]):
                 req.msg = msg
-                req.event.set()
+                req.event_a.set()
 
     # ------------------------------------------------------------------------------------------------------------------
     def _registerRead(self, module, address):

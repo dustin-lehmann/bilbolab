@@ -12,6 +12,7 @@ from utils.exit import ExitHandler
 class SerialConnection_Callbacks:
     rx: CallbackContainer
 
+
 class SerialConnection:
     _socket: UART_Socket
 
@@ -56,7 +57,6 @@ class SerialConnection:
         self._exit = False
         self.rx_queue = queue.Queue()
 
-
     # === METHODS ======================================================================================================
     def start(self):
 
@@ -71,7 +71,6 @@ class SerialConnection:
         # self._thread.join()
         self._socket.close()
 
-
     # ------------------------------------------------------------------------------------------------------------------
     def send(self, msg: protocol.Message):
         buffer = self._encode_message(msg)
@@ -81,7 +80,6 @@ class SerialConnection:
     # ------------------------------------------------------------------------------------------------------------------
     def sendRaw(self, buffer):
         self._socket.send(buffer)
-
 
     # === PRIVATE METHODS ==============================================================================================
     def _encode_message(self, msg: protocol.Message):

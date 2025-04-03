@@ -1,17 +1,34 @@
+import ctypes
+import dataclasses
 import enum
 
 
-class TWIPR_ErrorCode(enum.IntEnum):
-    TWIPR_ERROR_NONE = 0
-    TWIPR_ERROR_CRITICAL = 1
-    TWIPR_ERROR_WARNING = 2
+class TWIPR_ErrorType(enum.IntEnum):
+    NONE = 0,
+    MINOR = 1,
+    MAJOR = 2,
+    CRITICAL = 3,
 
-class TWIPR_SupervisorErrorCodes(enum.IntEnum):
-    TWIPR_SUPERVISOR_NONE = 0,
-    TWIPR_SUPERVISOR_STUCK = 1,
-    TWIPR_SUPERVISOR_WHEEL_SPEED = 2,
-    TWIPR_SUPERVISOR_MANUAL_STOP = 3,
-    TWIPR_SUPERVISOR_MOTOR_TIMEOUT = 4,
-    TWIPR_FIRMWARE_ERROR_RACE_CONDITION = 5,
-    TWIPR_SUPERVISOR_ERROR_INTEGRATOR_OVERRUN = 6,
-    TWIPR_SUPERVISOR_MOTOR_RACECONDITION = 7,
+
+class TWIPR_ErrorCodes(enum.IntEnum):
+    UNSPECIFIED = 0,
+    WHEEL_SPEED = 1,
+    MANUAL_STOP = 2,
+    INIT = 3,
+    START = 4,
+    IMU_INITIALIZE = 5,
+    MOTOR_RACECONDITIONS = 6,
+    FIRMWARE_RACECONDITION = 7
+
+
+class bilbo_ll_log_entry_t(ctypes.Structure):
+    _fields_ = [("tick", ctypes.c_uint32),
+                ("type", ctypes.c_int8),
+                ("error", ctypes.c_int8)]
+
+
+@dataclasses.dataclass
+class BILBO_LL_Log_Entry:
+    tick: int = 0
+    type: TWIPR_ErrorType = TWIPR_ErrorType.NONE
+    error: TWIPR_ErrorCodes = TWIPR_ErrorCodes.UNSPECIFIED

@@ -35,7 +35,7 @@ class TWIPR_Sensors_Distance:
     back: float = 0.0
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class TWIPR_Sensors_Sample:
     imu: TWIPR_Sensors_IMU = dataclasses.field(default_factory=TWIPR_Sensors_IMU)
     power: TWIPR_Sensors_Power = dataclasses.field(default_factory=TWIPR_Sensors_Power)
@@ -43,7 +43,7 @@ class TWIPR_Sensors_Sample:
     distance: TWIPR_Sensors_Distance = dataclasses.field(default_factory=TWIPR_Sensors_Distance)
 
 
-class TWIPR_Sensors:
+class BILBO_Sensors:
     _comm: BILBO_Communication
 
     imu: TWIPR_Sensors_IMU
@@ -56,7 +56,7 @@ class TWIPR_Sensors:
         self._comm = comm
         self._comm.callbacks.rx_stm32_sample.register(self._onSample)
 
-        self.imu = TWIPR_Sensors_IMU(gyr={'x':0, 'y': 0, 'z': 0}, acc={'x':0, 'y': 0, 'z': 0})
+        self.imu = TWIPR_Sensors_IMU(gyr={'x': 0, 'y': 0, 'z': 0}, acc={'x': 0, 'y': 0, 'z': 0})
         self.power = TWIPR_Sensors_Power(bat_voltage=0, bat_current=0)
         self.drive = TWIPR_Sensors_Drive()
         self.distance = TWIPR_Sensors_Distance()
@@ -67,18 +67,56 @@ class TWIPR_Sensors:
 
     def start(self):
         ...
+
     # ------------------------------------------------------------------------------------------------------------------
     def getSample(self):
-        sample = TWIPR_Sensors_Sample()
-        sample.imu = self.imu
-        sample.drive = self.drive
-        sample.power.bat_voltage = self.power.bat_voltage
+        # sample = TWIPR_Sensors_Sample(
+        #     imu=self.imu,
+        #     power=self.power,
+        #     drive=self.drive,
+        #     distance=self.distance
+        # )
+
+        sample = {
+            'imu': {
+                'gyr': {
+                    'x': self.imu.gyr['x'],
+                    'y': self.imu.gyr['y'],
+                    'z': self.imu.gyr['z']
+                },
+                'acc': {
+                    'x': self.imu.acc['x'],
+                    'y': self.imu.acc['y'],
+                    'z': self.imu.acc['z']
+                }
+            },
+            'power': {
+                'bat_voltage': self.power.bat_voltage,
+                'bat_current': self.power.bat_current
+            },
+            'drive': {
+                'left': {
+                    'speed': self.drive.left.speed,
+                    'torque': self.drive.left.torque,
+                    'slip': self.drive.left.slip
+                },
+                'right': {
+                    'speed': self.drive.right.speed,
+                    'torque': self.drive.right.torque,
+                    'slip': self.drive.right.slip
+                }
+            },
+            'distance': {
+                'front': self.distance.front,
+                'back': self.distance.back
+            }
+        }
         return sample
 
     # ------------------------------------------------------------------------------------------------------------------
     def _onSample(self, sample: BILBO_LL_Sample, *args, **kwargs):
-        self.imu.gyr = dataclasses.asdict(sample.sensors.gyr)
-        self.imu.acc = dataclasses.asdict(sample.sensors.acc)
+        self.imu.gyr = dataclasses.asdict(sample.sensors.gyr)  # type: ignore
+        self.imu.acc = dataclasses.asdict(sample.sensors.acc)  # type: ignore
         self.drive.left.speed = sample.sensors.speed_left
         self.drive.right.speed = sample.sensors.speed_right
         self.power.bat_voltage = sample.sensors.battery_voltage

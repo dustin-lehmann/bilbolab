@@ -16,7 +16,10 @@ def initialize_pygame():
         if not pygame.get_init():
             pygame.init()  # Initialize all of Pygame
         if pygame.mixer.get_init() is None:
-            pygame.mixer.init()  # Initialize the mixer for sound
+            try:
+                pygame.mixer.init()  # Initialize the mixer for sound
+            except pygame.error:
+                pass
         _initialized = True
     else:
         # Pygame is already initialized, so we don't do anything

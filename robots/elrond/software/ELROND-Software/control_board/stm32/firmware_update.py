@@ -150,4 +150,4 @@ def firmware_update(file):
     updater.uploadFirmware(file)
 
 if __name__ == '__main__':
-    firmware_update("firmware_twipr_stm32h7_v4_2_2.hex")
+    firmware_update()

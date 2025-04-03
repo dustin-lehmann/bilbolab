@@ -67,7 +67,7 @@ class RpiJoystick:
         for event in self.device.read_loop():
             if event.type == ecodes.EV_KEY:
                 if event.value == 1:
-                    callback = next((x for x in self.callbacks if x.event == event.code),
+                    callback = next((x for x in self.callbacks if x.event_a == event.code),
                                     None)
                     if callback is not None:
                         callback()

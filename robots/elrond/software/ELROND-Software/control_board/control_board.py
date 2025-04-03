@@ -69,25 +69,25 @@ class RobotControl_Board:
                                        arguments=['red', 'green', 'blue'], description='')
 
         self.wifi_interface.addCommand(identifier='beep',
-                                        callback=self.beep,
-                                        description='',
-                                           arguments = [
-                                               CommandArgument(name='frequency',
-                                                               type=str,
-                                                               optional=True,
-                                                               default='medium',
-                                                               description='Frequency of the beep. Can be "low", "medium", "high" or a number in Hz'),
-                                               CommandArgument(name='time_ms',
-                                                               type=int,
-                                                               optional=True,
-                                                               default=500,
-                                                               description='Duration of the beep in ms'),
-                                               CommandArgument(name='repeats',
-                                                               type=int,
-                                                               optional=True,
-                                                               default=1,
-                                                               description='Number of repeats')
-                                           ])
+                                       callback=self.beep,
+                                       description='',
+                                       arguments=[
+                                           CommandArgument(name='frequency',
+                                                           type=str,
+                                                           optional=True,
+                                                           default='medium',
+                                                           description='Frequency of the beep. Can be "low", "medium", "high" or a number in Hz'),
+                                           CommandArgument(name='time_ms',
+                                                           type=int,
+                                                           optional=True,
+                                                           default=500,
+                                                           description='Duration of the beep in ms'),
+                                           CommandArgument(name='repeats',
+                                                           type=int,
+                                                           optional=True,
+                                                           default=1,
+                                                           description='Number of repeats')
+                                       ])
 
         # This too
 
@@ -103,9 +103,9 @@ class RobotControl_Board:
             value=0,
         )
 
-        self.wifi_interface.callbacks.connected.register(self.setStatusLed, parameters={'state': True},
+        self.wifi_interface.callbacks.connected.register(self.setStatusLed, inputs={'state': True},
                                                          discard_inputs=True)
-        self.wifi_interface.callbacks.disconnected.register(self.setStatusLed, parameters={'state': False},
+        self.wifi_interface.callbacks.disconnected.register(self.setStatusLed, inputs={'state': False},
                                                             discard_inputs=True)
 
         self.exit = ExitHandler()

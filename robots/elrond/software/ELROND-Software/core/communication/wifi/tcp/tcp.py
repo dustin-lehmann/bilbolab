@@ -36,12 +36,14 @@ class TCP_Socket_Callbacks:
     rx: CallbackContainer
     error: CallbackContainer
 
+
 # TODO:
 # - give the user the possibility to decide whether he wants to use the queue or callbacks or both
 # ---------------------------------------------------------------------------
 class TCP_Socket:
     """
-
+    TCP socket wrapper for Raspberry Pi client side.
+    Manages connection, sending, and receiving data with proper handling of partial packets.
     """
     server_address: str
     server_port: int
@@ -67,12 +69,12 @@ class TCP_Socket:
     callbacks: TCP_Socket_Callbacks
     events: dict[str, threading.Event]
 
+    _rx_buffer: bytes
+
     # === INIT =========================================================================================================
     def __init__(self, server_address: str = None, server_port: int = 6666, config: dict = None):
         """
-
-        :param server_address:
-        :param server_port:
+        Initialize the TCP_Socket instance.
         """
         self.server_address = server_address
         self.server_port = server_port
@@ -109,21 +111,22 @@ class TCP_Socket:
 
         self._close_check_time = 0
 
+        # Initialize the receive buffer for handling partial packets.
+        self._rx_buffer = b''
+
     # === METHODS ======================================================================================================
     def init(self):
         ...
 
     def start(self):
         """
-
-        :return:
+        Start the main socket thread.
         """
         self._thread = threading.Thread(target=self._threadFunction)
         self._thread.start()
 
     # ------------------------------------------------------------------------------------------------------------------
     def connect(self, address=None, port=None):
-
         if address is not None:
             self.server_address = address
         if port is not None:
@@ -134,12 +137,25 @@ class TCP_Socket:
         self._connect(self.server_address, self.server_port)
 
     # ------------------------------------------------------------------------------------------------------------------
+    def disconnect(self):
+        self.connected = False
+        time.sleep(0.01)
+        for connection in self._input_connections:
+            connection.close()
+        for connection in self._output_connections:
+            connection.close()
+        self._input_connections = []
+        self._output_connections = []
+        self._socket.close()
+
+        self.callbacks.disconnected.call()
+        raise NotImplementedError
+
+    # ------------------------------------------------------------------------------------------------------------------
     def close(self):
         """
-
-        :return:
+        Close the socket connection.
         """
-
         self._exit = True
         self.connected = False
         self._thread.join()
@@ -147,10 +163,8 @@ class TCP_Socket:
     # ------------------------------------------------------------------------------------------------------------------
     def send(self, data):
         """
-        :param data:
-        :return:
+        Prepare and queue data for sending over the socket.
         """
-
         if self.connected:
             buffer = self._prepareTxData(data)
             self.tx_queue.put_nowait(buffer)
@@ -161,10 +175,7 @@ class TCP_Socket:
     # === PRIVATE METHODS ==============================================================================================
     def _connect(self, server_address, server_port):
         """
-        connect to client if server_address AND server Port are defined
-        :param server_address: address of Host-Server
-        :param server_port: port of Host-Server
-        :return: nothing
+        Connect to the server.
         """
         try:
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -190,8 +201,7 @@ class TCP_Socket:
     # ------------------------------------------------------------------------------------------------------------------
     def _threadFunction(self):
         """
-
-        :return:
+        Main thread function to manage the socket connection.
         """
         while not self._exit:
             self._updateFunction()
@@ -204,12 +214,9 @@ class TCP_Socket:
     # ------------------------------------------------------------------------------------------------------------------
     def _updateFunction(self):
         """
-
-        :return:
+        Handle socket events such as receiving data, sending data, and checking for disconnection.
         """
-
         if self.connected:
-
             readable, writable, exceptional = select.select(self._input_connections, self._output_connections,
                                                             self._input_connections, 0)
 
@@ -229,19 +236,15 @@ class TCP_Socket:
             # rx data
             for connection in readable:
                 try:
-                    # save received data
-                    data = []
-                    try:
-                        data = connection.recv(MAX_SOCKET_READ)
-                    except:
-                        pass
+                    data = connection.recv(MAX_SOCKET_READ)
                     if len(data) > 0:
                         self._rxFunction(data)
-
                 except (ConnectionResetError, ConnectionAbortedError, InterruptedError):
                     logger.warning(f"Lost connection with TCP server {self.server_address}")
-                    self._output_connections.remove(connection)
-                    self._input_connections.remove(connection)
+                    if connection in self._output_connections:
+                        self._output_connections.remove(connection)
+                    if connection in self._input_connections:
+                        self._input_connections.remove(connection)
                     connection.close()
                     self.connected = False
                     self._socket.close()
@@ -249,24 +252,26 @@ class TCP_Socket:
                     for callback in self.callbacks.disconnected:
                         callback(self)
                     return
-            #
+
             if writable:
                 self._sendTxData()
 
             for connection in exceptional:
                 logger.error(f"Server exception with {connection.getpeername()}")
-                self._input_connections.remove(connection)
+                if connection in self._input_connections:
+                    self._input_connections.remove(connection)
                 if connection in self._output_connections:
                     self._output_connections.remove(connection)
                 connection.close()
                 self._socket.close()
-
                 for callback in self.callbacks.error:
                     callback(self)
 
     # ------------------------------------------------------------------------------------------------------------------
     def _prepareTxData(self, data: (str, list)):
-        # Encode the data to utf-8 if it's a string
+        """
+        Prepare data for transmission.
+        """
         if isinstance(data, str):
             data = data.encode('utf-8')
         elif isinstance(data, list):
@@ -274,7 +279,6 @@ class TCP_Socket:
 
         assert (isinstance(data, (bytes, bytearray)))
 
-        # Encode the data and add a delimiter of those options are set
         if self.config['cobs']:
             data = cobs.encode(data)
 
@@ -285,36 +289,50 @@ class TCP_Socket:
 
     # ------------------------------------------------------------------------------------------------------------------
     def _sendTxData(self):
-
+        """
+        Send queued data over the socket.
+        """
         try:
             data = self.tx_queue.get_nowait()
         except queue.Empty:
             return
 
-        self._socket.send(data)
+        try:
+            self._socket.send(data)
+        except (ConnectionResetError, BrokenPipeError):
+            logger.warning(f"Broken pipe with server {self.server_address}. Closing the TCP Socket.")
+            self.close()
 
     # ------------------------------------------------------------------------------------------------------------------
     def _rxFunction(self, data: bytes):
+        """
+        Process received data. Accumulate data in a buffer and extract complete packets.
+        Partial packets are stored until the delimiter is encountered.
+        """
+        # Append new data to the persistent receive buffer.
+        self._rx_buffer += data
+        delimiter = self.config["delimiter"]
 
-        # Split the data by the delimiter
-        data_packets = data.split(self.config["delimiter"])
+        while True:
+            index = self._rx_buffer.find(delimiter)
+            if index == -1:
+                # No complete packet found yet.
+                break
 
-        if not data_packets[-1] == b'':
-            pass  # TODO: here i need some handling of incomplete packets
+            # Extract one complete packet.
+            packet = self._rx_buffer[:index]
+            # Remove the processed packet and delimiter from the buffer.
+            self._rx_buffer = self._rx_buffer[index + len(delimiter):]
 
-        data_packets = data_packets[0:-1]
-
-        # COBS-decode the data packets if configured
-        if self.config["cobs"]:
-            for i, packet in enumerate(data_packets):
+            # If COBS encoding is enabled, decode the packet.
+            if self.config["cobs"]:
                 try:
-                    data_packets[i] = cobs.decode(packet)
-                except:
-                    pass  # TODO: This means we have cut a package in the middle
+                    packet = cobs.decode(packet)
+                except Exception:
+                    # Skip the packet if decoding fails.
+                    continue
 
-        # Process the individual packets
-        for packet in data_packets:
-
+            # Process the individual packet.
             if self.config['rx_queue']:
                 self.rx_queue.put_nowait(packet)
             for callback in self.callbacks.rx:
@@ -324,8 +342,7 @@ class TCP_Socket:
     # ------------------------------------------------------------------------------------------------------------------
     def _remote_connection_closed(self) -> bool:
         """
-        Returns True if the remote side did close the connection
-
+        Returns True if the remote side closed the connection.
         """
         try:
             buf = self._socket.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT)
@@ -333,7 +350,6 @@ class TCP_Socket:
                 return True
         except BlockingIOError as exc:
             if exc.errno != errno.EAGAIN:
-                # Raise on unknown exception
                 pass
         except:
             pass

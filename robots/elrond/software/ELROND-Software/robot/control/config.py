@@ -3,6 +3,7 @@ import json
 import os
 
 from paths import control_config_path
+from robot.hardware import get_hardware_definition
 from utils.dataclass_utils import analyze_dataclass, from_dict
 
 TWIPR_CONTROL_VELOCITY_FORWARD_MAX = 3
@@ -23,8 +24,17 @@ class Feedforward_Config:
 
 
 @dataclasses.dataclass
+class VIC_Config:
+    enabled: bool = True
+    Ki: float = 0.1
+    max_error: float = 0.3
+    velocity_threshold: float = 0.05
+
+
+@dataclasses.dataclass
 class StateFeedback_Config:
     gain: list = dataclasses.field(default_factory=list)
+    vic: VIC_Config = dataclasses.field(default_factory=VIC_Config)
 
 
 @dataclasses.dataclass
@@ -83,19 +93,105 @@ class ControlConfig:
 
 
 def generate_default_config():
+    hardware = get_hardware_definition()
+
+    if hardware['model']['type'] == 'normal':
+        generate_default_config_normal()
+    elif hardware['model']['type'] == 'big':
+        generate_default_config_big()
+    elif hardware['model']['type'] == 'small':
+        generate_default_config_small()
+    else:
+        raise Exception("Unknown hardware model type")
+
+
+def generate_default_config_normal():
     config = ControlConfig(name='default')
-    config.description = ('This is the default control configuration with which the robot is stable and is properly '
-                          'working')
+    config.description = 'Default Control Configuration for Normal Bilbo.'
     config.general.theta_offset = 0
     config.general.torque_offset = [0, 0]
-    config.statefeedback.gain = [0.12, 0.24, 0.04, 0.036,
-                                 0.12, 0.24, 0.04, -0.036]
+
+    # This is quite average
+    # config.statefeedback.gain = [0.12, 0.24, 0.04, 0.036,
+    #                              0.12, 0.24, 0.04, -0.036]
+
+    # config.statefeedback.gain = [0.12, 0.3, 0.04, 0.036,
+    #                              0.12, 0.3, 0.04, -0.036]
+
+    # config.statefeedback.gain = [0.2, 0.3, 0.04, 0.036,
+    #                              0.2, 0.3, 0.04, -0.036]
+
+    # # This is really aggressive!
+    # config.statefeedback.gain = [0.3, 0.3, 0.04, 0.036,
+    #                              0.3, 0.3, 0.04, -0.036]
+
+    # This is really aggressive!
+    config.statefeedback.gain = [0.3, 0.3, 0.04, 0.025,
+                                 0.3, 0.3, 0.04, -0.025]
+
     config.velocity_control.forward.feedback.Kp = -0.5
     config.velocity_control.forward.feedback.Ki = -0.6
     config.velocity_control.forward.feedback.Kd = -0.02
     config.velocity_control.turn.feedback.Kp = -0.01
     config.velocity_control.turn.feedback.Ki = -0.12
     config.velocity_control.turn.feedback.Kd = 0
+    save_config(config)
+
+
+def generate_default_config_big():
+    config = ControlConfig(name='default')
+    config.description = 'Default Control Configuration for Big Bilbo.'
+
+    config.general.theta_offset = 0
+    config.general.torque_offset = [0, 0]
+
+    # config.statefeedback.gain = [0.15, 0.22, 0.032, 0.02,
+    #                              0.15, 0.22, 0.032, -0.02]
+
+    config.statefeedback.gain = [0.17, 0.22, 0.032, 0.02,
+                                 0.17, 0.22, 0.032, -0.02]
+
+    config.statefeedback.gain = [0.12, 0.25, 0.030, 0.02,
+                                 0.12, 0.25, 0.030, -0.02]
+
+    config.manual.torque.forward_torque_gain = 0.2
+    config.manual.torque.turn_torque_gain = 0.15
+
+    config.velocity_control.forward.feedback.Kp = 0
+    config.velocity_control.forward.feedback.Ki = 0
+    config.velocity_control.forward.feedback.Kd = 0
+    config.velocity_control.turn.feedback.Kp = 0
+    config.velocity_control.turn.feedback.Ki = 0
+    config.velocity_control.turn.feedback.Kd = 0
+    config.statefeedback.vic.enabled = False
+    config.statefeedback.vic.max_error = 0.5
+    config.statefeedback.vic.velocity_threshold = 0.1
+    config.statefeedback.vic.Ki = 0.2
+    save_config(config)
+
+def generate_default_config_small():
+    config = ControlConfig(name='default')
+    config.description = 'Default Control Configuration for Small Bilbo.'
+
+    config.general.theta_offset = 0
+    config.general.torque_offset = [0, 0]
+
+    config.statefeedback.gain = [0.12, 0.25, 0.030, 0.02,
+                                 0.12, 0.25, 0.030, -0.02]
+
+    config.manual.torque.forward_torque_gain = 0.2
+    config.manual.torque.turn_torque_gain = 0.15
+
+    config.velocity_control.forward.feedback.Kp = 0
+    config.velocity_control.forward.feedback.Ki = 0
+    config.velocity_control.forward.feedback.Kd = 0
+    config.velocity_control.turn.feedback.Kp = 0
+    config.velocity_control.turn.feedback.Ki = 0
+    config.velocity_control.turn.feedback.Kd = 0
+    config.statefeedback.vic.enabled = False
+    config.statefeedback.vic.max_error = 0.5
+    config.statefeedback.vic.velocity_threshold = 0.1
+    config.statefeedback.vic.Ki = 0.2
     save_config(config)
 
 

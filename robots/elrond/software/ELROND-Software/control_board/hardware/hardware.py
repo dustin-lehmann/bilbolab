@@ -2,6 +2,7 @@ import enum
 
 # ======================================================================================================================
 from core.hardware.sx1508 import SX1508, SX1508_GPIO_MODE
+from core.hardware.sx1509 import SX1509, SX1509_GPIO_MODE
 from utils.callbacks import Callback
 import core.hardware.rpi_gpio as gpio
 
@@ -22,7 +23,7 @@ class GPIO_Output:
     # ------------------------------------------------------------------------------------------------------------------
     def __init__(self, pin: int, pin_type: str = 'internal', write_direction: str = 'normal', value: int = 0,
                  pull_up_down: PullupPulldown = PullupPulldown.OFF):
-        assert pin_type in ('internal', 'sx1508')
+        assert pin_type in ('internal', 'sx1508', 'sx1509')
         assert (write_direction in ('normal', 'inverted'))
 
         self.pin_type = pin_type
@@ -34,6 +35,9 @@ class GPIO_Output:
         elif pin_type == 'sx1508':
             self.sx1508 = SX1508()
             self.sx1508.configureGPIO(self.pin, mode=SX1508_GPIO_MODE.OUTPUT)
+        elif pin_type == 'sx1509':
+            self.sx1509 = SX1509()
+            self.sx1509.configureGPIO(self.pin, mode=SX1509_GPIO_MODE.OUTPUT)
 
         self.write(value)
 
@@ -47,6 +51,8 @@ class GPIO_Output:
             gpio.write(self.pin, value)
         elif self.pin_type == 'sx1508':
             self.sx1508.writeGPIO(self.pin, value)
+        elif self.pin_type == 'sx1509':
+            self.sx1509.writeGPIO(self.pin, value)
 
     # ------------------------------------------------------------------------------------------------------------------
     def on(self):
@@ -62,6 +68,8 @@ class GPIO_Output:
             gpio.toggle(self.pin)
         elif self.pin_type == 'sx1508':
             self.sx1508.toggleGPIO(self.pin)
+        elif self.pin_type == 'sx1509':
+            self.sx1509.toggleGPIO(self.pin)
 
 
 # ======================================================================================================================
@@ -107,6 +115,9 @@ class GPIO_Input:
 
         elif pin_type == 'sx1508':
             raise NotImplementedError('SX1508 Input is not implemented yet')
+
+        elif pin_type == 'sx1509':
+            raise NotImplementedError('SX1509 Input is not implemented yet')
 
     # ------------------------------------------------------------------------------------------------------------------
     def addInterrupt(self, interrupt_flank: InterruptFlank, callback: (callable, Callback), bouncetime: int = 10):

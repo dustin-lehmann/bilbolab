@@ -97,6 +97,17 @@ class StandaloneJoystickControl:
                                         function=self.twipr.control.setMode,
                                         parameters={'mode': BILBO_Control_Mode.VELOCITY})
 
+        self.joystick.setButtonCallback(button=5,
+                                        event='down',
+                                        function=self.twipr.control.enableVelocityIntegralControl,
+                                        parameters={'enable': True})
+
+        self.joystick.setButtonCallback(button=4,
+                                        event='down',
+                                        function=self.twipr.control.enableVelocityIntegralControl,
+                                        parameters={'enable': False})
+
+
         logger.info("Joystick connected and assigned")
 
     # ------------------------------------------------------------------------------------------------------------------

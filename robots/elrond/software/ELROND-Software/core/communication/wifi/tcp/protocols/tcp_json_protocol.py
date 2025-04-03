@@ -12,9 +12,11 @@ from .tcp_base_protocol import TCP_Base_Protocol
 class TCP_JSON_Message(Message):
     address: (str, dict) = None
     source: str = None
-    type: str = None
-    time: float = None
+
+    type: str = ''
+    time: float = 0
     id: int = 0
+    event: str = ''
     request_id: int = 0
     request_response: bool = False
     data: dict = dataclasses.field(default_factory=dict)
@@ -55,8 +57,9 @@ class TCP_JSON_Protocol(Protocol):
             msg.time = msg_content['time']
         if 'request_id' in msg_content:
             msg.request_id = msg_content['request_id']
+        if 'event' in msg_content:
+            msg.event = msg_content['event']
         return msg
-
 
     # ------------------------------------------------------------------------------------------------------------------
     @classmethod
@@ -80,4 +83,4 @@ class TCP_JSON_Protocol(Protocol):
         return 1
 
 
-TCP_JSON_Message._protocol = TCP_JSON_Protocol   # Type: Ignore
+TCP_JSON_Message._protocol = TCP_JSON_Protocol  # Type: Ignore

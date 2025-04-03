@@ -24,37 +24,39 @@ class TCP_Base_Protocol(Protocol):
     |   1       |   HEADER[1]       |   second header byte          |   0x55
     |   2       |   SRC[0]          |   Source Address                   |
     |   3       |   SRC[1]          |   Source Address                   |
-    |   2       |   SRC[2]          |   Source Address                   |
-    |   3       |   SRC[3]          |   Source Address                   |
-    |   4       |   ADD[0]          |   Target Address                     |
-    |   5       |   ADD[1]          |   Target Address                     |
-    |   4       |   ADD[2]          |   Target Address                     |
-    |   5       |   ADD[3]          |   Target Address                     |
-    |   6       |   PROTOCOL        |   Protocol ID                 |
-    |   7       |   LEN[0]          |   Length of the payload       |
-    |   8       |   LEN[1]          |   Length of the payload       |
-    |   9       |   PAYLOAD[0]      |   Payload                     |
-    |   9+N-1   |   PAYLOAD[N-1]    |   Payload                     |
-    |   9+N     |   CRC8            |   CRC8 of the Payload         |
-    |   10+N     |   FOOTER          |   Footer                      |   0x5D
+    |   4       |   SRC[2]          |   Source Address                   |
+    |   5       |   SRC[3]          |   Source Address                   |
+    |   6       |   ADD[0]          |   Target Address                     |
+    |   7       |   ADD[1]          |   Target Address                     |
+    |   8       |   ADD[2]          |   Target Address                     |
+    |   9       |   ADD[3]          |   Target Address                     |
+    |   10       |   PROTOCOL        |   Protocol ID                 |
+    |   11       |   LEN[0]          |   Length of the payload       |
+    |   12       |   LEN[1]          |   Length of the payload       |
+    |   13      |   LEN[2]          |   Length of the payload       |
+    |   14       |   LEN[3]          |   Length of the payload       |
+    |   15       |   PAYLOAD[0]      |   Payload                     |
+    |   15+N-1   |   PAYLOAD[N-1]    |   Payload                     |
+    |   15+N     |   CRC8            |   CRC8 of the Payload         |
+    |   16+N     |   FOOTER          |   Footer                      |   0x5D
     """
     base = None
     identifier = 0
     Message = TCP_Base_Message
 
-    idx_protocol = 6
+    idx_protocol = 10
     idx_src = slice(2, 6)
     idx_add = slice(6, 10)
-    idx_len = slice(10, 12)
-    idx_payload = 13
-    offset_crc = 13
-    offset_footer = 14
+    idx_len = slice(11, 15)
+    idx_payload = 15
+    offset_crc = 15
+    offset_footer = 16
 
     header_0 = 0x55
     header_1 = 0x55
     footer = 0x5D
 
-    protocol_overhead = 15
+    protocol_overhead = 17
 
     def __init__(self):
         super().__init__()
@@ -98,7 +100,7 @@ class TCP_Base_Protocol(Protocol):
         else:
             buffer[cls.idx_protocol] = 0
 
-        buffer[cls.idx_len] = len(msg.data).to_bytes(length=2, byteorder="little")
+        buffer[cls.idx_len] = len(msg.data).to_bytes(length=4, byteorder="little")
         buffer[cls.idx_payload: cls.idx_payload + len(msg.data)] = msg.data
         buffer[cls.offset_crc + len(msg.data)] = 0x00  # TODO
         buffer[cls.offset_footer + len(msg.data)] = cls.footer

@@ -16,7 +16,7 @@ from utils.logging_utils import Logger, enable_redirection, setLoggerLevel, disa
 handler = None
 
 logger = Logger("COMMUNICATION")
-logger.setLevel("WARNING")
+logger.setLevel("INFO")
 
 
 # ======================================================================================================================
@@ -56,10 +56,11 @@ class BILBO_Communication:
         self.events = BILBO_Communication_Events()
 
         # Configure the SPI Interface
-        self.spi.callbacks.rx_samples.register(self._stm32_rx_sample_callback)
+        self.spi.callbacks.rx_latest_sample.register(self._stm32_rx_sample_callback)
 
         setLoggerLevel('tcp', 'WARNING')
-        # self.wifi.callbacks.connected.register()
+        self.wifi.callbacks.connected.register(self._wifi_connected_callback)
+        self.wifi.callbacks.disconnected.register(self._wifi_disconnected_callback)
 
         self.exit = ExitHandler()
         self.exit.register(self.close)
@@ -80,21 +81,25 @@ class BILBO_Communication:
         handler = self
 
     # ------------------------------------------------------------------------------------------------------------------
+    def startSampleListener(self):
+        self.spi.startSampleListener()
+
+    # ------------------------------------------------------------------------------------------------------------------
     def close(self, *args, **kwargs):
         disable_redirection(self._log_redirection)
         logger.info("Closing BILBO Communication")
         self.spi.close()
 
     # === PRIVATE METHODS ==============================================================================================
-    def _stm32_rx_sample_callback(self, samples, *args, **kwargs):
-        sample = samples[0]
+    def _stm32_rx_sample_callback(self, sample, *args, **kwargs):
+        # sample = samples[0]
 
         # Execute the callbacks
         for callback in self.callbacks.rx_stm32_sample:
             callback(sample)
 
         # Set the events
-        self.events.rx_stm32_sample.set(samples)
+        self.events.rx_stm32_sample.set(sample)
         self.events.stm32_tick.set(sample.general.tick)
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -105,3 +110,11 @@ class BILBO_Communication:
                                 'message': log,
                                 'logger': logger.name
                             })
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _wifi_connected_callback(self, *args, **kwargs):
+        logger.info("Connected to Server")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _wifi_disconnected_callback(self, *args, **kwargs):
+        logger.warning("Disconnected from Server")

@@ -2,6 +2,7 @@ import logging
 import os
 import queue
 import threading
+import time
 
 import cobs.cobs as cobs
 import serial
@@ -11,11 +12,13 @@ from utils.callbacks import callback_handler, CallbackContainer
 
 SERIAL_BUFFER_SIZE = 8192
 
+
 @callback_handler
 class UART_Socket_Callbacks:
     rx: CallbackContainer
     # connected: ...
     # error: ...
+
 
 class UART_Socket:
     """
@@ -102,7 +105,7 @@ class UART_Socket:
         self._rxThread = threading.Thread(target=self._rxThreadFunction, daemon=True)
         self._rxThread.start()
 
-        self._txThread =  threading.Thread(target=self._txThreadFunction, daemon=True)
+        self._txThread = threading.Thread(target=self._txThreadFunction, daemon=True)
         self._txThread.start()
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -134,7 +137,6 @@ class UART_Socket:
         while not self._exit:
             # Read data
             data = self._device.read(size=1)
-
             # Put the data into the reception buffer
             if len(data) > 0:
                 buffer[idx_write] = data
@@ -145,8 +147,6 @@ class UART_Socket:
                     idx_write = 0
                 else:
                     idx_write += 1
-
-
 
     # ------------------------------------------------------------------------------------------------------------------
     def _txThreadFunction(self):
