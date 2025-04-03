@@ -1,5 +1,6 @@
 import ctypes
 import enum
+from dataclasses import dataclass, fields
 
 from numpy import unsignedinteger
 
@@ -24,10 +25,46 @@ class dynamixel_position_single_motor_LL:
         'position': ctypes.c_uint32,
     }
 
+@dataclass
+class actuator_angles:
+    front_left: float = 0
+    back_left: float = 0
+    front_right: float = 0
+    back_right: float = 0
+
+@dataclass
+class actuator_angles_input:
+    front_left: float = 0
+    back_left: float = 0
+    front_right: float = 0
+    back_right: float = 0
+
+@dataclass
+class actuator_admissable_range:
+    front_left_min: float = 0
+    front_left_max: float = 80
+    back_left_min: float = 0
+    back_left_max: float = 80
+    front_right_min: float = 0
+    front_right_max: float = 80
+    back_right_min: float = 0
+    back_right_max: float = 80
+
+@dataclass
+class actuator_offsets:
+    front_left: float = 14
+    back_left: float = 14
+    front_right: float = 14
+    back_right: float = 14
+    # height difference (mm) between absolute zero point
+    # and initialization point, so that height 0 is driveable
+    #height: float = 30
 
 class ELROND_Dynamixel_Handler:
     comm: BILBO_Communication
     logger: Logger
+    angles: actuator_angles
+    ranges: actuator_admissable_range
 
     def __init__(self, comm: BILBO_Communication):
         self.comm = comm
@@ -42,22 +79,55 @@ class ELROND_Dynamixel_Handler:
     def start(self):
         ...
 
-    def setPosition(self, position: int, motor_id: int = 254):
-        if not (motor_id <= 252 or motor_id == 254):
-            self.logger.info(f"Motor ID must be between 0 and 252 (single motor) or 254 (broadcast), but was {motor_id}")
-        elif motor_id == 254:
-            self._setPositionAll_LL(ctypes.c_uint32(position))
+    def initializeLegs(self):
+        # move legs to a known position where the drive motors can spin
+        angles = actuator_angles_input(14.2,14.2,14.2,14.2)
+        self.moveLegs(angles)
+
+    # def setPosition(self, position: int, motor_id: int = 254):
+    #     if not (motor_id <= 252 or motor_id == 254):
+    #         self.logger.info(f"Motor ID must be between 0 and 252 (single motor) or 254 (broadcast), but was {motor_id}")
+    #     elif motor_id == 254:
+    #         self._setPositionAll_LL(ctypes.c_uint32(position))
+    #     else:
+    #         position_config = dynamixel_position_single_motor_LL()
+    #         position_config.motor_id = motor_id
+    #         position_config.position = position
+    #         self._setPositionSingle_LL(position_config)
+    #         self.logger.info("set position to {}".format(position))
+
+    def extendLegsStraight(self,height):
+
+        # Check if the height is ok
+        ...
+
+        # Calculate the angles for the corresponding height
+        ...
+
+        # Set the angle legs
+        self.moveLegs(...)
+
+    def moveLegs(self, angles: actuator_angles_input):
+        # Checking for admissible ranges
+        if not self._check_angles(angles):
+            raise ValueError("One or more angles are out of admissible range")
+        # Check if all angles are the same
+        # Call the function for the microcontroller
+        if self._are_angles_equal(angles):
+            self._setPositionAll_LL(ctypes.c_uint32(angles.front_left))
         else:
-            position_config = dynamixel_position_single_motor_LL()
-            position_config.motor_id = motor_id
-            position_config.position = position
-            self._setPositionSingle_LL(position_config)
-            self.logger.info("set position to {}".format(position))
+            self._setPositionAll_LL(ctypes.c_uint32(angles.front_left))
+            self._setPositionAll_LL(ctypes.c_uint32(angles.back_left))
+            self._setPositionAll_LL(ctypes.c_uint32(angles.front_right))
+            self._setPositionAll_LL(ctypes.c_uint32(angles.back_right))
+
+
+
 
     def readPositions(self):
         ...
 
-    def _checkMotors(self) -> bool:
+    def checkMotors(self) -> bool:
         return True
 
 
@@ -69,10 +139,30 @@ class ELROND_Dynamixel_Handler:
         else:
             self._setTorqueSingle_LL(dynamixel_bool_state_single_motor_LL(motor_id, torque_enable))
 
+    ## helper functions
 
+    def _are_angles_equal(self, angles: actuator_angles_input) -> bool:
+        """Check if all angles are equal."""
+        return (angles.front_left == angles.back_left == angles.front_right == angles.back_right)
+
+    def _check_angles(self, angles: actuator_angles_input) -> bool:
+        """Check if all angles are within their admissible ranges."""
+        # Get the admissible ranges
+        ranges = self.range
+
+        # Check each angle against its range
+        if not (ranges.front_left_min <= angles.front_left <= ranges.front_left_max):
+            return False
+        if not (ranges.back_left_min <= angles.back_left <= ranges.back_left_max):
+            return False
+        if not (ranges.front_right_min <= angles.front_right <= ranges.front_right_max):
+            return False
+        if not (ranges.back_right_min <= angles.back_right <= ranges.back_right_max):
+            return False
+
+        return True
 
     # direct mirrors of the lowlevel functions
-    # helper functions
     def _setTorqueSingle_LL(self, torque_config: dynamixel_bool_state_single_motor_LL) -> None:
         self.comm.serial.executeFunction(module=addresses.TWIPR_AddressTables.REGISTER_TABLE_GENERAL,
                                          address=addresses.TWIPR_ActuatorAddresses.ADDRESS_ACTUATOR_SET_TORQUE_SINGLE,
