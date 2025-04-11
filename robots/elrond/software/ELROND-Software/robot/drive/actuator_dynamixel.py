@@ -1,8 +1,7 @@
 import ctypes
 import enum
-from dataclasses import dataclass, fields
-
-from numpy import unsignedinteger
+from dataclasses import dataclass
+import numpy as np
 
 from utils.ctypes_utils import STRUCTURE
 
@@ -10,6 +9,21 @@ from utils.logging_utils import Logger
 from robot.communication.bilbo_communication import BILBO_Communication
 import robot.lowlevel.stm32_addresses as addresses
 
+class dynamixel_motor(enum.IntEnum):
+    FRONT_LEFT = 0
+    BACK_LEFT = 1
+    FRONT_RIGHT = 2
+    BACK_RIGHT = 3
+    ALL_MOTORS = 4
+
+@dataclass
+class elrond_leg_params:
+    # in mm
+    l1 : float = 46     # distance between the motors
+    l2 : float = 160    # length of the upper leg front
+    l3 : float = 230    # length of the lower leg front
+    l4 : float = 160    # length of upper leg back
+    l5 : float = 230    # length of lower leg back
 
 @STRUCTURE
 class dynamixel_bool_state_single_motor_LL:
@@ -40,7 +54,7 @@ class actuator_angles_input:
     back_right: float = 0
 
 @dataclass
-class actuator_admissable_range:
+class actuator_admissible_range:
     front_left_min: float = 0
     front_left_max: float = 80
     back_left_min: float = 0
@@ -49,6 +63,8 @@ class actuator_admissable_range:
     front_right_max: float = 80
     back_right_min: float = 0
     back_right_max: float = 80
+    height_min: float = 0 # in mm
+    height_max: float = 230 # in mm
 
 @dataclass
 class actuator_offsets:
@@ -58,21 +74,27 @@ class actuator_offsets:
     back_right: float = 14
     # height difference (mm) between absolute zero point
     # and initialization point, so that height 0 is driveable
-    #height: float = 30
+    height: float = 141
 
 class ELROND_Dynamixel_Handler:
     comm: BILBO_Communication
     logger: Logger
     angles: actuator_angles
-    ranges: actuator_admissable_range
+    ranges: actuator_admissible_range
+    offsets: actuator_offsets
 
     def __init__(self, comm: BILBO_Communication):
         self.comm = comm
         self.logger = Logger('actuators')
         self.logger.setLevel('INFO')
 
+        self.angles = actuator_angles()
+        self.ranges = actuator_admissible_range()
+        self.offsets = actuator_offsets()
+
     def init(self) -> bool:
-        success = self._checkMotors()
+        success = self.checkMotors()
+        #self.initializeLegs()
 
         return success
 
@@ -81,45 +103,67 @@ class ELROND_Dynamixel_Handler:
 
     def initializeLegs(self):
         # move legs to a known position where the drive motors can spin
-        angles = actuator_angles_input(14.2,14.2,14.2,14.2)
+        angles = actuator_angles_input(0,0,0,0)
         self.moveLegs(angles)
 
-    # def setPosition(self, position: int, motor_id: int = 254):
-    #     if not (motor_id <= 252 or motor_id == 254):
-    #         self.logger.info(f"Motor ID must be between 0 and 252 (single motor) or 254 (broadcast), but was {motor_id}")
-    #     elif motor_id == 254:
-    #         self._setPositionAll_LL(ctypes.c_uint32(position))
-    #     else:
-    #         position_config = dynamixel_position_single_motor_LL()
-    #         position_config.motor_id = motor_id
-    #         position_config.position = position
-    #         self._setPositionSingle_LL(position_config)
-    #         self.logger.info("set position to {}".format(position))
-
-    def extendLegsStraight(self,height):
+    def extendLegsStraight(self,height: float ):
 
         # Check if the height is ok
-        ...
+       if height < self.ranges.height_min or height > self.ranges.height_max:
+           raise ValueError("Height is out of admissible range")
 
         # Calculate the angles for the corresponding height
-        ...
+       angles = self._calculate_angles(0,height + self.offsets.height)
 
         # Set the angle legs
-        self.moveLegs(...)
+       self.moveLegs(angles)
+
+    def extendLegs2D(self, x_target:float, y_target:float):
+
+        # Calculate the angles for the corresponding height
+        angles = self._calculate_angles(x_target, y_target + self.offsets.height)
+
+        # Set the angle legs
+        self.moveLegs(angles)
+
 
     def moveLegs(self, angles: actuator_angles_input):
-        # Checking for admissible ranges
+        """
+        Move the legs to the specified angles.
+
+        This function sets the positions of the legs based on the input angles. It first checks if
+        the angles are within admissible ranges and if all angles are equal. Depending on these
+        checks, it sets the torque and positions for the motors accordingly.
+
+        Args:
+            angles (actuator_angles_input): The desired angles for the front-left, back-left,
+                                            front-right, and back-right motors.
+
+        Raises:
+            ValueError: If any of the angles are out of the admissible range.
+        """
+        # Checking if the angles are within admissible ranges
         if not self._check_angles(angles):
             raise ValueError("One or more angles are out of admissible range")
-        # Check if all angles are the same
-        # Call the function for the microcontroller
-        if self._are_angles_equal(angles):
-            self._setPositionAll_LL(ctypes.c_uint32(angles.front_left))
+
+        # Check if all angles are equal
+        if self._angles_equal(angles):
+            # Set torque and position for all motors if angles are equal
+            self.setTorque(True, dynamixel_motor.ALL_MOTORS)
+            self._setPosition(angles.front_left + self.offsets.front_left, dynamixel_motor.ALL_MOTORS)
         else:
-            self._setPositionAll_LL(ctypes.c_uint32(angles.front_left))
-            self._setPositionAll_LL(ctypes.c_uint32(angles.back_left))
-            self._setPositionAll_LL(ctypes.c_uint32(angles.front_right))
-            self._setPositionAll_LL(ctypes.c_uint32(angles.back_right))
+            # Set torque and position individually for each motor
+            self.setTorque(True, dynamixel_motor.FRONT_LEFT)
+            self._setPosition(angles.front_left + self.offsets.front_left, dynamixel_motor.FRONT_LEFT)
+
+            self.setTorque(True, dynamixel_motor.BACK_LEFT)
+            self._setPosition(angles.back_left + self.offsets.back_left, dynamixel_motor.BACK_LEFT)
+
+            self.setTorque(True, dynamixel_motor.FRONT_RIGHT)
+            self._setPosition(angles.front_right + self.offsets.front_right, dynamixel_motor.FRONT_RIGHT)
+
+            self.setTorque(True, dynamixel_motor.BACK_RIGHT)
+            self._setPosition(angles.back_right + self.offsets.back_right, dynamixel_motor.BACK_RIGHT)
 
 
 
@@ -130,25 +174,43 @@ class ELROND_Dynamixel_Handler:
     def checkMotors(self) -> bool:
         return True
 
-
-    def setTorque(self, torque_enable: bool ,motor_id: int = 254):
-        if not (motor_id <= 252 or motor_id == 254):
-            self.logger.info(f"Motor ID must be between 0 and 252 (single motor) or 254 (broadcast), but was {motor_id}")
-        elif motor_id == 254:
-            self._setTorqueAll_LL(ctypes.c_bool(torque_enable))
+    def setTorque(self, torque: bool, motor: dynamixel_motor):
+        """Set the torque of a single motor or all motors to the given state."""
+        if motor == dynamixel_motor.ALL_MOTORS:
+            self._setTorqueAll_LL(torque)
         else:
-            self._setTorqueSingle_LL(dynamixel_bool_state_single_motor_LL(motor_id, torque_enable))
+            torque_config = dynamixel_bool_state_single_motor_LL(motor, torque)
+            self._setTorqueSingle_LL(torque_config)
+
+    def setLED(self, led_enable: bool, motor: dynamixel_motor):
+        """Set the LED of a single motor or all motors to the given state."""
+        if motor == dynamixel_motor.ALL_MOTORS:
+            self._setLEDAll_LL(led_enable)
+        else:
+            led_config = dynamixel_bool_state_single_motor_LL(motor, led_enable)
+            self._setLEDSingle_LL(led_config)
+
+    def _setPosition(self, position: float, motor: dynamixel_motor):
+        """Set the position of a single motor or all motors to the given state."""
+        if position < 0:
+            raise ValueError("Position cannot be negative")
+        position_pulses = int(position/0.088)
+        if motor == dynamixel_motor.ALL_MOTORS:
+            self._setPositionAll_LL(ctypes.c_uint32(position_pulses))
+        else:
+            position_config = dynamixel_position_single_motor_LL(motor, ctypes.c_uint32(position_pulses))
+            self._setPositionSingle_LL(position_config)
 
     ## helper functions
 
-    def _are_angles_equal(self, angles: actuator_angles_input) -> bool:
+    def _angles_equal(self, angles: actuator_angles_input) -> bool:
         """Check if all angles are equal."""
         return (angles.front_left == angles.back_left == angles.front_right == angles.back_right)
 
     def _check_angles(self, angles: actuator_angles_input) -> bool:
         """Check if all angles are within their admissible ranges."""
         # Get the admissible ranges
-        ranges = self.range
+        ranges = self.ranges
 
         # Check each angle against its range
         if not (ranges.front_left_min <= angles.front_left <= ranges.front_left_max):
@@ -161,6 +223,49 @@ class ELROND_Dynamixel_Handler:
             return False
 
         return True
+
+    def _calculate_angles(self, x_target: float, y_target: float) -> actuator_angles_input:
+        """
+            Solves the inverse kinematics for a five-bar linkage with origin at midpoint.
+            Returns the base joint angles (θ1, θ3) and intermediate angles (θ2, θ4).
+            """
+        # Shift target to original frame (A0 at (0,0), B0 at (d,0))
+        x = x_target + elrond_leg_params.l1 / 2
+        y = y_target
+
+        # First chain (A0 -> P)
+        r_sq = x ** 2 + y ** 2
+        cos_theta2 = (r_sq - elrond_leg_params.l2 ** 2 - elrond_leg_params.l3 ** 2) / (2 * elrond_leg_params.l2 * elrond_leg_params.l3)
+
+        if abs(cos_theta2) > 1:
+            raise ValueError("Target position not reachable by the first chain.")
+
+        theta2 = -np.arccos(cos_theta2)  # Elbow-up solution
+
+        # Calculate θ1
+        alpha = np.arctan2(y, x)
+        beta = np.arctan2(elrond_leg_params.l3 * np.sin(theta2), elrond_leg_params.l2 + elrond_leg_params.l3 * np.cos(theta2))
+        theta1 = alpha - beta
+
+        # Second chain (B0 -> P)
+        r_prime_sq = (x - elrond_leg_params.l1) ** 2 + y ** 2
+        cos_theta4 = (r_prime_sq - elrond_leg_params.l4 ** 2 - elrond_leg_params.l5 ** 2) / (2 * elrond_leg_params.l4 * elrond_leg_params.l5)
+
+        if abs(cos_theta4) > 1:
+            raise ValueError("Target position not reachable by the second chain.")
+
+        theta4 = np.arccos(cos_theta4)  # Elbow-up solution
+
+        # Calculate θ3
+        alpha_prime = np.arctan2(y, x - elrond_leg_params.l1)
+        beta_prime = np.arctan2(elrond_leg_params.l5 * np.sin(theta4), elrond_leg_params.l4 + elrond_leg_params.l5 * np.cos(theta4))
+        theta3 = alpha_prime - beta_prime
+
+        theta1_deg = 180 - np.degrees(theta1)
+        theta3_deg = np.degrees(theta3)
+        angles_out = actuator_angles_input(theta3_deg,theta1_deg,theta3_deg,theta1_deg)
+
+        return angles_out
 
     # direct mirrors of the lowlevel functions
     def _setTorqueSingle_LL(self, torque_config: dynamixel_bool_state_single_motor_LL) -> None:

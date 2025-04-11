@@ -3,6 +3,7 @@ import ctypes
 import math
 import time
 
+from robot.drive.actuator_dynamixel import dynamixel_motor
 from robot.elrond import BILBO
 from robot.communication.serial.bilbo_serial_messages import BILBO_Debug_Message, BILBO_Sequencer_Event_Message
 from robot.control.definitions import BILBO_Control_Mode
@@ -22,12 +23,31 @@ def main():
     bilbo.start()
 
     time.sleep(2)
+    bilbo.board.beep()
+    bilbo.actuator.setTorque(True, dynamixel_motor.ALL_MOTORS)
+    #bilbo.actuator._setPosition(0, dynamixel_motor.ALL_MOTORS)
+    bilbo.actuator.initializeLegs()
+    time.sleep(4)
 
     while True:
+        time.sleep(2)
         bilbo.board.beep()
-        time.sleep(1)
+        #bilbo.actuator.setPosition(40, dynamixel_motor.ALL_MOTORS)
+        bilbo.actuator.extendLegsStraight(150)
+        #bilbo.actuator.extendLegs2D(100, 130)
+        time.sleep(4)
+        #bilbo.actuator.extendLegs2D(-50, 60)
+        #time.sleep(4)
+        #bilbo.actuator.extendLegs2D(50, 60)
+        #time.sleep(4)
         bilbo.board.beep('high')
-        time.sleep(1)
+        #bilbo.actuator.setPosition(0, dynamixel_motor.ALL_MOTORS)
+        bilbo.actuator.extendLegsStraight(0)
+        #bilbo.actuator.extendLegs2D(-100, 130)
+        #time.sleep(4)
+        #bilbo.actuator.extendLegs2D(-50, 60)
+        time.sleep(2)
+
 
 
 if __name__ == '__main__':

@@ -401,7 +401,7 @@ HAL_StatusTypeDef TWIPR_Firmware::init() {
 	this->control.init(twipr_control_config);
 
 	// Drive configuration
-
+	/*
 	// ------------------------------------------------------------------
 #ifdef BILBO_DRIVE_SIMPLEXMOTION_CAN
 	// Initialize both motors
@@ -446,6 +446,7 @@ HAL_StatusTypeDef TWIPR_Firmware::init() {
 			.torque_max = 0.4, .task_time = BILBO_DRIVE_TASK_TIME };
 
 	this->drive.init(drive_config, &this->motor_left, &this->motor_right);
+	*/
 
 	// Actuator module initialization
 	dynamixel_handler_config_t handler_config = {
@@ -495,12 +496,14 @@ HAL_StatusTypeDef TWIPR_Firmware::start() {
 	this->sensors.start();
 	this->estimation.start();
 
+	/*
 	HAL_StatusTypeDef status = this->drive.start();
 	if (status) {
 		while (true) {
 			nop();
 		}
 	}
+	*/
 
 	// Start the actuators
 	this->handler.start();

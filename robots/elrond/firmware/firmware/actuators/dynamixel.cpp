@@ -30,15 +30,22 @@ uint8_t DynamixelMotor::init(dynamixel_config_t config) {
 	this->motor_mutexes.present_voltage_mutex = osMutexNew(NULL);
 	this->motor_mutexes.present_temperature_mutex = osMutexNew(NULL);
 
-	//create the motor task
-	osThreadNew(motor_task, this, &motor_task_attributes);
+
 
 	// success
 	return 0;
 }
 
 void DynamixelMotor::start() {
-	//
+
+	// set the profile velocity etc.
+	this->set_profile_accel(this->config.profile_accel);
+	osDelay(7);
+	this->set_profile_velocity(this->config.profile_velocity);
+	osDelay(7);
+
+	//create the motor task
+	osThreadNew(motor_task, this, &motor_task_attributes);
 }
 
 void DynamixelMotor::checkCommunication() {
@@ -104,7 +111,7 @@ void DynamixelMotor::set_torque(bool torque_enable = 0) {
 	send_request_to_handler(request);
 }
 
-void DynamixelMotor::set_profile_accel(uint16_t accel) {
+void DynamixelMotor::set_profile_accel(uint32_t accel) {
 
 	// set the length of the parameter in bytes
 	uint8_t parameter_len = 6;
@@ -122,7 +129,7 @@ void DynamixelMotor::set_profile_accel(uint16_t accel) {
 	send_request_to_handler(request);
 }
 
-void DynamixelMotor::set_profile_velocity(uint16_t velocity) {
+void DynamixelMotor::set_profile_velocity(uint32_t velocity) {
 
 	// set the length of the parameter in bytes
 	uint8_t parameter_len = 6;
@@ -289,9 +296,52 @@ void DynamixelMotor::request_present_position() {
 	dynamixel_request_t *req_back = nullptr;
 	BaseType_t status_returned = pdFALSE;
 	status_returned = xTaskNotifyWait(0, ULONG_MAX, (uint32_t*) &req_back,
-			MOTOR_WAIT_FOR_HANDLER_TIMEOUT);
+			portMAX_DELAY);
 
-	process_read_request(status_returned, request, req_back, &this->present_position, this->motor_mutexes.present_position_mutex);
+	//process_read_request(status_returned, request, req_back, &this->present_position, this->motor_mutexes.present_position_mutex);
+
+	// check if there was a notification to take or if there was a timeout
+	if (status_returned) {
+		// check if own request is the same address as received request adress
+		if (request == req_back) {
+
+			//check if the handler had success
+			if (request->success) {
+
+				// decode the position from the request
+				uint8_t *read_data = request->read_buffer;
+				uint32_t present_position = ((uint32_t) read_data[12] << 24)
+									|   // Most significant byte
+									((uint32_t) read_data[11] << 16)
+									| ((uint32_t) read_data[10] << 8)
+									| (uint32_t) read_data[9];     // Least significant byte
+
+				// store the position
+				osStatus_t status = osMutexAcquire(
+						this->motor_mutexes.present_position_mutex,
+						MOTOR_ACQUIRE_MUTEX_TIMEOUT_IN_TASK);
+				if (status == osOK) {
+					this->present_position = present_position;
+					osMutexRelease(this->motor_mutexes.present_position_mutex);
+				} else {
+					// mutex not available
+				}
+
+			} else {
+
+				//handler received wrong id or something else
+			}
+
+		} else {
+			// request addresses dont match
+
+		}
+
+	} else {
+
+		// there was a timeout waiting for the handler
+	}
+
 
 	// return request to the memory pool
 	osMemoryPoolFree(this->config.request_mem_pool, request);
@@ -323,7 +373,7 @@ void DynamixelMotor::request_goal_position() {
 	dynamixel_request_t *req_back = nullptr;
 	BaseType_t status_returned = pdFALSE;
 	status_returned = xTaskNotifyWait(0, ULONG_MAX, (uint32_t*) &req_back,
-			MOTOR_WAIT_FOR_HANDLER_TIMEOUT);
+			portMAX_DELAY);
 
 	// status = read_handler(status_returned, request, req_back, data_to_write_to, mutexforthat)
 	// process_read_request(status_returned, request, req_back, data_to_write_to, mutexforthat)
@@ -400,7 +450,7 @@ void DynamixelMotor::request_voltage() {
 	dynamixel_request_t *req_back = nullptr;
 	BaseType_t status_returned = pdFALSE;
 	status_returned = xTaskNotifyWait(0, ULONG_MAX, (uint32_t*) &req_back,
-			MOTOR_WAIT_FOR_HANDLER_TIMEOUT);
+			portMAX_DELAY);
 
 	// check if there was a notification to take or if there was a timeout
 	if (status_returned) {
@@ -479,7 +529,7 @@ void DynamixelMotor::request_temperature() {
 	dynamixel_request_t *req_back = nullptr;
 	BaseType_t status_returned = pdFALSE;
 	status_returned = xTaskNotifyWait(0, ULONG_MAX, (uint32_t*) &req_back,
-			MOTOR_WAIT_FOR_HANDLER_TIMEOUT);
+			portMAX_DELAY);
 
 	// check if there was a notification to take or if there was a timeout
 	if (status_returned) {
@@ -733,7 +783,7 @@ HAL_StatusTypeDef DynamixelMotor::process_read_request(BaseType_t status_returne
 				// decode the data from the request
 				uint8_t *read_data = request->read_buffer;
 				uint32_t temp_data_target =
-						((uint32_t) read_data[12] << 24) |   // Most significant byte
+						((uint32_t) read_data[12] << 24) |   // Mohst significant byte
 						((uint32_t) read_data[11] << 16)
 						| ((uint32_t) read_data[10] << 8)
 						| (uint32_t) read_data[9];     // Least significant byte
@@ -817,8 +867,8 @@ uint8_t DynamixelHandler::init(dynamixel_handler_config_t config) {
 	this->config = config; // copy given config
 
 	// create own uart config
-	core_hardware_UART_config uart_config = { .mode =
-			CORE_HARDWARE_UART_MODE_DMA, //use DMA for uart communication
+	core_hardware_UART_config uart_config = {
+			.mode = CORE_HARDWARE_UART_MODE_DMA, //use DMA for uart communication
 			.cobs_encode_rx = 0, // transmitting no co byte stuffing
 			.cobs_encode_tx = 0, // receving no co byte stuffing
 			.queues = true // use a queue
@@ -1240,6 +1290,13 @@ void DynamixelHandler::handler_task(void *argument) {
 			// cast the received pointer to original type
 			dynamixel_request_t *req = (dynamixel_request_t*) ptr_req;
 			// 1. Send TX data
+
+			if (req->write_buffer[0] == 0x00){
+				nop();
+			}
+
+
+
 			instance->uart.send(req->write_buffer, req->write_len);
 
 			if (req->type != INSTRUCTION_SYNC_WRITE) {
