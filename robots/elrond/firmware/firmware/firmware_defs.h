@@ -44,6 +44,10 @@ typedef struct twipr_logging_general_t {
 #define BILBO_DRIVE_TASK_TIME 10
 #endif
 
+#ifdef BILBO_DRIVE_MAB_CAN
+#define BILBO_DRIVE_TYPE BILBO_DRIVE_MAB
+#define BILBO_DRIVE_TASK_TIME 10
+#endif
 
 extern DMA_HandleTypeDef hdma_memtomem_dma2_stream0;
 #define TWIPR_FIRMWARE_SAMPLE_DMA_STREAM &hdma_memtomem_dma2_stream0

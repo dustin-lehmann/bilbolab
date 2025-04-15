@@ -102,6 +102,99 @@ void BILBO_Drive::task() {
 
 	HAL_StatusTypeDef status = HAL_ERROR;
 
+#ifdef BILBO_DRIVE_MAB_CAN
+	while (true) {
+			current_tick = osKernelGetTickCount();
+
+			if (this->status == BILBO_DRIVE_STATUS_OK) {
+
+				// Read the voltage
+				if (voltage_timer > 2000) {
+					voltage_timer.reset();
+					status = this->motor_left->getVoltage(motor_left_voltage);
+
+					if (status == HAL_OK) {
+						osSemaphoreAcquire(voltage_semaphore, portMAX_DELAY);
+						this->_voltage = motor_left_voltage;
+						osSemaphoreRelease(voltage_semaphore);
+					} else {
+						// TODO
+					}
+					continue;
+				}
+
+				// Read the speed
+				HAL_StatusTypeDef status_speed_left = this->motor_left->readSpeed(
+						motor_left_speed);
+
+				if (status_speed_left == HAL_ERROR) {
+					setError(BILBO_ERROR_MAJOR, BILBO_ERROR_MOTOR_COMM);
+					send_error("Motor comm error");
+					this->status = BILBO_DRIVE_STATUS_ERROR;
+					continue;
+				}
+
+				osDelay(2);
+
+				HAL_StatusTypeDef status_speed_right = this->motor_right->readSpeed(
+						motor_right_speed);
+
+				if (status_speed_right == HAL_ERROR) {
+					setError(BILBO_ERROR_MAJOR, BILBO_ERROR_MOTOR_COMM);
+					send_error("Motor comm error");
+					this->status = BILBO_DRIVE_STATUS_ERROR;
+					continue;
+				}
+
+				if (status_speed_left == HAL_OK && status_speed_right == HAL_OK) {
+					osSemaphoreAcquire(speed_semaphore, portMAX_DELAY);
+					this->_speed.left = motor_left_speed;
+					this->_speed.right = motor_right_speed;
+					osSemaphoreRelease(speed_semaphore);
+				}
+
+				// Set the torque
+
+				osSemaphoreAcquire(torque_semaphore, portMAX_DELAY);
+				motor_left_torque = this->_input.torque_left;
+				motor_right_torque = this->_input.torque_right;
+				osSemaphoreRelease(torque_semaphore);
+
+				status = this->motor_left->setTorque(motor_left_torque);
+
+				if (status == HAL_ERROR) {
+					setError(BILBO_ERROR_MAJOR, BILBO_ERROR_MOTOR_COMM);
+					send_error("Motor comm error");
+					this->status = BILBO_DRIVE_STATUS_ERROR;
+					continue;
+				}
+
+				osDelay(2);
+
+				status = this->motor_right->setTorque(motor_right_torque);
+
+				if (status == HAL_ERROR) {
+					setError(BILBO_ERROR_MAJOR, BILBO_ERROR_MOTOR_COMM);
+					send_error("Motor comm error");
+					this->status = BILBO_DRIVE_STATUS_ERROR;
+					continue;
+				}
+
+			} else if (this->status == BILBO_DRIVE_STATUS_ERROR) {
+				nop();
+			}
+
+			ticks_loop = osKernelGetTickCount() - current_tick;
+
+			if (ticks_loop > this->config.task_time) {
+				setError(BILBO_ERROR_MAJOR, BILBO_ERROR_MOTOR_RACECONDITIONS);
+			}
+
+			this->tick++;
+			osDelayUntil(current_tick + this->config.task_time);
+		}
+#endif
+
 #ifdef BILBO_DRIVE_SIMPLEXMOTION_RS485
 	uint8_t taskmode = 0;
 	while (true){

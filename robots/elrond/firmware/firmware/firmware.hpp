@@ -22,8 +22,8 @@
 #include "dynamixel.h"
 
 #include "bilbo_drive.h"
-#include "simplexmotion_can.h"
-#include "simplexmotion_rs485.h"
+//#include "simplexmotion_can.h"
+//#include "simplexmotion_rs485.h"
 
 #include "twipr_errors.h"
 
@@ -79,6 +79,10 @@ public:
 #ifdef BILBO_DRIVE_SIMPLEXMOTION_RS485
 	SimplexMotion_RS485 motor_left;
 	SimplexMotion_RS485 motor_right;
+#endif
+
+#ifdef BILBO_DRIVE_MAB
+
 #endif
 
 	twipr_debug_sample_t debugData;
