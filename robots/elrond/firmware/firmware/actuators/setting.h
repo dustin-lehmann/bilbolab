@@ -51,7 +51,7 @@
 // 2bytes length declaration + 1byte instruction + 0-255bytes parameters + 2bytes checksum = 10 + length of parameters
 #define LEN_INSTRUC_PACKET_NO_PARAMETERS 10U
 #define LEN_STATUS_PACKET_NO_PARAMETERS 11U //status packet has one byte more, the error field
-
+#define LEN_PARAMETER_BUF_READ 4U //standard length of the parameter buf for a read request
 
 // Define the motors
 // number corresponds to the index

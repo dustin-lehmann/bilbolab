@@ -17,7 +17,7 @@ const osThreadAttr_t motor_task_attributes = { .name = "Dxl_Motor",
 		.stack_size = 2560, .priority = (osPriority_t) osPriorityBelowNormal, };
 
 /*public*/
-uint8_t DynamixelMotor::init(dynamixel_config_t config) {
+HAL_StatusTypeDef DynamixelMotor::init(dynamixel_config_t config) {
 
 	//load config into class member
 	this->config = config;
@@ -30,13 +30,14 @@ uint8_t DynamixelMotor::init(dynamixel_config_t config) {
 	this->motor_mutexes.present_voltage_mutex = osMutexNew(NULL);
 	this->motor_mutexes.present_temperature_mutex = osMutexNew(NULL);
 
-
+	// set mode to idle
+	this->status = DYNAMIXEL_MOTOR_IDLE;
 
 	// success
-	return 0;
+	return HAL_OK;
 }
 
-void DynamixelMotor::start() {
+HAL_StatusTypeDef DynamixelMotor::start() {
 
 	// set the profile velocity etc.
 	this->set_profile_accel(this->config.profile_accel);
@@ -44,17 +45,182 @@ void DynamixelMotor::start() {
 	this->set_profile_velocity(this->config.profile_velocity);
 	osDelay(7);
 
+	dynamixel_communication_packet__error_t com_err = this->checkCommunication();
+	if (com_err){
+		//there was an communication error
+		send_error("Dynamixel Motor, Communication Error in Startup, Code: %d",com_err);
+		return HAL_ERROR;
+	} else {
+		// communication is good, check hardware
+		osDelay(10);
+		dynamixel_motor_hardware_error_t hw_err =  this->checkHardwareError();
+		if (hw_err){
+			// there is a hard ware error
+			send_error("Dynamixel Motor, Hardware Error in Startup, Code: %d",hw_err);
+			return HAL_ERROR;
+
+		}
+	}
+
 	//create the motor task
 	osThreadNew(motor_task, this, &motor_task_attributes);
+
+	return HAL_OK;
 }
 
-void DynamixelMotor::checkCommunication() {
+dynamixel_communication_packet__error_t DynamixelMotor::checkCommunication() {
+
+	// this function sends a packet and checks the response from the motor
+	// construct a ping packet, no parameters but set it so that handler gets the answer of the motor
+	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
+			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
+	construct_request(INSTRUCTION_PING, 0, 0, 0, true, request);
+	//send the packet
+	send_request_to_handler(request);
+
+	// wait for the notification by the handler
+	// the handler updates the request and transfers uart data into the read buffer
+	// handler returns a pointer to the processed request
+	dynamixel_request_t *req_back = nullptr;
+	BaseType_t status_returned = pdFALSE;
+	status_returned = xTaskNotifyWait(0, ULONG_MAX, (uint32_t*) &req_back,
+			portMAX_DELAY);
+
+	if( status_returned){
+		// if we had a notification from the handler
+		if(request->success == true){
+			// check the error field in the request
+			uint8_t error = request->read_buffer[8];
+			if (error){
+				// return request to the memory pool
+				osMemoryPoolFree(this->config.request_mem_pool, request);
+
+				return (dynamixel_communication_packet__error_t)error;
+			}
+		} else {
+			// return request to the memory pool
+			osMemoryPoolFree(this->config.request_mem_pool, request);
+			// communication was not possible
+			return DYNAMIXEL_MOTOR_COMM_ERROR_REACHABLE;
+		}
+
+	}
+
+	// return request to the memory pool
+	osMemoryPoolFree(this->config.request_mem_pool, request);
+
+	return DYNAMIXEL_MOTOR_COMM_ERROR_NONE;
 }
 
 dynamixel_motor_hardware_error_t DynamixelMotor::checkHardwareError() {
+	// this function sends a packet and checks hardware errors
+	// should only be used if communication was checked and is possible
 
-	return DYNAMIXEL_HARDWARE_ERROR_NONE;
+	// construct a ping packet, no parameters, but set it so that handler gets the answer of the motor
+	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
+			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
+	construct_request(INSTRUCTION_PING, 0, 0, 0, true, request);
+	//send the packet
+	send_request_to_handler(request);
 
+	// wait for the notification by the handler
+	// the handler updates the request and transfers uart data into the read buffer
+	// handler returns a pointer to the processed request
+	dynamixel_request_t *req_back = nullptr;
+	BaseType_t status_returned = pdFALSE;
+	status_returned = xTaskNotifyWait(0, ULONG_MAX, (uint32_t*) &req_back,
+			portMAX_DELAY);
+
+	if( status_returned){
+		// if we had a notification from the handler
+		if(request->success == true){
+			// check the error field in the request
+			uint8_t error = request->read_buffer[8];
+			if (error == 1){
+				// this means there could be hardware error
+
+				// return old request to the memory pool
+				osMemoryPoolFree(this->config.request_mem_pool, request);
+
+				//read the hardware error register
+				// set the length of the parameter in bytes
+				uint8_t parameter_len = LEN_PARAMETER_BUF_READ;
+				// initialize a buffer for parameters
+				uint8_t parameter_buf[parameter_len];
+
+				// set the parameters
+				set_parameters_read(ADDRESS_HARDWARE_ERROR_STATUS, LEN_CTABLE_HARDWARE_ERROR_STATUS,
+						parameter_buf);
+
+				// construct a read packet
+				dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
+						this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
+				construct_request(INSTRUCTION_READ, parameter_buf, parameter_len, true,
+						LEN_CTABLE_HARDWARE_ERROR_STATUS, request);
+
+				//send the packet
+				send_request_to_handler(request);
+
+				// wait for the notification by the handler
+				// the handler updates the request and transfers uart data into the read buffer
+				// handler returns a pointer to the processed request
+				dynamixel_request_t *req_back = nullptr;
+				BaseType_t status_returned = pdFALSE;
+				status_returned = xTaskNotifyWait(0, ULONG_MAX, (uint32_t*) &req_back,
+						portMAX_DELAY);
+
+				if (status_returned){
+					if(request == req_back){
+						if (request->success){
+							dynamixel_motor_hardware_error_t hw_error = (dynamixel_motor_hardware_error_t) request->read_buffer[9];
+							if (hw_error){
+
+								// return request to the memory pool
+								osMemoryPoolFree(this->config.request_mem_pool, request);
+
+								return hw_error;
+							}
+
+
+						} else {
+							// return request to the memory pool
+							osMemoryPoolFree(this->config.request_mem_pool, request);
+							// communication was not possible
+							return DYNAMIXEL_MOTOR_HARDWARE_ERROR_REACHABLE;
+						}
+					} else {
+						// return request to the memory pool
+						osMemoryPoolFree(this->config.request_mem_pool, request);
+						// communication was not possible
+						return DYNAMIXEL_MOTOR_HARDWARE_ERROR_REACHABLE;
+					}
+
+				} else {
+					// return request to the memory pool
+					osMemoryPoolFree(this->config.request_mem_pool, request);
+					// communication was not possible
+					return DYNAMIXEL_MOTOR_HARDWARE_ERROR_REACHABLE;
+				}
+
+			} else {
+
+				// return request to the memory pool
+				osMemoryPoolFree(this->config.request_mem_pool, request);
+				// there is a communication error call checkCommunicatin instead
+				return DYNAMIXEL_MOTOR_HARDWARE_ERROR_COMMS;
+			}
+		} else {
+			// return request to the memory pool
+			osMemoryPoolFree(this->config.request_mem_pool, request);
+			// communication was not possible
+			return DYNAMIXEL_MOTOR_HARDWARE_ERROR_REACHABLE;
+		}
+	}
+
+	// return request to the memory pool
+	osMemoryPoolFree(this->config.request_mem_pool, request);
+
+	return DYNAMIXEL_MOTOR_HARDWARE_ERROR_NONE;
 }
 
 void DynamixelMotor::send_ping() {
@@ -62,7 +228,7 @@ void DynamixelMotor::send_ping() {
 	// construct a ping packet, no parameters
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_PING, 0, 0, 0, request);
+	construct_request(INSTRUCTION_PING, 0, 0, 0, false, request);
 	//send the packet
 	send_request_to_handler(request);
 
@@ -82,7 +248,7 @@ void DynamixelMotor::set_led(bool led_state) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len, 0,
+	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len, 0, false,
 			request);
 
 	//send the packet
@@ -104,7 +270,7 @@ void DynamixelMotor::set_torque(bool torque_enable = 0) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len, 0,
+	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len, 0, false,
 			request);
 
 	//send the packet
@@ -123,7 +289,7 @@ void DynamixelMotor::set_profile_accel(uint32_t accel) {
 
 	//construct a packet
 	dynamixel_request_t* request = (dynamixel_request_t*)osMemoryPoolAlloc(this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len,0, request);
+	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len,0, false, request);
 
 	//send the packet
 	send_request_to_handler(request);
@@ -141,7 +307,7 @@ void DynamixelMotor::set_profile_velocity(uint32_t velocity) {
 
 	//construct a packet
 	dynamixel_request_t* request = (dynamixel_request_t*)osMemoryPoolAlloc(this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len,0, request);
+	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len,0, false, request);
 
 	//send the packet
 	send_request_to_handler(request);
@@ -162,7 +328,7 @@ void DynamixelMotor::send_position(uint32_t position) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len, 0,
+	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len, 0, false,
 			request);
 
 	//send the packet
@@ -184,7 +350,7 @@ void DynamixelMotor::send_position_register(uint32_t position) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_REGISTER_WRITE, parameter_buf, parameter_len,
+	construct_request(INSTRUCTION_REGISTER_WRITE, parameter_buf, parameter_len, false,
 			0, request);
 
 	//send the packet
@@ -196,7 +362,7 @@ void DynamixelMotor::send_action() {
 	// construct a action packet, no parameters
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_ACTION, 0, 0, 0, request);
+	construct_request(INSTRUCTION_ACTION, 0, 0, 0, false, request);
 
 	//send the packet
 	send_request_to_handler(request);
@@ -213,7 +379,7 @@ float DynamixelMotor::get_present_voltage() {
 	osStatus_t status = osMutexAcquire(
 			this->motor_mutexes.present_voltage_mutex, 0);
 	if (status == osOK) {
-		float voltage = this->present_voltage;
+		float voltage = this->present_voltage * 0.1;
 		osMutexRelease(this->motor_mutexes.goal_position_mutex);
 		return voltage;
 	} else {
@@ -273,7 +439,7 @@ uint32_t DynamixelMotor::get_goal_position() {
 void DynamixelMotor::request_present_position() {
 
 	// set the length of the parameter in bytes
-	uint8_t parameter_len = 4;
+	uint8_t parameter_len = LEN_PARAMETER_BUF_READ;
 	// initialize a buffer for parameters
 	uint8_t parameter_buf[parameter_len];
 
@@ -284,7 +450,7 @@ void DynamixelMotor::request_present_position() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len,
+	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len, true,
 			LEN_CTABLE_PRESENT_POSITION, request);
 
 	//send the packet
@@ -298,50 +464,7 @@ void DynamixelMotor::request_present_position() {
 	status_returned = xTaskNotifyWait(0, ULONG_MAX, (uint32_t*) &req_back,
 			portMAX_DELAY);
 
-	//process_read_request(status_returned, request, req_back, &this->present_position, this->motor_mutexes.present_position_mutex);
-
-	// check if there was a notification to take or if there was a timeout
-	if (status_returned) {
-		// check if own request is the same address as received request adress
-		if (request == req_back) {
-
-			//check if the handler had success
-			if (request->success) {
-
-				// decode the position from the request
-				uint8_t *read_data = request->read_buffer;
-				uint32_t present_position = ((uint32_t) read_data[12] << 24)
-									|   // Most significant byte
-									((uint32_t) read_data[11] << 16)
-									| ((uint32_t) read_data[10] << 8)
-									| (uint32_t) read_data[9];     // Least significant byte
-
-				// store the position
-				osStatus_t status = osMutexAcquire(
-						this->motor_mutexes.present_position_mutex,
-						MOTOR_ACQUIRE_MUTEX_TIMEOUT_IN_TASK);
-				if (status == osOK) {
-					this->present_position = present_position;
-					osMutexRelease(this->motor_mutexes.present_position_mutex);
-				} else {
-					// mutex not available
-				}
-
-			} else {
-
-				//handler received wrong id or something else
-			}
-
-		} else {
-			// request addresses dont match
-
-		}
-
-	} else {
-
-		// there was a timeout waiting for the handler
-	}
-
+	process_read_request(status_returned, request, req_back, &this->present_position, this->motor_mutexes.present_position_mutex);
 
 	// return request to the memory pool
 	osMemoryPoolFree(this->config.request_mem_pool, request);
@@ -351,7 +474,7 @@ void DynamixelMotor::request_present_position() {
 void DynamixelMotor::request_goal_position() {
 
 	// set the length of the parameter in bytes
-	uint8_t parameter_len = 4;
+	uint8_t parameter_len = LEN_PARAMETER_BUF_READ;
 	// initialize a buffer for parameters
 	uint8_t parameter_buf[parameter_len];
 
@@ -361,7 +484,7 @@ void DynamixelMotor::request_goal_position() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT); // get a request from the pool
-	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len,
+	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len, true,
 			LEN_CTABLE_GOAL_POSITION, request);
 
 	//send the packet
@@ -375,49 +498,7 @@ void DynamixelMotor::request_goal_position() {
 	status_returned = xTaskNotifyWait(0, ULONG_MAX, (uint32_t*) &req_back,
 			portMAX_DELAY);
 
-	// status = read_handler(status_returned, request, req_back, data_to_write_to, mutexforthat)
-	// process_read_request(status_returned, request, req_back, data_to_write_to, mutexforthat)
-	// check if there was a notification to take or if there was a timeout
-	if (status_returned) {
-		// check if own request is the same address as received request adress
-		if (request == req_back) {
-
-			//check if the handler had success
-			if (request->success) {
-
-				// decode the position from the request
-				uint8_t *read_data = request->read_buffer;
-				uint32_t goal_position = ((uint32_t) read_data[12] << 24)
-						|   // Most significant byte
-						((uint32_t) read_data[11] << 16)
-						| ((uint32_t) read_data[10] << 8)
-						| (uint32_t) read_data[9];     // Least significant byte
-
-				// store the position
-				osStatus_t status = osMutexAcquire(
-						this->motor_mutexes.goal_position_mutex,
-						MOTOR_ACQUIRE_MUTEX_TIMEOUT_IN_TASK);
-				if (status == osOK) {
-					this->goal_position = goal_position;
-					osMutexRelease(this->motor_mutexes.goal_position_mutex);
-				} else {
-					// mutex not available
-				}
-
-			} else {
-
-				//handler received wrong id or something else
-			}
-
-		} else {
-			// request addresses dont match
-
-		}
-
-	} else {
-
-		// there was a timeout waiting for the handler
-	}
+	process_read_request(status_returned, request, req_back, &this->goal_position, this->motor_mutexes.goal_position_mutex);
 
 	// return request to the memory pool
 	osMemoryPoolFree(this->config.request_mem_pool, request);
@@ -427,7 +508,7 @@ void DynamixelMotor::request_goal_position() {
 void DynamixelMotor::request_voltage() {
 
 	// set the length of the parameter in bytes
-	uint8_t parameter_len = 4;
+	uint8_t parameter_len = LEN_PARAMETER_BUF_READ;
 	// initialize a buffer for parameters
 	uint8_t parameter_buf[parameter_len];
 
@@ -438,7 +519,7 @@ void DynamixelMotor::request_voltage() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len,
+	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len, true,
 			LEN_CTABLE_INPUT_VOLTAGE, request);
 
 	//send the packet
@@ -452,51 +533,7 @@ void DynamixelMotor::request_voltage() {
 	status_returned = xTaskNotifyWait(0, ULONG_MAX, (uint32_t*) &req_back,
 			portMAX_DELAY);
 
-	// check if there was a notification to take or if there was a timeout
-	if (status_returned) {
-		// check if own request is the same address as received request adress
-		if (request == req_back) {
-
-			//check if the handler had success
-			if (request->success) {
-
-				// decode the data from the request
-				uint8_t *read_data = &request->read_buffer[9];
-
-				uint16_t input_voltage;
-
-				for (uint8_t i = 0; i < LEN_CTABLE_INPUT_VOLTAGE; i++) {
-
-					input_voltage |= (uint16_t) read_data[i] << (8 * i);
-				}
-
-				// store the voltage
-				osStatus_t status = osMutexAcquire(
-						this->motor_mutexes.present_voltage_mutex,
-						MOTOR_ACQUIRE_MUTEX_TIMEOUT_IN_TASK);
-				if (status == osOK) {
-					this->present_voltage = input_voltage * 0.1f;
-					osMutexRelease(this->motor_mutexes.present_voltage_mutex);
-				} else {
-					// mutex not available
-				}
-
-			} else {
-
-				//handler had no success
-				// return the request to pool
-
-			}
-
-		} else {
-			// request addresses dont match
-
-		}
-
-	} else {
-
-		// there was a timeout waiting for the handler
-	}
+	process_read_request(status_returned, request, req_back, &this->present_voltage, this->motor_mutexes.present_voltage_mutex);
 
 	// return request to the memory pool
 	osMemoryPoolFree(this->config.request_mem_pool, request);
@@ -506,7 +543,7 @@ void DynamixelMotor::request_voltage() {
 void DynamixelMotor::request_temperature() {
 
 	// set the length of the parameter in bytes
-	uint8_t parameter_len = 4;
+	uint8_t parameter_len = LEN_PARAMETER_BUF_READ;
 	// initialize a buffer for parameters
 	uint8_t parameter_buf[parameter_len];
 
@@ -517,7 +554,7 @@ void DynamixelMotor::request_temperature() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len,
+	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len, true,
 			LEN_CTABLE_TEMPERATURE, request);
 
 	//send the packet
@@ -531,47 +568,7 @@ void DynamixelMotor::request_temperature() {
 	status_returned = xTaskNotifyWait(0, ULONG_MAX, (uint32_t*) &req_back,
 			portMAX_DELAY);
 
-	// check if there was a notification to take or if there was a timeout
-	if (status_returned) {
-		// check if own request is the same address as received request adress
-		if (request == req_back) {
-
-			//check if the handler had success
-			if (request->success) {
-
-				// decode the data from the request
-				uint8_t *read_data = &request->read_buffer[9];
-
-				uint8_t present_temperature = read_data[0];
-
-				// store the temp
-				osStatus_t status = osMutexAcquire(
-						this->motor_mutexes.present_temperature_mutex,
-						MOTOR_ACQUIRE_MUTEX_TIMEOUT_IN_TASK);
-				if (status == osOK) {
-					this->present_voltage = present_temperature;
-					osMutexRelease(
-							this->motor_mutexes.present_temperature_mutex);
-				} else {
-					// mutex not available
-				}
-
-			} else {
-
-				//handler had no success
-				// return the request to pool
-
-			}
-
-		} else {
-			// request addresses dont match
-
-		}
-
-	} else {
-
-		// there was a timeout waiting for the handler
-	}
+	process_read_request(status_returned, request, req_back, &this->present_temperature, this->motor_mutexes.present_temperature_mutex);
 
 	// return request to the memory pool
 	osMemoryPoolFree(this->config.request_mem_pool, request);
@@ -640,7 +637,7 @@ void DynamixelMotor::set_parameters_read(uint8_t address,
 /// makes a packet for protocol 2.0 and bundles it into a request
 uint8_t DynamixelMotor::construct_request(
 		dynamixel_instruction_type_t instruction, uint8_t *parameters,
-		uint8_t parameter_len, uint8_t len_ctable_read,
+		uint8_t parameter_len, uint8_t len_ctable_read, bool set_type_to_read,
 		dynamixel_request_t *request) {
 
 	//length of full packet is 4bytes header and reserved + 1byte ID +
@@ -781,28 +778,18 @@ HAL_StatusTypeDef DynamixelMotor::process_read_request(BaseType_t status_returne
 			if (request->success) {
 
 				// decode the data from the request
-				uint8_t *read_data = request->read_buffer;
-				uint32_t temp_data_target =
-						((uint32_t) read_data[12] << 24) |   // Mohst significant byte
-						((uint32_t) read_data[11] << 16)
-						| ((uint32_t) read_data[10] << 8)
-						| (uint32_t) read_data[9];     // Least significant byte
+				uint8_t *read_data = &request->read_buffer[9];
+				uint32_t temp_data_target = bytearray_to_uint32(read_data);
 
 				// store the data
-				osStatus_t status = osMutexAcquire(mutex_for_data, MOTOR_ACQUIRE_MUTEX_TIMEOUT_IN_TASK);
-				if (status == osOK) {
-					*(data_target) = temp_data_target;
-					osMutexRelease(mutex_for_data);
-				} else {
-					// mutex not available
+				if(this->store_data_w_mutex(data_target, &temp_data_target, mutex_for_data)){
+					// store was not successful
 					return HAL_ERROR;
 				}
 
 			} else {
-
 				//handler had no success
 				return HAL_ERROR;
-
 			}
 
 		} else {
@@ -811,10 +798,135 @@ HAL_StatusTypeDef DynamixelMotor::process_read_request(BaseType_t status_returne
 		}
 
 	} else {
-
-		// there was a timeout waiting for the handler
+		// the handler did not notify
+		// the request is still in the request_queue could lead to use after free , trigger error internal for handler
+		// ToDo trigger handler error, handler should clear the massage queue
 		return HAL_ERROR;
 	}
+	return HAL_OK;
+}
+
+HAL_StatusTypeDef DynamixelMotor::process_read_request(BaseType_t status_returned,
+		dynamixel_request_t *request, dynamixel_request_t *req_back,
+		uint16_t * data_target, osMutexId_t mutex_for_data) {
+
+	// check if there was a notification to take or if there was a timeout
+	if (status_returned) {
+		// check if own request is the same address as received request adress
+		if (request == req_back) {
+
+			//check if the handler had success
+			if (request->success) {
+
+				// decode the data from the request
+				uint8_t *read_data = &request->read_buffer[9];
+				uint16_t temp_data_target = bytearray_to_uint16(read_data);
+
+				// store the data
+				if(this->store_data_w_mutex(data_target, &temp_data_target, mutex_for_data)){
+					// store was not successful
+					return HAL_ERROR;
+				}
+
+			} else {
+				//handler had no success
+				return HAL_ERROR;
+			}
+
+		} else {
+			// request addresses dont match
+			return HAL_ERROR;
+		}
+
+	} else {
+		// the handler did not notify
+		// the request is still in the request_queue could lead to use after free , trigger error internal for handler
+		// ToDo trigger handler error, handler should clear the massage queue
+		return HAL_ERROR;
+	}
+	return HAL_OK;
+}
+
+HAL_StatusTypeDef DynamixelMotor::process_read_request(BaseType_t status_returned,
+		dynamixel_request_t *request, dynamixel_request_t *req_back,
+		uint8_t * data_target, osMutexId_t mutex_for_data) {
+
+	// check if there was a notification to take or if there was a timeout
+	if (status_returned) {
+		// check if own request is the same address as received request adress
+		if (request == req_back) {
+
+			//check if the handler had success
+			if (request->success) {
+
+				// decode the data from the request
+				uint8_t *read_data = &request->read_buffer[9];
+				uint8_t temp_data_target = bytearray_to_uint16(read_data);
+
+				// store the data
+				if(this->store_data_w_mutex(data_target, &temp_data_target, mutex_for_data)){
+					// store was not successful
+					return HAL_ERROR;
+				}
+
+			} else {
+				//handler had no success
+				return HAL_ERROR;
+			}
+
+		} else {
+			// request addresses dont match
+			return HAL_ERROR;
+		}
+
+	} else {
+		// the handler did not notify
+		// the request is still in the request_queue could lead to use after free , trigger error internal for handler
+		// ToDo trigger handler error, handler should clear the massage queue
+		return HAL_ERROR;
+	}
+	return HAL_OK;
+}
+
+HAL_StatusTypeDef DynamixelMotor::store_data_w_mutex(uint32_t * data_target,uint32_t * temp_data, osMutexId_t mutex){
+
+	osStatus_t status = osMutexAcquire(mutex, MOTOR_ACQUIRE_MUTEX_TIMEOUT_IN_TASK);
+	if (status == osOK) {
+		*(data_target) = *(temp_data);
+		osMutexRelease(mutex);
+	} else {
+		// mutex not available
+		return HAL_ERROR;
+	}
+
+	return HAL_OK;
+}
+
+HAL_StatusTypeDef DynamixelMotor::store_data_w_mutex(uint16_t * data_target,uint16_t * temp_data, osMutexId_t mutex){
+
+	osStatus_t status = osMutexAcquire(mutex, MOTOR_ACQUIRE_MUTEX_TIMEOUT_IN_TASK);
+	if (status == osOK) {
+		*(data_target) = *(temp_data);
+		osMutexRelease(mutex);
+	} else {
+		// mutex not available
+		return HAL_ERROR;
+	}
+
+	return HAL_OK;
+}
+
+HAL_StatusTypeDef DynamixelMotor::store_data_w_mutex(uint8_t * data_target,uint8_t * temp_data, osMutexId_t mutex){
+
+	osStatus_t status = osMutexAcquire(mutex, MOTOR_ACQUIRE_MUTEX_TIMEOUT_IN_TASK);
+	if (status == osOK) {
+		*(data_target) = *(temp_data);
+		osMutexRelease(mutex);
+	} else {
+		// mutex not available
+		return HAL_ERROR;
+	}
+
 	return HAL_OK;
 }
 
@@ -1010,7 +1122,7 @@ void DynamixelHandler::set_torque_all_motors(bool torque_enable) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	motors[0].construct_request(INSTRUCTION_SYNC_WRITE, parameter_buf,
+	motors[0].construct_request(INSTRUCTION_SYNC_WRITE, parameter_buf, false,
 			parameter_len, 0, request);
 
 	// override motor id in request to Broadcast id
@@ -1040,7 +1152,7 @@ void DynamixelHandler::set_led_all_motors(bool led_state) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	motors[0].construct_request(INSTRUCTION_SYNC_WRITE, parameter_buf,
+	motors[0].construct_request(INSTRUCTION_SYNC_WRITE, parameter_buf, false,
 			parameter_len, 0, request);
 
 	// override motor id in request to Broadcast id
@@ -1071,7 +1183,7 @@ void DynamixelHandler::send_position_all_motors(uint32_t position) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	motors[0].construct_request(INSTRUCTION_SYNC_WRITE, parameter_buf,
+	motors[0].construct_request(INSTRUCTION_SYNC_WRITE, parameter_buf, false,
 			parameter_len, 0, request);
 
 	// override motor id in request to Broadcast id
@@ -1290,13 +1402,6 @@ void DynamixelHandler::handler_task(void *argument) {
 			// cast the received pointer to original type
 			dynamixel_request_t *req = (dynamixel_request_t*) ptr_req;
 			// 1. Send TX data
-
-			if (req->write_buffer[0] == 0x00){
-				nop();
-			}
-
-
-
 			instance->uart.send(req->write_buffer, req->write_len);
 
 			if (req->type != INSTRUCTION_SYNC_WRITE) {
@@ -1312,20 +1417,6 @@ void DynamixelHandler::handler_task(void *argument) {
 					buffer = instance->uart.rx_queue.read();
 
 					if (req->type == INSTRUCTION_READ) {
-
-						/*
-						 //debug statements
-						 // get the length and data from uart
-						 uint16_t len = buffer->len;
-						 uint8_t *data = buffer->data_ptr;
-
-						 for(uint8_t i = 0; i<len; i++)
-						 {
-						 data_from_rx[i] = data[i];
-						 }
-
-						 rx_completed++;
-						 */
 
 						//check the paket header and checksum
 						if (instance->check_packet_header_crc(buffer)) {
@@ -1404,9 +1495,6 @@ void DynamixelHandler::handler_task(void *argument) {
 							eSetValueWithOverwrite);
 
 					// motor will return request to the pool
-
-					// Return the request to memory pool
-					//osMemoryPoolFree(instance->config.request_mem_pool, req);
 
 				}
 

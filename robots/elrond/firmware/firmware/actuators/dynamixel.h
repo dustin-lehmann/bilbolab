@@ -18,6 +18,7 @@
 #include "cmsis_os2.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "twipr_communication.h"
 //#include "queue.h"
 //#include "semphr.h"
 
@@ -76,23 +77,26 @@ typedef enum dynamixel_operating_mode_t {
 }dynamixel_operating_mode_t;
 
 typedef enum dynamixel_motor_hardware_error_t {
-	DYNAMIXEL_HARDWARE_ERROR_NONE = 0,
-	DYNAMIXEL_HARDWARE_ERROR_VOLTAGE = 1,
-	DYNAMIXEL_HARDWARE_ERROR_OVERHEATING = 2,
-	DYNAMIXEL_HARDWARE_ERROR_ENCODER = 3,
-	DYNAMIXEL_HARDWARE_ERROR_ELECTRICAL_SHOCK = 4,
-	DYNAMIXEL_HARDWARE_ERROR_OVERLOAD = 5
+	DYNAMIXEL_MOTOR_HARDWARE_ERROR_NONE = 0,
+	DYNAMIXEL_MOTOR_HARDWARE_ERROR_VOLTAGE = 1,
+	DYNAMIXEL_MOTOR_HARDWARE_ERROR_OVERHEATING = 2,
+	DYNAMIXEL_MOTOR_HARDWARE_ERROR_ENCODER = 3,
+	DYNAMIXEL_MOTOR_HARDWARE_ERROR_ELECTRICAL_SHOCK = 4,
+	DYNAMIXEL_MOTOR_HARDWARE_ERROR_OVERLOAD = 5,
+	DYNAMIXEL_MOTOR_HARDWARE_ERROR_REACHABLE = 10, // own code when motor not reachable
+	DYNAMIXEL_MOTOR_HARDWARE_ERROR_COMMS = 11 // there is a comm error call checkCommunication instead
 }dynamixel_motor_hardware_error_t;
 
 typedef enum dynamixel_communication_packet__error_t{
-	DYNAMIXEL_COMM_ERROR_NONE = 0,
-	DYNAMIXEL_COMM_ERROR_RESULT_FAIL = 1,
-	DYNAMIXEL_COMM_ERROR_INSTRUCTION = 2,
-	DYNAMIXEL_COMM_ERROR_CRC = 3,
-	DYNAMIXEL_COMM_ERROR_DATA_RANGE = 4,
-	DYNAMIXEL_COMM_ERROR_DATA_LENGTH = 5,
-	DYNAMIXEL_COMM_ERROR_DATA_LIMIT = 6,
-	DYNAMIXEL_COMM_ERROR_ACCESS = 7
+	DYNAMIXEL_MOTOR_COMM_ERROR_NONE = 0,
+	DYNAMIXEL_MOTOR_COMM_ERROR_RESULT_FAIL = 1,
+	DYNAMIXEL_MOTOR_COMM_ERROR_INSTRUCTION = 2,
+	DYNAMIXEL_MOTOR_COMM_ERROR_CRC = 3,
+	DYNAMIXEL_MOTOR_COMM_ERROR_DATA_RANGE = 4,
+	DYNAMIXEL_MOTOR_COMM_ERROR_DATA_LENGTH = 5,
+	DYNAMIXEL_MOTOR_COMM_ERROR_DATA_LIMIT = 6,
+	DYNAMIXEL_MOTOR_COMM_ERROR_ACCESS = 7,
+	DYNAMIXEL_MOTOR_COMM_ERROR_REACHABLE = 10 // own error code for no comm possible
 }dynamixel_communication_packet__error_t;
 
 typedef enum dynamixel_motor_status_t {
@@ -123,10 +127,10 @@ public:
 
 	}
 	/// Management and general functions
-	uint8_t init(dynamixel_config_t config);
-	void start();
-	void checkCommunication();
-	dynamixel_motor_hardware_error_t checkHardwareError();
+	HAL_StatusTypeDef init(dynamixel_config_t config);
+	HAL_StatusTypeDef start();
+
+	void checkMotor();
 
 	// sending and writing functions
 	void set_torque(bool torque_enable);
@@ -147,23 +151,28 @@ public:
 
 	// For receiving status packets
 	//void receive_callback(uint8_t *packet, uint16_t packet_len);
-	uint8_t construct_request(dynamixel_instruction_type_t instruction, uint8_t *parameters, uint8_t parameter_len, uint8_t len_ctable_read, dynamixel_request_t* request);
+	uint8_t construct_request(dynamixel_instruction_type_t instruction, uint8_t *parameters, uint8_t parameter_len, uint8_t len_ctable_read, bool set_type_to_read, dynamixel_request_t* request);
 
 private:
 
-	uint32_t present_position;
+	dynamixel_config_t config;
+	dynamixel_operating_mode_t operating_mode;
 
+	dynamixel_motor_status_t status;
+	dynamixel_communication_packet__error_t comm_error;
+	dynamixel_motor_hardware_error_t hardware_error;
+
+	uint32_t present_position;
 	uint32_t goal_position;
 
-	uint8_t hardware_error_status;
-
-	float present_voltage;
-
-	float present_temperature;
-
-	dynamixel_config_t config;
+	uint16_t present_voltage;
+	uint8_t present_temperature;
 
 	dynamixel_motor_mut_t motor_mutexes;
+
+	dynamixel_communication_packet__error_t checkCommunication();
+	dynamixel_motor_hardware_error_t checkHardwareError();
+
 
 	void request_present_position();
 	void request_goal_position();
@@ -183,8 +192,17 @@ private:
 	HAL_StatusTypeDef process_read_request(BaseType_t status_returned,
 			dynamixel_request_t *request, dynamixel_request_t *req_back,
 			uint32_t * data_target, osMutexId_t mutex_for_data);
+	HAL_StatusTypeDef process_read_request(BaseType_t status_returned,
+			dynamixel_request_t *request, dynamixel_request_t *req_back,
+			uint16_t * data_target, osMutexId_t mutex_for_data);
+	HAL_StatusTypeDef process_read_request(BaseType_t status_returned,
+			dynamixel_request_t *request, dynamixel_request_t *req_back,
+			uint8_t * data_target, osMutexId_t mutex_for_data);
 	// dynamixel_communication_packet__error_t process_status_packet(uint8_t * rx_data, uint16_t rx_length);
 
+	HAL_StatusTypeDef store_data_w_mutex(uint32_t * data_target,uint32_t * temp_data, osMutexId_t mutex);
+	HAL_StatusTypeDef store_data_w_mutex(uint16_t * data_target,uint16_t * temp_data, osMutexId_t mutex);
+	HAL_StatusTypeDef store_data_w_mutex(uint8_t * data_target,uint8_t * temp_data, osMutexId_t mutex);
 
 	static void motor_task(void*);
 
@@ -207,16 +225,16 @@ typedef struct dynamixel_handler_config_t {
 
 typedef enum dynamixel_handler_status_t{
 	DYNAMIXEL_HANDLER_IDLE,
-	DYNAMIXEL_HANDLER_STOP,
 	DYNAMIXEL_HANDLER_RUNNING,
 	DYNAMIXEL_HANDLER_ERROR
-
-}dynamixel_handler_error_state_t;
+}dynamixel_handler_status_t;
 
 
 typedef enum dynamixel_handler_error_t {
-
-
+	DYNAMIXEL_HANDLER_ERROR_NONE = 0,
+	DYNAMIXEL_HANDLER_ERROR_MOTOR_ERROR = 1, // One of the motors is in error state that cannot be resolved (hardware etc.)
+	DYNAMIXEL_HANDLER_ERROR_MOTOR_COMM = 2, // One of The motors has no connection or communication error
+	DYNAMIXEL_HANDLER_ERROR_INTERNAL = 3, // error in handler, could be ressources(request queue etc.)
 }dynamixel_handler_error_t;
 
 
@@ -263,14 +281,13 @@ public:
 	uint8_t add_request(dynamixel_request_t * request);
 
 private:
-	osMessageQueueId_t request_queue;
-
+	dynamixel_handler_config_t config;
 	DynamixelMotor motors[NUM_DYNAMIXEL_MOTORS];
 
-	dynamixel_handler_config_t config;
 	core_hardware_UART<NUM_UART_QUEUES, UART_QUEUES_SIZE> uart;
-
 	TaskHandle_t task_handle_dxl_handler;
+
+	osMessageQueueId_t request_queue;
 
 	static void handler_task(void*);
 
