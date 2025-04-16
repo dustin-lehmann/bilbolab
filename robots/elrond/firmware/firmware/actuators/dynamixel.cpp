@@ -74,7 +74,7 @@ dynamixel_communication_packet__error_t DynamixelMotor::checkCommunication() {
 	// construct a ping packet, no parameters but set it so that handler gets the answer of the motor
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_PING, 0, 0, 0, true, request);
+	construct_request(DYNAMIXEL_INSTRUCTION_PING, 0, 0, 0, true, request);
 	//send the packet
 	send_request_to_handler(request);
 
@@ -119,7 +119,7 @@ dynamixel_motor_hardware_error_t DynamixelMotor::checkHardwareError() {
 	// construct a ping packet, no parameters, but set it so that handler gets the answer of the motor
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_PING, 0, 0, 0, true, request);
+	construct_request(DYNAMIXEL_INSTRUCTION_PING, 0, 0, 0, true, request);
 	//send the packet
 	send_request_to_handler(request);
 
@@ -155,7 +155,7 @@ dynamixel_motor_hardware_error_t DynamixelMotor::checkHardwareError() {
 				// construct a read packet
 				dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 						this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-				construct_request(INSTRUCTION_READ, parameter_buf, parameter_len, true,
+				construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len, true,
 						LEN_CTABLE_HARDWARE_ERROR_STATUS, request);
 
 				//send the packet
@@ -202,12 +202,6 @@ dynamixel_motor_hardware_error_t DynamixelMotor::checkHardwareError() {
 					return DYNAMIXEL_MOTOR_HARDWARE_ERROR_REACHABLE;
 				}
 
-			} else {
-
-				// return request to the memory pool
-				osMemoryPoolFree(this->config.request_mem_pool, request);
-				// there is a communication error call checkCommunicatin instead
-				return DYNAMIXEL_MOTOR_HARDWARE_ERROR_COMMS;
 			}
 		} else {
 			// return request to the memory pool
@@ -215,6 +209,11 @@ dynamixel_motor_hardware_error_t DynamixelMotor::checkHardwareError() {
 			// communication was not possible
 			return DYNAMIXEL_MOTOR_HARDWARE_ERROR_REACHABLE;
 		}
+	} else {
+		// return request to the memory pool
+		osMemoryPoolFree(this->config.request_mem_pool, request);
+		// communication was not possible
+		return DYNAMIXEL_MOTOR_HARDWARE_ERROR_REACHABLE;
 	}
 
 	// return request to the memory pool
@@ -228,7 +227,7 @@ void DynamixelMotor::send_ping() {
 	// construct a ping packet, no parameters
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_PING, 0, 0, 0, false, request);
+	construct_request(DYNAMIXEL_INSTRUCTION_PING, 0, 0, 0, false, request);
 	//send the packet
 	send_request_to_handler(request);
 
@@ -248,7 +247,7 @@ void DynamixelMotor::set_led(bool led_state) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len, 0, false,
+	construct_request(DYNAMIXEL_INSTRUCTION_WRITE, parameter_buf, parameter_len, 0, false,
 			request);
 
 	//send the packet
@@ -270,7 +269,7 @@ void DynamixelMotor::set_torque(bool torque_enable = 0) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len, 0, false,
+	construct_request(DYNAMIXEL_INSTRUCTION_WRITE, parameter_buf, parameter_len, 0, false,
 			request);
 
 	//send the packet
@@ -289,7 +288,7 @@ void DynamixelMotor::set_profile_accel(uint32_t accel) {
 
 	//construct a packet
 	dynamixel_request_t* request = (dynamixel_request_t*)osMemoryPoolAlloc(this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len,0, false, request);
+	construct_request(DYNAMIXEL_INSTRUCTION_WRITE, parameter_buf, parameter_len,0, false, request);
 
 	//send the packet
 	send_request_to_handler(request);
@@ -307,7 +306,7 @@ void DynamixelMotor::set_profile_velocity(uint32_t velocity) {
 
 	//construct a packet
 	dynamixel_request_t* request = (dynamixel_request_t*)osMemoryPoolAlloc(this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len,0, false, request);
+	construct_request(DYNAMIXEL_INSTRUCTION_WRITE, parameter_buf, parameter_len,0, false, request);
 
 	//send the packet
 	send_request_to_handler(request);
@@ -328,7 +327,7 @@ void DynamixelMotor::send_position(uint32_t position) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_WRITE, parameter_buf, parameter_len, 0, false,
+	construct_request(DYNAMIXEL_INSTRUCTION_WRITE, parameter_buf, parameter_len, 0, false,
 			request);
 
 	//send the packet
@@ -350,7 +349,7 @@ void DynamixelMotor::send_position_register(uint32_t position) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_REGISTER_WRITE, parameter_buf, parameter_len, false,
+	construct_request(DYNAMIXEL_INSTRUCTION_REGISTER_WRITE, parameter_buf, parameter_len, false,
 			0, request);
 
 	//send the packet
@@ -362,7 +361,7 @@ void DynamixelMotor::send_action() {
 	// construct a action packet, no parameters
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_ACTION, 0, 0, 0, false, request);
+	construct_request(DYNAMIXEL_INSTRUCTION_ACTION, 0, 0, 0, false, request);
 
 	//send the packet
 	send_request_to_handler(request);
@@ -450,7 +449,7 @@ void DynamixelMotor::request_present_position() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len, true,
+	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len, true,
 			LEN_CTABLE_PRESENT_POSITION, request);
 
 	//send the packet
@@ -484,7 +483,7 @@ void DynamixelMotor::request_goal_position() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT); // get a request from the pool
-	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len, true,
+	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len, true,
 			LEN_CTABLE_GOAL_POSITION, request);
 
 	//send the packet
@@ -519,7 +518,7 @@ void DynamixelMotor::request_voltage() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len, true,
+	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len, true,
 			LEN_CTABLE_INPUT_VOLTAGE, request);
 
 	//send the packet
@@ -554,7 +553,7 @@ void DynamixelMotor::request_temperature() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(INSTRUCTION_READ, parameter_buf, parameter_len, true,
+	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len, true,
 			LEN_CTABLE_TEMPERATURE, request);
 
 	//send the packet
@@ -651,7 +650,7 @@ uint8_t DynamixelMotor::construct_request(
 
 	// set id
 	// if its sync write use broadcast id
-	if (instruction == INSTRUCTION_SYNC_WRITE) {
+	if (instruction == DYNAMIXEL_INSTRUCTION_SYNC_WRITE) {
 
 		request->write_buffer[4] = 0xFE;
 	} else {
@@ -675,6 +674,7 @@ uint8_t DynamixelMotor::construct_request(
 	// set instruction
 	request->write_buffer[7] = instruction;
 
+
 	// set the parameters
 	// if there are any
 	if (parameter_len != 0) {
@@ -694,7 +694,15 @@ uint8_t DynamixelMotor::construct_request(
 
 	// bundle the rest of the request
 	request->motor_id = this->config.id;
-	request->type = instruction;
+
+	// if the answer is wanted (shown by set_type_read)
+	// set the request type to read, so the handler retrieves the answer
+	if ( set_type_to_read){
+		request->type = DYNAMIXEL_INSTRUCTION_READ;
+	} else {
+		request->type = instruction;
+	}
+
 	request->write_len = (uint16_t) (LEN_INSTRUC_PACKET_NO_PARAMETERS
 			+ parameter_len);
 	request->read_len = (uint16_t) (LEN_STATUS_PACKET_NO_PARAMETERS
@@ -1122,7 +1130,7 @@ void DynamixelHandler::set_torque_all_motors(bool torque_enable) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	motors[0].construct_request(INSTRUCTION_SYNC_WRITE, parameter_buf, false,
+	motors[0].construct_request(DYNAMIXEL_INSTRUCTION_SYNC_WRITE, parameter_buf, false,
 			parameter_len, 0, request);
 
 	// override motor id in request to Broadcast id
@@ -1152,7 +1160,7 @@ void DynamixelHandler::set_led_all_motors(bool led_state) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	motors[0].construct_request(INSTRUCTION_SYNC_WRITE, parameter_buf, false,
+	motors[0].construct_request(DYNAMIXEL_INSTRUCTION_SYNC_WRITE, parameter_buf, false,
 			parameter_len, 0, request);
 
 	// override motor id in request to Broadcast id
@@ -1183,7 +1191,7 @@ void DynamixelHandler::send_position_all_motors(uint32_t position) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	motors[0].construct_request(INSTRUCTION_SYNC_WRITE, parameter_buf, false,
+	motors[0].construct_request(DYNAMIXEL_INSTRUCTION_SYNC_WRITE, parameter_buf, false,
 			parameter_len, 0, request);
 
 	// override motor id in request to Broadcast id
@@ -1404,7 +1412,7 @@ void DynamixelHandler::handler_task(void *argument) {
 			// 1. Send TX data
 			instance->uart.send(req->write_buffer, req->write_len);
 
-			if (req->type != INSTRUCTION_SYNC_WRITE) {
+			if (req->type != DYNAMIXEL_INSTRUCTION_SYNC_WRITE) {
 
 				// wait for response from the uart receive interrupt
 				notify_value = ulTaskNotifyTake(pdTRUE,
@@ -1416,7 +1424,7 @@ void DynamixelHandler::handler_task(void *argument) {
 					// get the received status packet out of the uart rx queue buffer
 					buffer = instance->uart.rx_queue.read();
 
-					if (req->type == INSTRUCTION_READ) {
+					if (req->type == DYNAMIXEL_INSTRUCTION_READ) {
 
 						//check the paket header and checksum
 						if (instance->check_packet_header_crc(buffer)) {

@@ -23,7 +23,7 @@
 #include "utils/core_debug.hpp"
 #include "hardware/SPI/core_hardware_spi.h"
 #include "control/pid/pid.h"
-#include "communication/can/can.h"
+#include "communication/can/can_mab/can_mab.h"
 
 
 #define _RAM_D2 __attribute__(( section(".ramd2block") ))
