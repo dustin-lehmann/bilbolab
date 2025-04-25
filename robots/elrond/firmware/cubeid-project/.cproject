@@ -192,12 +192,12 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Core"/>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Drivers"/>
-						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="Middlewares"/>
-						<entry excluding="drive/mab_motors/archive|drive/archive|drive/rs485|drive/can" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="firmware_v1"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="robot-control_std_lib"/>
 						<entry excluding="communication/can/archive|communication/modbus_rtu/old|sensors/VL53L1|_example_firmware" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="stm32_core_cpp_lib"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Core"/>
+						<entry excluding="drive/mab_motors/archive|drive/archive|drive/rs485|drive/can" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="firmware_v1"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="Middlewares"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Drivers"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -482,8 +482,8 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Core"/>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Drivers"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Middlewares"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Drivers"/>
 						<entry excluding="archive" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="stm32_core_cpp_lib/communication/can"/>
 					</sourceEntries>
 				</configuration>

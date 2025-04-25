@@ -24,9 +24,9 @@ def main():
 
     time.sleep(2)
     bilbo.board.beep()
-    bilbo.actuator.setTorque(True, dynamixel_motor.ALL_MOTORS)
+    #bilbo.actuator.setTorque(True, dynamixel_motor.ALL_MOTORS)
     #bilbo.actuator._setPosition(0, dynamixel_motor.ALL_MOTORS)
-    bilbo.actuator.initializeLegs()
+    #bilbo.actuator.initializeLegs()
     time.sleep(4)
 
     while True:

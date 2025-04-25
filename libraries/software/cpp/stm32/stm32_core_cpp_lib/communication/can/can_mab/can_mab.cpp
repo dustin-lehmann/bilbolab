@@ -19,7 +19,7 @@ CAN *can;
 // Structure for queued CAN messages.
 struct CAN_Message {
     FDCAN_RxHeaderTypeDef header;
-    uint8_t data[8];
+    uint8_t data[24];
 };
 
 // Define a queue length for incoming messages.
@@ -77,11 +77,11 @@ HAL_StatusTypeDef CAN::init(can_config_t config) {
     // Configure filters (same as original)
     FDCAN_FilterTypeDef filterConfig;
 
-    // Filter for 11-bit frames -> FIFO 1
+    // Filter for 11-bit frames -> FIFO 0
     filterConfig.IdType = FDCAN_STANDARD_ID;
     filterConfig.FilterIndex = 0; // First filter
     filterConfig.FilterType = FDCAN_FILTER_RANGE;
-    filterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO1; // Route to FIFO 1
+    filterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0; // Route to FIFO 0
     filterConfig.FilterID1 = 0x000; // Match all 11-bit IDs (0x000 to 0x7FF)
     filterConfig.FilterID2 = 0x7FF;
     status = HAL_FDCAN_ConfigFilter(this->config.hfdcan, &filterConfig);
@@ -89,11 +89,11 @@ HAL_StatusTypeDef CAN::init(can_config_t config) {
         return status;
     }
 
-    // Filter for 29-bit frames -> FIFO 0
+    // Filter for 29-bit frames -> FIFO 1
     filterConfig.IdType = FDCAN_EXTENDED_ID;
     filterConfig.FilterIndex = 1; // Second filter
     filterConfig.FilterType = FDCAN_FILTER_RANGE;
-    filterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0; // Route to FIFO 0
+    filterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO1; // Route to FIFO 1
     filterConfig.FilterID1 = 0x00000000; // Match all 29-bit IDs (0x00000000 to 0x1FFFFFFF)
     filterConfig.FilterID2 = 0x1FFFFFFF;
     status = HAL_FDCAN_ConfigFilter(this->config.hfdcan, &filterConfig);
@@ -113,7 +113,7 @@ HAL_StatusTypeDef CAN::init(can_config_t config) {
 HAL_StatusTypeDef CAN::start() {
     HAL_StatusTypeDef status = HAL_FDCAN_Start(this->config.hfdcan);
     // Create a dedicated CAN task to process messages from the queue.
-    xTaskCreate(CAN::taskFunction, "CAN_Task", configMINIMAL_STACK_SIZE, this, tskIDLE_PRIORITY + 1, &this->canTaskHandle);
+    xTaskCreate(CAN::taskFunction, "CAN_Task", configMINIMAL_STACK_SIZE, this, tskIDLE_PRIORITY + 20, &this->canTaskHandle);
     return status;
 }
 
@@ -203,7 +203,7 @@ CAN_Status CAN::readMessage(uint32_t motor_id, uint16_t register_id, uint8_t reg
     };
 
     // Build Data Frame
-    uint8_t tx_data[8];
+    uint8_t tx_data[4 + register_data_length] = {0};
 
     uint8_t register_address_array[2] = {0};
 
@@ -288,20 +288,27 @@ void CAN::taskFunction(void *pvParameters) {
             instance->onMessageReceived(msg.header, msg.data);
         }
     }
+    osDelay(20);
 }
 
 // IRQ Callback Integration for FIFO 0 (29-bit IDs)
 // Now the ISR packs the message and posts it to the queue.
 extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan,
-        uint32_t RxFifo0ITs) {
-    CAN_Message msg;
-    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &msg.header, msg.data) == HAL_OK) {
-        BaseType_t higherPriorityTaskWoken = pdFALSE;
-        if(xQueueSendFromISR(can->messageQueue, &msg, &higherPriorityTaskWoken) != pdPASS) {
-            // Queue full – message is dropped; consider error handling.
-        }
-        portYIELD_FROM_ISR(higherPriorityTaskWoken);
-    }
+		uint32_t RxFifo0ITs) {
+	CAN_Message msg;
+	if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &msg.header, msg.data) == HAL_OK) {
+		BaseType_t higherPriorityTaskWoken = pdFALSE;
+
+		// Ignore messages with D0: 0xA0, Just status messages
+		// or messages that are longer than 8 bytes
+		//if (msg.data[0] != 0xA0 || msg.header.DataLength < 8 ) {
+		if(xQueueSendFromISR(can->messageQueue, &msg, &higherPriorityTaskWoken) != pdPASS) {
+				// Queue full – message is dropped; consider error handling.
+		}
+
+		//}
+		portYIELD_FROM_ISR(higherPriorityTaskWoken);
+	}
 }
 
 // IRQ Callback Integration for FIFO 1 (11-bit IDs)
@@ -315,6 +322,11 @@ extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan,
         }
         portYIELD_FROM_ISR(higherPriorityTaskWoken);
     }
+}
+
+extern "C" void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan){
+	// This callback is not used in the current implementation.
+	osDelay(1);
 }
 
 uint32_t mapDLC(uint8_t dataLength) {

@@ -185,7 +185,7 @@ public:
 	}
 
 	HAL_StatusTypeDef init(mab_motor_config_t config);
-	HAL_StatusTypeDef start(mab_motor_mode_t mode = MAB_MOTOR_MODE_IDLE);
+	HAL_StatusTypeDef start();
 
 	HAL_StatusTypeDef checkCommunication();
 	HAL_StatusTypeDef checkMotor();

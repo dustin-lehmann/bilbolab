@@ -82,7 +82,8 @@ public:
 #endif
 
 #ifdef BILBO_DRIVE_MAB
-
+	MabMotor_FDCAN motor_left;
+    MabMotor_FDCAN motor_right;
 #endif
 
 	twipr_debug_sample_t debugData;

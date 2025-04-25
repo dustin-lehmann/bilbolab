@@ -46,10 +46,10 @@ HAL_StatusTypeDef MabMotor_FDCAN::init(mab_motor_config_t config) {
 	return HAL_OK;
 }
 
-HAL_StatusTypeDef MabMotor_FDCAN::start(mab_motor_mode_t mode) {
+HAL_StatusTypeDef MabMotor_FDCAN::start() {
 
 	// set the mode
-	this->setMode(mode);
+	this->setMode(MAB_MOTOR_MODE_RAW_TORQUE);
 	osDelay(10);
 	// reset the targets
 	this->setTargetPosition(0);
@@ -57,9 +57,9 @@ HAL_StatusTypeDef MabMotor_FDCAN::start(mab_motor_mode_t mode) {
 	this->setTargetVelocity(0);
 	osDelay(10);
 	this->setTorque(0);
-	osDelay(30);
+	osDelay(10);
 	this->write_register(MAB_REG_STATE_MACHINE, (uint16_t) 39);
-	this->mode = mode;
+	this->mode = MAB_MOTOR_MODE_RAW_TORQUE;
 
 	//TODO: check status from mode set
 
@@ -70,8 +70,8 @@ HAL_StatusTypeDef MabMotor_FDCAN::checkCommunication() {
 
 	// check if motor is reachable
 	// check for warnings and errors
-	uint16_t comm_status = 0;
-	this->read_register((uint16_t) MAB_REG_COMMUNICATION_ERRORS, comm_status);
+	uint32_t comm_status = 0;
+	this->read_register(MAB_REG_COMMUNICATION_ERRORS, comm_status);
 
 	// check if there are comm errors or warnings
 	if (comm_status) {
@@ -79,7 +79,7 @@ HAL_StatusTypeDef MabMotor_FDCAN::checkCommunication() {
 		// try to clear the warning, run clear cmd
 		this->clearWarnings();
 		// check if the error has been cleared
-		this->read_register((uint16_t) 0x80E, comm_status);
+		this->read_register(MAB_REG_COMMUNICATION_ERRORS, comm_status);
 		if (comm_status) {
 			// error could not be cleared
 			return HAL_ERROR;
@@ -98,7 +98,7 @@ HAL_StatusTypeDef MabMotor_FDCAN::checkMotor() {
 	// check for warnings and errors
 	uint16_t motor_status = 0;
 	// check quick status vector, this shows only errors not warnings
-	this->read_register((uint16_t) MAB_REG_QUICK_STATUS, motor_status);
+	this->read_register(MAB_REG_QUICK_STATUS, motor_status);
 
 	if(motor_status){
 		// error
@@ -159,18 +159,17 @@ HAL_StatusTypeDef MabMotor_FDCAN::setMode(mab_motor_mode_t motion_mode) {
 
 	// read back the mode
 	mab_motor_mode_t mode_read = MAB_MOTOR_MODE_IDLE;
-	// TODO implement read Mode
-	//status = readMode(mode_read);
-	/*
-	 if (status) {
-	 return status;
-	 }
 
-	 // check if the mode has been successfully set
-	 if (mode_read != motion_mode) {
-	 return HAL_ERROR;
-	 }
-	 */
+	status = readMode(mode_read);
+
+	if (status) {
+		return status;
+	}
+
+	// check if the mode has been successfully set
+	if (mode_read != motion_mode) {
+		return HAL_ERROR;
+	}
 	this->mode = motion_mode;
 
 	return HAL_OK;
@@ -224,9 +223,9 @@ HAL_StatusTypeDef MabMotor_FDCAN::setImpedanceConstants(
 
 HAL_StatusTypeDef MabMotor_FDCAN::setTorque(float torque) {
 
-//	if (this->mode != MAB_MOTOR_MODE_RAW_TORQUE) {
-//		return HAL_ERROR;
-//	}
+	if (this->mode != MAB_MOTOR_MODE_RAW_TORQUE) {
+		return HAL_ERROR;
+	}
 
 	// write the torque to the motor
 	return this->write_register(MAB_REG_TARGET_TORQUE, torque);
@@ -253,7 +252,7 @@ HAL_StatusTypeDef MabMotor_FDCAN::setTargetPosition(float position) {
 HAL_StatusTypeDef MabMotor_FDCAN::readMode(mab_motor_mode_t &mode) {
 
 	uint8_t mode_temp = 0;
-	if (this->read_register(MAB_REG_MOTION_MODE, mode_temp)) {
+	if (this->read_register(MAB_REG_READ_MOTION_MODE, mode_temp)) {
 		return HAL_ERROR;
 	}
 	mode = (mab_motor_mode_t) mode_temp;
@@ -263,7 +262,7 @@ HAL_StatusTypeDef MabMotor_FDCAN::readMode(mab_motor_mode_t &mode) {
 HAL_StatusTypeDef MabMotor_FDCAN::readSpeed(float &velocity) {
 
 	float velocity_temp = 0;
-	if (this->read_register(MAB_REG_TARGET_VELOCITY, velocity_temp)) {
+	if (this->read_register(MAB_REG_MAIN_ENCODER_VELOCITY, velocity_temp)) {
 		return HAL_ERROR;
 	}
 	velocity = velocity_temp;
@@ -274,7 +273,7 @@ HAL_StatusTypeDef MabMotor_FDCAN::readSpeed(float &velocity) {
 HAL_StatusTypeDef MabMotor_FDCAN::readPosition(float &position) {
 
 	float position_temp = 0;
-	if (this->read_register(MAB_REG_TARGET_POSITION, position_temp)) {
+	if (this->read_register(MAB_REG_MAIN_ENCODER_POSITION, position_temp)) {
 		return HAL_ERROR;
 	}
 	position = position_temp;
@@ -285,7 +284,7 @@ HAL_StatusTypeDef MabMotor_FDCAN::readPosition(float &position) {
 HAL_StatusTypeDef MabMotor_FDCAN::getTemperature(float &temperature) {
 
 	float temperature_temp = 0;
-	if (this->read_register(MAB_REG_MOTOR_TEMPERATURE, temperature_temp)) {
+	if (this->read_register(MAB_REG_MOSFET_TEMPERATURE, temperature_temp)) {
 		return HAL_ERROR;
 	}
 	temperature = temperature_temp;
@@ -295,7 +294,33 @@ HAL_StatusTypeDef MabMotor_FDCAN::getTemperature(float &temperature) {
 HAL_StatusTypeDef MabMotor_FDCAN::stop() {
 
 	// stop the motor
-	return this->write_register(MAB_REG_STATE_MACHINE, (uint16_t) 64);
+	HAL_StatusTypeDef status = this->write_register(MAB_REG_STATE_MACHINE, (uint16_t) 64);
+	if (status) {
+		return status;
+	}
+
+	// set the mode to idle
+	status = this->setMode(MAB_MOTOR_MODE_IDLE);
+	if (status) {
+		return status;
+	}
+
+	// reset the targets
+	status = this->setTargetPosition(0);
+	if (status) {
+		return status;
+	}
+	status = this->setTargetVelocity(0);
+	if (status) {
+		return status;
+	}
+	status = this->setTorque(0);
+	if (status) {
+		return status;
+	}
+
+	return HAL_OK;
+
 
 }
 
@@ -510,9 +535,12 @@ HAL_StatusTypeDef MabMotor_FDCAN::read_register(uint16_t register_id, int32_t &d
 }
 
 HAL_StatusTypeDef MabMotor_FDCAN::beep(uint16_t amplitude) {
+	return HAL_OK;
 }
 
 HAL_StatusTypeDef MabMotor_FDCAN::getVoltage(float &voltage) {
+	voltage = 0;
+	return HAL_OK;
 }
 
 void MabMotor_FDCAN::_error_handler() {

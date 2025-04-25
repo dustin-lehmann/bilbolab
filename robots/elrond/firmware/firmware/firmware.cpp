@@ -184,7 +184,7 @@ core_utils_RegisterEntry<bool, float> reg_set_theta_offset(&register_map,
 		&TWIPR_Estimation::setThetaOffset);
 
 
-
+void mab_motors_test_task(void * argument);
 
 /* Thread Attributes for Firmware and Control Tasks */
 const osThreadAttr_t firmware_task_attributes = { .name = "firmware",
@@ -205,8 +205,9 @@ osMemoryPoolId_t dynamixel_request_pool = osMemoryPoolNew(REQUEST_POOL_SIZE, siz
  * This is the entry point from the main function that spawns the firmware task.
  */
 void firmware() {
-	osThreadNew(start_firmware_task, (void*) &twipr_firmware,
+	osThreadNew(mab_motors_test_task, (void*) &twipr_firmware,
 			&firmware_task_attributes);
+	/*start_firmware_task*/
 }
 
 /**
@@ -229,7 +230,8 @@ void start_firmware_task(void *argument) {
  *
  * @param argument Pointer to the firmware object.
  */
-/*
+#include "mab_motor_fdcan.h"
+
 void mab_motors_test_task(void * argument){
 
 	TWIPR_Sequencer sequencer;
@@ -248,13 +250,17 @@ void mab_motors_test_task(void * argument){
 	comm.init(twipr_comm_config);
 	comm.start();
 
+	// timer config
+	elapsedMillis torque_timer;
+	elapsedMillis mab_led_timer;
 
+	bool torque_state_toggle = false;
 
 	MabMotor_FDCAN motor1;
 
 	mab_motor_config_t mab_config = {
 			.can = &comm.can,
-			.drive_id = 99,
+			.drive_id = 98,
 			.can_watchdog_timeout = 300,
 			.torque_limit = 0.3,
 			.velocity_limit = 100
@@ -262,29 +268,51 @@ void mab_motors_test_task(void * argument){
 
 	motor1.init(mab_config);
 
-	motor1.start(MAB_MOTOR_MODE_RAW_TORQUE);
-	osDelay(300);
-	//motor1.setMode(MAB_MOTOR_MODE_IMPEDANCE);
-	osDelay(300);
+	motor1.start();
+	//osDelay(300);
+	//motor1.setMode(MAB_MOTOR_MODE_RAW_TORQUE);
+	//osDelay(300);
 	//motor1.setTorque(0.01f);
 
 	while(true){
+
+		// set torque every 2seconds
+		if (torque_timer > 2000) {
+			if (torque_state_toggle) {
+				motor1.setTorque(-0.1f);
+				torque_state_toggle = false;
+			} else {
+				motor1.setTorque(0.1f);
+				torque_state_toggle = true;
+			}
+			torque_timer.reset();
+		}
+
+		// set LED every 1s
+		if (mab_led_timer > 2000) {
+			motor1.setLEDBlink(1);
+			mab_led_timer.reset();
+		}
+
+		// read the speed
+		float speed = 0;
+		motor1.readSpeed(speed);
+		osDelay(10);
+		float position = 0;
+		motor1.readPosition(position);
+		send_debug("Motor1: Speed: %f, Position: %f", speed, position);
+		osDelay(10);
+		float temperature = 0;
+		motor1.getTemperature(temperature);
+		osDelay(10);
+		mab_motor_mode_t mode = MAB_MOTOR_MODE_IDLE;
+		motor1.readMode(mode);
 		osDelay(100);
-		motor1.setTorque(0.1f);
- 		osDelay(100);
-		motor1.setLEDBlink(1);
-		osDelay(500);
-		motor1.setTorque(0.0f);
-		osDelay(400);
-		motor1.setTorque(-0.1f);
-		osDelay(500);
-		motor1.setTorque(0.0f);
-		osDelay(400);
 	}
 
 
 }
-*/
+
 
 /**
  * @brief Constructor for TWIPR_Firmware.
