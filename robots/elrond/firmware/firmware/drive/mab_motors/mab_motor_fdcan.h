@@ -16,6 +16,8 @@
 
 #define MAB_MOTOR_WRITE_DELAY 2
 
+#define MAB_MOTOR_STARTUP_DELAY 500 // ms
+
 typedef struct mab_motor_config_t {
 	CAN *can;
 	uint32_t drive_id;

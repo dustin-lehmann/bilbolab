@@ -188,7 +188,8 @@ void BILBO_Drive::task() {
 			ticks_loop = osKernelGetTickCount() - current_tick;
 
 			if (ticks_loop > this->config.task_time) {
-				setError(BILBO_ERROR_MAJOR, BILBO_ERROR_MOTOR_RACECONDITIONS);
+				//setError(BILBO_ERROR_MAJOR, BILBO_ERROR_MOTOR_RACECONDITIONS);
+				send_warning("Motor loop RC %d ms", ticks_loop);
 			}
 
 			this->tick++;

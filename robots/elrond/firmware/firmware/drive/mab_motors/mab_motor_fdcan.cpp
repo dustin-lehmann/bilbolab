@@ -10,6 +10,8 @@ HAL_StatusTypeDef MabMotor_FDCAN::init(mab_motor_config_t config) {
 	// copy the config
 	this->config = config;
 
+	osDelay(MAB_MOTOR_STARTUP_DELAY);
+
 	// TODO: check Communication, check Motor, reset Motor, set Torque Limit
 	// check if motor is reachable
 	if (this->checkCommunication()) {
