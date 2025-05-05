@@ -21,15 +21,17 @@ def main():
     bilbo = BILBO(reset_stm32=False)
     bilbo.init()
     bilbo.start()
+
+    time.sleep(2)
     bilbo.board.beep()
     #bilbo.actuator.setTorque(True, dynamixel_motor.ALL_MOTORS)
     #bilbo.actuator._setPosition(0, dynamixel_motor.ALL_MOTORS)
-    time.sleep(1)
     bilbo.actuator.initializeLegs()
-    time.sleep(2)
-    bilbo.actuator.extendLegs2D(6, 10)
+
+    time.sleep(4)
 
     while True:
+        bilbo.actuator.extendLegs2D(6, 10)
         time.sleep(3)
         #bilbo.actuator.extendLegs2D(-5, 10)
         time.sleep(3)

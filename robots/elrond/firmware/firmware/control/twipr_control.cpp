@@ -23,7 +23,14 @@ void TWIPR_ControlManager::init(twipr_control_init_config_t config) {
 	this->_estimation = config.estimation;
 
 	// Initialize the balancing controller
-	twipr_balancing_control_config_t balancing_control_config;
+	//twipr_balancing_control_config_t balancing_control_config;
+
+	// test set the K values
+	// todo: remove the test
+	twipr_balancing_control_config_t balancing_control_config = {	0.5, 0.8, 0.3, 0.02,
+																	0.5, 0.8, 0.3, - 0.02,
+																	.pitch_offset =  0};
+
 	this->_balancing_control.init(balancing_control_config);
 
 	twipr_speed_control_forward_config_t speed_control_forward_config = { .Kp =
@@ -82,6 +89,19 @@ void TWIPR_ControlManager::update() {
 	// Read the dynamic state from the estimator
 	this->_dynamic_state = this->_estimation->getState();
 
+	// set some states to zero for testing
+	// todo: remove the test
+//	this->_dynamic_state.v = 0;
+//	this->_dynamic_state.theta = 0;
+//	this->_dynamic_state.theta_dot = 0;
+//	this->_dynamic_state.psi = 0;
+//	this->_dynamic_state.psi_dot = 0;
+
+	// set the control status and mode
+	// Todo: remove the test
+	this->status = TWIPR_CONTROL_STATUS_RUNNING;
+	this->mode = TWIPR_CONTROL_MODE_BALANCING;
+
 	// Check for errors
 	// TODO
 
@@ -127,6 +147,19 @@ void TWIPR_ControlManager::update() {
 	}
 	}
 
+	// send the state via info
+	// todo: remove the test
+	static elapsedMillis state_timer;
+
+	if (state_timer > 500) {
+		send_info("State: v: %f, theta: %f, theta_dot: %f, psi: %f, psi_dot: %f", this->_dynamic_state.v,
+				this->_dynamic_state.theta, this->_dynamic_state.theta_dot,
+				this->_dynamic_state.psi, this->_dynamic_state.psi_dot);
+		send_info("Control: u_left: %f, u_right: %f", control_output.u_left,
+				control_output.u_right);
+		state_timer.reset();
+	}
+
 	this->_data.input_left = control_output.u_left;
 	this->_data.input_right = control_output.u_right;
 	// Limit the Output
@@ -141,6 +174,10 @@ void TWIPR_ControlManager::update() {
 
 //	control_output.u_left = 0;
 //	control_output.u_right = 0;
+	// scale the output for testing
+	control_output.u_left = control_output.u_left * 1;
+	control_output.u_right = control_output.u_right * 1;
+
 	// Write the output to the motors
 	this->_setTorque(control_output);
 

@@ -24,6 +24,7 @@
 #include "bilbo_drive.h"
 //#include "simplexmotion_can.h"
 //#include "simplexmotion_rs485.h"
+#include "mab_motor_fdcan.h"
 
 #include "twipr_errors.h"
 
@@ -81,7 +82,7 @@ public:
 	SimplexMotion_RS485 motor_right;
 #endif
 
-#ifdef BILBO_DRIVE_MAB
+#ifdef BILBO_DRIVE_MAB_CAN
 	MabMotor_FDCAN motor_left;
     MabMotor_FDCAN motor_right;
 #endif

@@ -14,9 +14,12 @@
 
 #define MAB_MOTOR_READ_TIMEOUT 10
 
+#define MAB_MOTOR_WRITE_DELAY 2
+
 typedef struct mab_motor_config_t {
 	CAN *can;
 	uint32_t drive_id;
+	int8_t direction;
 	uint16_t can_watchdog_timeout = 200;
 	float torque_limit = 1.75f;
 	float velocity_limit = 140.0f;

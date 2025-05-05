@@ -1,10 +1,10 @@
 /*
- * mab_motor.cpp
+ * mab_motor_fdcan.cpp
  *
  *  Created on: Mar 21, 2025
  *      Author: klvdw
  */
-#include <mab_motor_fdcan.h>
+#include "mab_motor_fdcan.h"
 
 HAL_StatusTypeDef MabMotor_FDCAN::init(mab_motor_config_t config) {
 	// copy the config
@@ -19,11 +19,9 @@ HAL_StatusTypeDef MabMotor_FDCAN::init(mab_motor_config_t config) {
 	if (this->checkMotor()) {
 		// failed to check motor
 		// reset motor
-		osDelay(10);
 		if (this->resetMotor()) {
 			return HAL_ERROR;
 		}
-		osDelay(10);
 		// check motor again
 		if (this->checkMotor()) {
 			return HAL_ERROR;
@@ -33,12 +31,10 @@ HAL_StatusTypeDef MabMotor_FDCAN::init(mab_motor_config_t config) {
 	if (this->setCANWatchdog(this->config.can_watchdog_timeout)) {
 		return HAL_ERROR;
 	}
-	osDelay(10);
 	// set the velocity limit
 	if (this->setVelocityLimit(this->config.velocity_limit)) {
 		return HAL_ERROR;
 	}
-	osDelay(10);
 	// set the torque limit
 	if (this->setTorqueLimit(this->config.torque_limit)) {
 		return HAL_ERROR;
@@ -50,15 +46,15 @@ HAL_StatusTypeDef MabMotor_FDCAN::start() {
 
 	// set the mode
 	this->setMode(MAB_MOTOR_MODE_RAW_TORQUE);
-	osDelay(10);
 	// reset the targets
 	this->setTargetPosition(0);
-	osDelay(10);
+
 	this->setTargetVelocity(0);
-	osDelay(10);
+
 	this->setTorque(0);
-	osDelay(10);
+
 	this->write_register(MAB_REG_STATE_MACHINE, (uint16_t) 39);
+
 	this->mode = MAB_MOTOR_MODE_RAW_TORQUE;
 
 	//TODO: check status from mode set
@@ -179,7 +175,7 @@ HAL_StatusTypeDef MabMotor_FDCAN::setMode(mab_motor_mode_t motion_mode) {
 HAL_StatusTypeDef MabMotor_FDCAN::setCANWatchdog(uint16_t timeout) {
 
 	// write the timeout to the motor
-	return this->write_register(MAB_REG_CAN_WATCHDOG, timeout);
+	this->write_register(MAB_REG_CAN_WATCHDOG, timeout);
 
 	// reinitialize the can bus
 	this->write_register(MAB_REG_RUN_CAN_REINIT, (uint8_t) 1);
@@ -228,7 +224,7 @@ HAL_StatusTypeDef MabMotor_FDCAN::setTorque(float torque) {
 	}
 
 	// write the torque to the motor
-	return this->write_register(MAB_REG_TARGET_TORQUE, torque);
+	return this->write_register(MAB_REG_TARGET_TORQUE, torque * this->config.direction);
 }
 
 HAL_StatusTypeDef MabMotor_FDCAN::setLEDBlink(bool enable) {
@@ -265,7 +261,7 @@ HAL_StatusTypeDef MabMotor_FDCAN::readSpeed(float &velocity) {
 	if (this->read_register(MAB_REG_MAIN_ENCODER_VELOCITY, velocity_temp)) {
 		return HAL_ERROR;
 	}
-	velocity = velocity_temp;
+	velocity = velocity_temp * this->config.direction;
 	return HAL_OK;
 
 }
@@ -327,7 +323,14 @@ HAL_StatusTypeDef MabMotor_FDCAN::stop() {
 HAL_StatusTypeDef MabMotor_FDCAN::write_register(uint16_t reg, uint8_t *data,
 		uint8_t length) {
 
-	return this->config.can->sendMessage(this->config.drive_id, data, length, 0);
+	HAL_StatusTypeDef status = HAL_ERROR;
+	// send the data to the motor
+	status = this->config.can->sendMessage(this->config.drive_id, data, length,
+			0);
+	// Short delay to allow the motor to process the data
+	osDelay(MAB_MOTOR_WRITE_DELAY);
+
+	return status;
 }
 
 HAL_StatusTypeDef MabMotor_FDCAN::write_register(uint16_t reg, float data) {

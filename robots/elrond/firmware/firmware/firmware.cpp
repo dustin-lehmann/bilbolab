@@ -205,7 +205,7 @@ osMemoryPoolId_t dynamixel_request_pool = osMemoryPoolNew(REQUEST_POOL_SIZE, siz
  * This is the entry point from the main function that spawns the firmware task.
  */
 void firmware() {
-	osThreadNew(mab_motors_test_task, (void*) &twipr_firmware,
+	osThreadNew(start_firmware_task, (void*) &twipr_firmware,
 			&firmware_task_attributes);
 	/*start_firmware_task*/
 }
@@ -309,7 +309,6 @@ void mab_motors_test_task(void * argument){
 		motor1.readMode(mode);
 		osDelay(100);
 	}
-
 
 }
 
@@ -429,7 +428,7 @@ HAL_StatusTypeDef TWIPR_Firmware::init() {
 	this->control.init(twipr_control_config);
 
 	// Drive configuration
-	/*
+
 	// ------------------------------------------------------------------
 #ifdef BILBO_DRIVE_SIMPLEXMOTION_CAN
 	// Initialize both motors
@@ -466,7 +465,37 @@ HAL_StatusTypeDef TWIPR_Firmware::init() {
     this->motor_left.init(config_motor_left);
 
 
-	#endif
+#endif
+
+#ifdef BILBO_DRIVE_MAB_CAN
+
+    // Initialize both motors
+    mab_motor_config_t config_motor_left = {
+    		.can = &this->comm.can,
+			.drive_id = 99,
+			.direction = 1,
+			.can_watchdog_timeout = 700,
+			.torque_limit = 0.4,
+			.velocity_limit = 100
+    };
+
+    this->motor_left = MabMotor_FDCAN();
+    this->motor_left.init(config_motor_left);
+
+    mab_motor_config_t config_motor_right = {
+    		.can = &this->comm.can,
+			.drive_id = 98,
+			.direction = -1,
+			.can_watchdog_timeout = 700,
+			.torque_limit = 0.4,
+			.velocity_limit = 100
+    };
+
+    this->motor_right = MabMotor_FDCAN();
+    this->motor_right.init(config_motor_right);
+
+#endif
+
 
 	// ------------------------------------------------------------------
 
@@ -474,7 +503,6 @@ HAL_StatusTypeDef TWIPR_Firmware::init() {
 			.torque_max = 0.4, .task_time = BILBO_DRIVE_TASK_TIME };
 
 	this->drive.init(drive_config, &this->motor_left, &this->motor_right);
-	*/
 
 	// Actuator module initialization
 	dynamixel_handler_config_t handler_config = {
@@ -524,14 +552,13 @@ HAL_StatusTypeDef TWIPR_Firmware::start() {
 	this->sensors.start();
 	this->estimation.start();
 
-	/*
+
 	HAL_StatusTypeDef status = this->drive.start();
 	if (status) {
 		while (true) {
 			nop();
 		}
 	}
-	*/
 
 	// Start the actuators
 	this->handler.start();

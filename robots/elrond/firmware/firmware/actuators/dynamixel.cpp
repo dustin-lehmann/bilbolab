@@ -14,7 +14,7 @@
  */
 
 const osThreadAttr_t motor_task_attributes = { .name = "Dxl_Motor",
-		.stack_size = 2560, .priority = (osPriority_t) osPriorityBelowNormal, };
+		.stack_size = 2560, .priority = (osPriority_t) osPriorityNormal, };
 
 /*public*/
 HAL_StatusTypeDef DynamixelMotor::init(dynamixel_config_t config) {
@@ -43,8 +43,8 @@ HAL_StatusTypeDef DynamixelMotor::start() {
 	this->set_profile_accel(this->config.profile_accel);
 	osDelay(7);
 	this->set_profile_velocity(this->config.profile_velocity);
-	osDelay(7);
-
+	//osDelay(7);
+/*
 	dynamixel_communication_packet__error_t com_err = this->checkCommunication();
 	if (com_err){
 		//there was an communication error
@@ -61,7 +61,7 @@ HAL_StatusTypeDef DynamixelMotor::start() {
 
 		}
 	}
-
+*/
 	//create the motor task
 	osThreadNew(motor_task, this, &motor_task_attributes);
 
@@ -91,7 +91,7 @@ dynamixel_communication_packet__error_t DynamixelMotor::checkCommunication() {
 		if(request->success == true){
 			// check the error field in the request
 			uint8_t error = request->read_buffer[8];
-			if (error){
+			if (error > 0 && error < 0x80){
 				// return request to the memory pool
 				osMemoryPoolFree(this->config.request_mem_pool, request);
 
@@ -136,7 +136,7 @@ dynamixel_motor_hardware_error_t DynamixelMotor::checkHardwareError() {
 		if(request->success == true){
 			// check the error field in the request
 			uint8_t error = request->read_buffer[8];
-			if (error == 1){
+			if(error & 0x80){
 				// this means there could be hardware error
 
 				// return old request to the memory pool
@@ -172,7 +172,9 @@ dynamixel_motor_hardware_error_t DynamixelMotor::checkHardwareError() {
 				if (status_returned){
 					if(request == req_back){
 						if (request->success){
+							// todo: correctly translate the error codes
 							dynamixel_motor_hardware_error_t hw_error = (dynamixel_motor_hardware_error_t) request->read_buffer[9];
+							//
 							if (hw_error){
 
 								// return request to the memory pool
@@ -349,8 +351,8 @@ void DynamixelMotor::send_position_register(uint32_t position) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(DYNAMIXEL_INSTRUCTION_REGISTER_WRITE, parameter_buf, parameter_len, false,
-			0, request);
+	construct_request(DYNAMIXEL_INSTRUCTION_REGISTER_WRITE, parameter_buf, parameter_len, 0,
+			false, request);
 
 	//send the packet
 	send_request_to_handler(request);
@@ -449,8 +451,8 @@ void DynamixelMotor::request_present_position() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len, true,
-			LEN_CTABLE_PRESENT_POSITION, request);
+	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len,
+			LEN_CTABLE_PRESENT_POSITION, true, request);
 
 	//send the packet
 	send_request_to_handler(request);
@@ -483,8 +485,8 @@ void DynamixelMotor::request_goal_position() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT); // get a request from the pool
-	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len, true,
-			LEN_CTABLE_GOAL_POSITION, request);
+	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len,
+			LEN_CTABLE_GOAL_POSITION, true, request);
 
 	//send the packet
 	send_request_to_handler(request);
@@ -518,8 +520,8 @@ void DynamixelMotor::request_voltage() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len, true,
-			LEN_CTABLE_INPUT_VOLTAGE, request);
+	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len,
+			LEN_CTABLE_INPUT_VOLTAGE, true, request);
 
 	//send the packet
 	send_request_to_handler(request);
@@ -553,8 +555,8 @@ void DynamixelMotor::request_temperature() {
 	// construct a read packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len, true,
-			LEN_CTABLE_TEMPERATURE, request);
+	construct_request(DYNAMIXEL_INSTRUCTION_READ, parameter_buf, parameter_len,
+			LEN_CTABLE_TEMPERATURE, true, request);
 
 	//send the packet
 	send_request_to_handler(request);
@@ -692,6 +694,7 @@ uint8_t DynamixelMotor::construct_request(
 	request->write_buffer[8 + parameter_len] = (crc & 0x00ff); //write lower byte in buffer
 	request->write_buffer[9 + parameter_len] = (crc >> 8) & 0x00ff; // write higher byte
 
+	//TODO: use mutex
 	// bundle the rest of the request
 	request->motor_id = this->config.id;
 
@@ -980,7 +983,7 @@ void DynamixelMotor::motor_task(void *argument) {
 
 const osThreadAttr_t handler_task_attributes = { .name = "Dxl_Handler",
 		.stack_size = 2560 * 2, .priority =
-				(osPriority_t) osPriorityBelowNormal1, };
+				(osPriority_t) osPriorityNormal, };
 
 uint8_t DynamixelHandler::init(dynamixel_handler_config_t config) {
 
@@ -1130,8 +1133,8 @@ void DynamixelHandler::set_torque_all_motors(bool torque_enable) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	motors[0].construct_request(DYNAMIXEL_INSTRUCTION_SYNC_WRITE, parameter_buf, false,
-			parameter_len, 0, request);
+	motors[0].construct_request(DYNAMIXEL_INSTRUCTION_SYNC_WRITE, parameter_buf, parameter_len,
+			0, false, request);
 
 	// override motor id in request to Broadcast id
 	request->motor_id = 0xFE;
@@ -1160,8 +1163,8 @@ void DynamixelHandler::set_led_all_motors(bool led_state) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	motors[0].construct_request(DYNAMIXEL_INSTRUCTION_SYNC_WRITE, parameter_buf, false,
-			parameter_len, 0, request);
+	motors[0].construct_request(DYNAMIXEL_INSTRUCTION_SYNC_WRITE, parameter_buf,
+			parameter_len, 0, false, request);
 
 	// override motor id in request to Broadcast id
 	request->motor_id = 0xFE;
@@ -1191,8 +1194,8 @@ void DynamixelHandler::send_position_all_motors(uint32_t position) {
 	//construct a packet
 	dynamixel_request_t *request = (dynamixel_request_t*) osMemoryPoolAlloc(
 			this->config.request_mem_pool, REQUEST_POOL_ALLOC_TIMEOUT);
-	motors[0].construct_request(DYNAMIXEL_INSTRUCTION_SYNC_WRITE, parameter_buf, false,
-			parameter_len, 0, request);
+	motors[0].construct_request(DYNAMIXEL_INSTRUCTION_SYNC_WRITE, parameter_buf,
+			parameter_len, 0, false, request);
 
 	// override motor id in request to Broadcast id
 	request->motor_id = 0xFE;

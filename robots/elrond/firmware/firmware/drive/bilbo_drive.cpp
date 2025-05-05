@@ -44,8 +44,9 @@ HAL_StatusTypeDef BILBO_Drive::start() {
 		return HAL_ERROR;
 	}
 
-	this->motor_left->start();
+
 	this->motor_right->start();
+    this->motor_left->start();
 
 	osThreadNew(startDriveTask, (void*) this, &drive_task_attributes);
 
@@ -134,7 +135,7 @@ void BILBO_Drive::task() {
 					continue;
 				}
 
-				osDelay(2);
+				osDelay(0);
 
 				HAL_StatusTypeDef status_speed_right = this->motor_right->readSpeed(
 						motor_right_speed);
@@ -169,7 +170,7 @@ void BILBO_Drive::task() {
 					continue;
 				}
 
-				osDelay(2);
+				osDelay(0);
 
 				status = this->motor_right->setTorque(motor_right_torque);
 

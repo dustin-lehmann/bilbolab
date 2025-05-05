@@ -113,7 +113,7 @@ HAL_StatusTypeDef CAN::init(can_config_t config) {
 HAL_StatusTypeDef CAN::start() {
     HAL_StatusTypeDef status = HAL_FDCAN_Start(this->config.hfdcan);
     // Create a dedicated CAN task to process messages from the queue.
-    xTaskCreate(CAN::taskFunction, "CAN_Task", configMINIMAL_STACK_SIZE, this, tskIDLE_PRIORITY + 20, &this->canTaskHandle);
+    xTaskCreate(CAN::taskFunction, "CAN_Task", configMINIMAL_STACK_SIZE, this, tskIDLE_PRIORITY + 1, &this->canTaskHandle);
     return status;
 }
 
