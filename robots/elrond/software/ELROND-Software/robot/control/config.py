@@ -94,13 +94,15 @@ class ControlConfig:
 
 def generate_default_config():
     hardware = get_hardware_definition()
-
+    print(hardware['model']['type'] )
     if hardware['model']['type'] == 'normal':
         generate_default_config_normal()
     elif hardware['model']['type'] == 'big':
         generate_default_config_big()
     elif hardware['model']['type'] == 'small':
         generate_default_config_small()
+    elif hardware['model']['type'] == 'elrond':
+        generate_default_config_elrond()
     else:
         raise Exception("Unknown hardware model type")
 
@@ -134,6 +136,23 @@ def generate_default_config_normal():
     config.velocity_control.forward.feedback.Kd = -0.02
     config.velocity_control.turn.feedback.Kp = -0.01
     config.velocity_control.turn.feedback.Ki = -0.12
+    config.velocity_control.turn.feedback.Kd = 0
+    save_config(config)
+
+def generate_default_config_elrond():
+    config = ControlConfig(name='default')
+    config.description = 'Default Control Configuration for ELROND.'
+    config.general.theta_offset = 0
+    config.general.torque_offset = [0, 0]
+
+    config.statefeedback.gain = [0.5, 0.8, 0.3, 0.025,
+                                 0.5, 0.8, 0.3, -0.025]
+
+    config.velocity_control.forward.feedback.Kp = 0
+    config.velocity_control.forward.feedback.Ki = 0
+    config.velocity_control.forward.feedback.Kd = 0
+    config.velocity_control.turn.feedback.Kp = 0
+    config.velocity_control.turn.feedback.Ki = 0
     config.velocity_control.turn.feedback.Kd = 0
     save_config(config)
 

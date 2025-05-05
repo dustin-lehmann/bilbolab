@@ -27,7 +27,7 @@
 #define TWIPR_CONTROL_TASK_FREQ 100
 
 // Control
-#define TWIPR_CONTROL_MAX_TORQUE 0.3
+#define TWIPR_CONTROL_MAX_TORQUE 1
 #define TWIPR_SAFETY_MAX_WHEEL_SPEED 75
 
 // Control - Trajectories

@@ -251,8 +251,8 @@ class BILBO_Control:
                 return
 
         # If the mode is already set, exit early
-        if mode == self.mode:
-            return
+        # if mode == self.mode:
+        #     return
 
         logger.info(f"Setting control mode to {mode.name}")
 

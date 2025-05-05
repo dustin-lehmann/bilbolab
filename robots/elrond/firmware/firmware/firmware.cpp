@@ -475,7 +475,7 @@ HAL_StatusTypeDef TWIPR_Firmware::init() {
 			.drive_id = 99,
 			.direction = 1,
 			.can_watchdog_timeout = 700,
-			.torque_limit = 0.4,
+			.torque_limit = 1,
 			.velocity_limit = 100
     };
 
@@ -487,7 +487,7 @@ HAL_StatusTypeDef TWIPR_Firmware::init() {
 			.drive_id = 98,
 			.direction = -1,
 			.can_watchdog_timeout = 700,
-			.torque_limit = 0.4,
+			.torque_limit = 1,
 			.velocity_limit = 100
     };
 
@@ -500,7 +500,7 @@ HAL_StatusTypeDef TWIPR_Firmware::init() {
 	// ------------------------------------------------------------------
 
 	bilbo_drive_config_t drive_config = { .type = BILBO_DRIVE_TYPE,
-			.torque_max = 0.4, .task_time = BILBO_DRIVE_TASK_TIME };
+			.torque_max = 1, .task_time = BILBO_DRIVE_TASK_TIME };
 
 	this->drive.init(drive_config, &this->motor_left, &this->motor_right);
 

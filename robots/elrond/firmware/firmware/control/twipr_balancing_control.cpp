@@ -34,9 +34,6 @@ void TWIPR_BalancingControl::update(twipr_estimation_state_t state,
 		twipr_balancing_control_input_t input,
 		twipr_balancing_control_output_t *output) {
 
-	// set status and mode to running balancing
-	this->status = TWIPR_BALANCING_CONTROL_STATUS_RUNNING;
-	this->mode = TWIPR_BALANCING_CONTROL_MODE_ON;
 
 	switch (this->status) {
 	case TWIPR_BALANCING_CONTROL_STATUS_NONE: {

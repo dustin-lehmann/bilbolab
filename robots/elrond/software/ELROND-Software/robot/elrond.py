@@ -164,11 +164,11 @@ class BILBO:
 
 
         # commented out for test
-        #success = self.control.start()
+        success = self.control.start()
 
-        #if not success:
-        #    self.logger.error("Cannot write control configuration. Exit program")
-        #    exit()
+        if not success:
+           self.logger.error("Cannot write control configuration. Exit program")
+           exit()
 
         self.supervisor.start()
         self.sensors.start()

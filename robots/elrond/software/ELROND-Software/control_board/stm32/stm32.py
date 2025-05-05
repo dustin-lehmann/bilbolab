@@ -12,12 +12,12 @@ def resetSTM32():
         GPIO.setwarnings(False)
         GPIO.cleanup()
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup(board_config['pins']['RC_CM4_STM32_RESET'], GPIO.OUT)
+        GPIO.setup(17, GPIO.OUT)
 
         time.sleep(0.25)
-        GPIO.output(board_config['pins']['RC_CM4_STM32_RESET'], 1)
+        GPIO.output(17, 1)
         time.sleep(1)
-        GPIO.output(board_config['pins']['RC_CM4_STM32_RESET'], 0)
+        GPIO.output(17, 0)
         time.sleep(0.25)
         GPIO.cleanup()
 
