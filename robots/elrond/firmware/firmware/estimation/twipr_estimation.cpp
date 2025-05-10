@@ -58,6 +58,11 @@ void TWIPR_Estimation::stop() {
 /* ======================================================= */
 void TWIPR_Estimation::update() {
 
+	static float speed_left_smooth = 0;
+	static float speed_right_smooth = 0;
+//	static elapsedMillis speed_timer = 0;
+	static float alpha = 1;
+
 	// Update the Sensors
 	this->config.sensors->update();
 
@@ -90,12 +95,42 @@ void TWIPR_Estimation::update() {
 	// Correct the speed by the pitch angle velocity
 	data.speed_left += theta_dot;
 	data.speed_right += theta_dot;
+
+	//
+	speed_left_smooth = alpha * data.speed_left + (1.0f - alpha) * speed_left_smooth;
+	speed_right_smooth = alpha * data.speed_right + (1.0f - alpha) * speed_right_smooth;
+
+	data.speed_left = speed_left_smooth;
+	data.speed_right = speed_right_smooth;
+
 	// Get the speed and yaw speed
 	float v = ((data.speed_left + data.speed_right) / 2 )
 			* WHEEL_DIAMETER/2;
 
 	float psi_dot = (data.speed_right - data.speed_left)
 			* (WHEEL_DIAMETER/2) / WHEEL_DISTANCE;
+
+//	// Calculate the speed from positions
+//	float speed_left_calc = ((last_position_left1 - data.position_left) / (TWIPR_ESTIMATION_TS)) * -1;
+//	float speed_right_calc = (last_position_right - data.position_right) / (TWIPR_ESTIMATION_TS);
+//
+//
+//	speed_left_smooth2 = (11*data.position_left - 18*last_position_left1 + 9*last_position_left2 - 2*last_position_left3) / (TWIPR_ESTIMATION_TS);
+
+
+
+//	last_position_left3 = last_position_left2;
+//	last_position_left2 = last_position_left1;
+//	last_position_left1 = data.position_left;
+//
+//	last_position_right = data.position_right;
+	//speed_right_smooth = 0.9 * speed_right_calc + (1.0 - 0.9) * speed_right_smooth;
+	// debug send the speed
+//	if (speed_timer > 300) {
+//		speed_timer.reset();
+//		send_debug("m1 %7.4f %7.4f", data.speed_left, speed_left_smooth);
+//		send_debug("m2 %7.4f %7.4f", data.speed_right, speed_right_smooth);
+//	}
 
 	// Set the current state
 	osSemaphoreAcquire(_semaphore, portMAX_DELAY);

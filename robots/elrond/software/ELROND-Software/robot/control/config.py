@@ -57,8 +57,8 @@ class GeneralControl_Config:
 
 @dataclasses.dataclass
 class SafetyControl_Config:
-    max_speed: float = 100
-    max_torque: float = 0.4
+    max_speed: float = 30
+    max_torque: float = 1.75
 
 
 @dataclasses.dataclass
@@ -145,8 +145,11 @@ def generate_default_config_elrond():
     config.general.theta_offset = 0
     config.general.torque_offset = [0, 0]
 
-    config.statefeedback.gain = [0.9, 1.1, 0.3, 0.00,
-                                 0.9, 1.1, 0.3, -0.0]
+    config.statefeedback.gain = [0.725, 1.1, 0.4, 0.06,
+                                 0.725, 1.1, 0.4, -0.06]
+
+    config.manual.torque.forward_torque_gain = 0.5
+    config.manual.torque.turn_torque_gain = 0.2
 
     config.velocity_control.forward.feedback.Kp = 0
     config.velocity_control.forward.feedback.Ki = 0

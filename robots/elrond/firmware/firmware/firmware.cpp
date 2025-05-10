@@ -720,7 +720,8 @@ twipr_logging_general_t TWIPR_Firmware::getSample() {
  * @brief Updates the side LED color based on the current control mode.
  *
  * Changes the LED color to represent:
- * - Red: OFF mode
+ * - Red: Error state
+ * - White: OFF mode
  * - Amber: Balancing mode
  * - Green: Velocity mode
  */

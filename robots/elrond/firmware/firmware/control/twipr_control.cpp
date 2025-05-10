@@ -138,16 +138,16 @@ void TWIPR_ControlManager::update() {
 
 	// send the state via info
 	// todo: remove the test
-	static elapsedMillis state_timer;
-
-	if (state_timer > 500) {
-		send_info("State: v: %f, theta: %f, theta_dot: %f, psi: %f, psi_dot: %f", this->_dynamic_state.v,
-				this->_dynamic_state.theta, this->_dynamic_state.theta_dot,
-				this->_dynamic_state.psi, this->_dynamic_state.psi_dot);
-		send_info("Control: u_left: %f, u_right: %f", control_output.u_left,
-				control_output.u_right);
-		state_timer.reset();
-	}
+//	static elapsedMillis state_timer;
+//
+//	if (state_timer > 500) {
+//		send_info("State: v: %f, theta: %f, theta_dot: %f, psi: %f, psi_dot: %f", this->_dynamic_state.v,
+//				this->_dynamic_state.theta, this->_dynamic_state.theta_dot,
+//				this->_dynamic_state.psi, this->_dynamic_state.psi_dot);
+//		send_info("Control: u_left: %f, u_right: %f", control_output.u_left,
+//				control_output.u_right);
+//		state_timer.reset();
+//	}
 
 	this->_data.input_left = control_output.u_left;
 	this->_data.input_right = control_output.u_right;

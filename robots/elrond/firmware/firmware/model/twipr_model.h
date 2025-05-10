@@ -20,8 +20,8 @@
 
 // Define WHEEL_DIAMETER based on the model
 #ifdef BILBO_MODEL_NORMAL
-    #define WHEEL_DIAMETER 0.12381
-	#define WHEEL_DISTANCE 0.167167
+    #define WHEEL_DIAMETER 0.1606
+	#define WHEEL_DISTANCE 0.1929
 #elif defined(BILBO_MODEL_SMALL)
     #define WHEEL_DIAMETER 0.099
 	#define WHEEL_DISTANCE 0.157

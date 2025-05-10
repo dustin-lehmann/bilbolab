@@ -94,6 +94,17 @@ void BILBO_Drive::task() {
 	uint32_t ticks_loop = 0;
 	elapsedMillis voltage_timer = 0;
 
+	// test
+	// todo remove test
+//	elapsedMillis speed_timer = 0;
+//	float motor_right_speed_calc = 0;
+//	float motor_right_speed_norm = 0;
+//	float motor_left_speed_calc = 0;
+//	float motor_left_speed_norm = 0;
+//	float motor_left_last_pos = 0;
+//	float motor_right_last_pos = 0;
+
+
 	float motor_left_speed = 0;
 	float motor_left_voltage = 0;
 	float motor_left_torque = 0;
@@ -114,6 +125,7 @@ void BILBO_Drive::task() {
 					voltage_timer.reset();
 					status = this->motor_left->getVoltage(motor_left_voltage);
 
+
 					if (status == HAL_OK) {
 						osSemaphoreAcquire(voltage_semaphore, portMAX_DELAY);
 						this->_voltage = motor_left_voltage;
@@ -123,6 +135,17 @@ void BILBO_Drive::task() {
 					}
 					continue;
 				}
+
+//				// test read speed
+//				if (speed_timer > 400) {
+//					speed_timer.reset();
+//					this->motor_left->readSpeed(motor_left_speed_norm);
+//					this->motor_right->readSpeed(motor_right_speed_norm);
+//					this->motor_left->readSpeed_calculated(motor_left_speed_calc, motor_left_last_pos);
+//					this->motor_right->readSpeed_calculated(motor_right_speed_calc, motor_right_last_pos);
+//					send_debug("m1 %7.4f %7.4f", motor_left_speed_norm, motor_left_speed_calc);
+//					send_debug("m2 %7.4f %7.4f", motor_right_speed_norm, motor_right_speed_calc);
+//				}
 
 				// Read the speed
 				HAL_StatusTypeDef status_speed_left = this->motor_left->readSpeed(

@@ -10,6 +10,7 @@ from robot.control.definitions import BILBO_Control_Mode
 from robot.lowlevel.stm32_sample import BILBO_LL_Sample
 from utils.logging_utils import setLoggerLevel, Logger
 from utils.time import PerformanceTimer
+from robot.control.ElrondJoystick_Standalone import ElrondJoystick
 
 setLoggerLevel('wifi', 'ERROR')
 
@@ -18,44 +19,24 @@ logger.setLevel('DEBUG')
 
 
 def main():
-    bilbo = BILBO(reset_stm32=False)
-    bilbo.init()
-    bilbo.start()
-    # bilbo.board.beep()
-    #bilbo.actuator.setTorque(True, dynamixel_motor.ALL_MOTORS)
-    #bilbo.actuator._setPosition(0, dynamixel_motor.ALL_MOTORS)
-    # time.sleep(1)
-    #bilbo.actuator.initializeLegs()
-    # time.sleep(2)
-    bilbo.actuator.extendLegs2D(4, 10)
+    elrond = BILBO(reset_stm32=False)
+    elrond.init()
+    joystick_control = ElrondJoystick(elrond, logger)
+    elrond.start()
+    joystick_control.start()
+    elrond.actuator.extendLegs2D(3, 10)
 
     time.sleep(3)
-    bilbo.board.beep(repeats=2)
+    elrond.board.beep(repeats=2)
     time.sleep(1)
-    bilbo.control.setMode(BILBO_Control_Mode.BALANCING)
+    #elrond.control.setMode(BILBO_Control_Mode.BALANCING)
     #time.sleep(10)
-    #bilbo.control.setMode(BILBO_Control_Mode.OFF)
+    #elrond.control.setMode(BILBO_Control_Mode.OFF)
 
 
     while True:
-        time.sleep(3)
-        #bilbo.actuator.extendLegs2D(-5, 10)
-        #bilbo.board.beep()
-        #bilbo.actuator.setPosition(40, dynamixel_motor.ALL_MOTORS)
-        #bilbo.actuator.extendLegsStraight(150)
-        #bilbo.actuator.extendLegs2D(100, 130)
-        #time.sleep(4)
-        #bilbo.actuator.extendLegs2D(-50, 60)
-        #time.sleep(4)
-        #bilbo.actuator.extendLegs2D(50, 60)
-        #time.sleep(4)
-        #bilbo.board.beep('high')
-        #bilbo.actuator.setPosition(0, dynamixel_motor.ALL_MOTORS)
-        #bilbo.actuator.extendLegsStraight(0)
-        #bilbo.actuator.extendLegs2D(-100, 130)
-        #time.sleep(4)
-        #bilbo.actuator.extendLegs2D(-50, 60)
-        time.sleep(2)
+        elrond.update()
+        time.sleep(0.05)
 
 
 

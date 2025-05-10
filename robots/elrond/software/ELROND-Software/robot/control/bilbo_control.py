@@ -175,7 +175,7 @@ class BILBO_Control:
             4. Call any user-defined update callbacks.
         """
         # Step 1: Process the STM32 sample
-        self._updateFromLowLevelSample(self._lowlevel_control_sample)
+        #self._updateFromLowLevelSample(self._lowlevel_control_sample)
 
         # Step 2: Process the external input and update control input accordingly
         external_input = self._updateExternalInput(self.external_input)
@@ -322,21 +322,21 @@ class BILBO_Control:
         assert isinstance(forward, (int, float))
         assert isinstance(turn, (int, float))
 
-        if self.mode == BILBO_Control_Mode.BALANCING:
-            # Scale the commands using configuration gains
-            forward_cmd_scaled = forward * self.config.manual.torque.forward_torque_gain
-            turn_cmd_scaled = turn * self.config.manual.torque.turn_torque_gain
-            # Combine inputs to calculate left and right torque values
-            torque_left = -(forward_cmd_scaled + turn_cmd_scaled)
-            torque_right = -(forward_cmd_scaled - turn_cmd_scaled)
+        #if self.mode == BILBO_Control_Mode.BALANCING:
+        # Scale the commands using configuration gains
+        forward_cmd_scaled = forward * self.config.manual.torque.forward_torque_gain
+        turn_cmd_scaled = turn * self.config.manual.torque.turn_torque_gain
+        # Combine inputs to calculate left and right torque values
+        torque_left = -(forward_cmd_scaled + turn_cmd_scaled)
+        torque_right = -(forward_cmd_scaled - turn_cmd_scaled)
 
-            # Apply offsets from configuration
-            self.external_input.balancing.u_left = torque_left + self.config.general.torque_offset[0]
-            self.external_input.balancing.u_right = torque_right + self.config.general.torque_offset[1]
+        # Apply offsets from configuration
+        self.external_input.balancing.u_left = torque_left + self.config.general.torque_offset[0]
+        self.external_input.balancing.u_right = torque_right + self.config.general.torque_offset[1]
 
-            if force:
-                self._setBalancingInput_LL(u_left=torque_left, u_right=torque_right)
-        else:
+        if force:
+            self._setBalancingInput_LL(u_left=torque_left, u_right=torque_right)
+        #else:
             # If not in balancing mode, no action is taken
             ...
 
@@ -879,17 +879,17 @@ class BILBO_Control:
         control_input = BILBO_Control_Input()
 
         # If external input is disabled or mode is OFF, return a zeroed input
-        if not self.enable_external_input:
-            return control_input
-
-        if self.mode == BILBO_Control_Mode.OFF:
-            return control_input
-        elif self.mode == BILBO_Control_Mode.DIRECT:
-            control_input.direct = external_input.direct
-        elif self.mode == BILBO_Control_Mode.BALANCING:
-            control_input.balancing = external_input.balancing
-        elif self.mode == BILBO_Control_Mode.VELOCITY:
-            control_input.velocity = external_input.velocity
+        # if not self.enable_external_input:
+        #     return control_input
+        #
+        # if self.mode == BILBO_Control_Mode.OFF:
+        #     return control_input
+        # elif self.mode == BILBO_Control_Mode.DIRECT:
+        #     control_input.direct = external_input.direct
+        # elif self.mode == BILBO_Control_Mode.BALANCING:
+        control_input.balancing = external_input.balancing
+        # elif self.mode == BILBO_Control_Mode.VELOCITY:
+        #     control_input.velocity = external_input.velocity
 
         return control_input
 
@@ -901,12 +901,12 @@ class BILBO_Control:
         Args:
             input (BILBO_Control_Input): The input to be applied.
         """
-        if self.mode == BILBO_Control_Mode.OFF:
-            return
-
-        elif self.mode == BILBO_Control_Mode.DIRECT:
-            self._setDirectInput_LL(input.direct.u_left, input.direct.u_right)
-        elif self.mode == BILBO_Control_Mode.BALANCING:
-            self._setBalancingInput_LL(input.balancing.u_left, input.balancing.u_right)
-        elif self.mode == BILBO_Control_Mode.VELOCITY:
-            self._setSpeedInput_LL(input.velocity.forward, input.velocity.turn)
+        # if self.mode == BILBO_Control_Mode.OFF:
+        #     return
+        #
+        # elif self.mode == BILBO_Control_Mode.DIRECT:
+        #     self._setDirectInput_LL(input.direct.u_left, input.direct.u_right)
+        # elif self.mode == BILBO_Control_Mode.BALANCING:
+        self._setBalancingInput_LL(input.balancing.u_left, input.balancing.u_right)
+        # elif self.mode == BILBO_Control_Mode.VELOCITY:
+        #     self._setSpeedInput_LL(input.velocity.forward, input.velocity.turn)

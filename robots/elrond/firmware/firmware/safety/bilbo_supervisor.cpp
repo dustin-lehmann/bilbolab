@@ -60,7 +60,7 @@ void TWIPR_Supervisor::task() {
 		this->checkMotorSpeed();
 
 		// Check the motors
-		this->checkMotors();
+		//this->checkMotors();
 
 //		if (error == TWIPR_SUPERVISOR_WHEEL_SPEED) {
 //			// Stop the control module
@@ -130,11 +130,12 @@ void TWIPR_Supervisor::checkMotors() {
 /* ============================================================================= */
 void TWIPR_Supervisor::checkMotorSpeed() {
 
-	if (this->config.control->mode == TWIPR_CONTROL_MODE_OFF) {
-		return;
-	}
+//	if (this->config.control->mode == TWIPR_CONTROL_MODE_OFF) {
+//		return;
+//	}
 
 	bilbo_drive_speed_t speed = this->config.drive->getSpeed();
+
 	if (abs(speed.left) > this->config.max_wheel_speed
 			|| abs(speed.right) > this->config.max_wheel_speed) {
 

@@ -139,7 +139,6 @@ void CAN::onMessageReceived(const FDCAN_RxHeaderTypeDef &header, uint8_t *data) 
     if (header.IdType == FDCAN_EXTENDED_ID){
     	return;
     }
-
     // Extract the register id
     uint16_t register_id = bytearray_to_uint16(&data[2]);
 
@@ -301,12 +300,11 @@ extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan,
 
 		// Ignore messages with D0: 0xA0, Just status messages
 		// or messages that are longer than 8 bytes
-		//if (msg.data[0] != 0xA0 || msg.header.DataLength < 8 ) {
-		if(xQueueSendFromISR(can->messageQueue, &msg, &higherPriorityTaskWoken) != pdPASS) {
+		if (msg.data[0] != 0xA0 || msg.header.DataLength < 8 ) {
+			if(xQueueSendFromISR(can->messageQueue, &msg, &higherPriorityTaskWoken) != pdPASS) {
 				// Queue full – message is dropped; consider error handling.
+			}
 		}
-
-		//}
 		portYIELD_FROM_ISR(higherPriorityTaskWoken);
 	}
 }

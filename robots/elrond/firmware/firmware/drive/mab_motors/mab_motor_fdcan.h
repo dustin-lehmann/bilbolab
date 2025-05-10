@@ -214,7 +214,8 @@ public:
 	HAL_StatusTypeDef setTargetPosition(float position);
 
 	HAL_StatusTypeDef readMode(mab_motor_mode_t &mode);
-	HAL_StatusTypeDef readSpeed(float &speed);
+	HAL_StatusTypeDef readSpeed(float &velocity);
+	HAL_StatusTypeDef readSpeed_calculated(float &speed, float &last_position);
 	HAL_StatusTypeDef readPosition(float &position);
 
 	HAL_StatusTypeDef getTemperature(float &temperature);

@@ -10,6 +10,7 @@ from utils.callbacks import callback_handler, CallbackContainer
 from utils.ctypes_utils import CType
 from utils.events import ConditionEvent
 from utils.logging_utils import Logger
+from utils .teleplot import sendValue
 
 
 # ======================================================================================================================
@@ -27,6 +28,7 @@ def debugprint(data: bilbo_debug_message_data_type, *args, **kwargs):
         text = data['text'].decode("utf-8")
         if flag == 0:
             logger.info(f"DEBUG: {text}")
+            sendToPlot(text)
         if flag == 1:
             logger.info(f"{text}")
         if flag == 2:
@@ -36,6 +38,18 @@ def debugprint(data: bilbo_debug_message_data_type, *args, **kwargs):
     except Exception as e:
         ...
 
+def sendToPlot(text):
+    parts = text.split()
+    if (parts[0] == "m1" or parts[0] == "m2") and len(parts) == 3:
+        motor_name = parts[0]
+        motor_speed_read = float(parts[1])
+        motor_speed_calculated = float(parts[2])
+        #motor_speed_calculated2 = float(parts[3])
+        sendValue(f"{motor_name}_speed_read", motor_speed_read)
+        sendValue(f"{motor_name}_speed_calculated", motor_speed_calculated)
+        #sendValue(f"{motor_name}_speed_calculated2", motor_speed_calculated2)
+    else:
+        raise ValueError(f"Failed to parse speeds from text for motor {motor_name}")
 
 class BILBO_Debug_Message(SerialMessage):
     module: int = 1

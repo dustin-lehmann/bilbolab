@@ -293,29 +293,14 @@ HAL_StatusTypeDef MabMotor_FDCAN::stop() {
 
 	// stop the motor
 	HAL_StatusTypeDef status = this->write_register(MAB_REG_STATE_MACHINE, (uint16_t) 64);
-	if (status) {
-		return status;
-	}
 
 	// set the mode to idle
-	status = this->setMode(MAB_MOTOR_MODE_IDLE);
-	if (status) {
-		return status;
-	}
+	this->setMode(MAB_MOTOR_MODE_IDLE);
 
 	// reset the targets
-	status = this->setTargetPosition(0);
-	if (status) {
-		return status;
-	}
-	status = this->setTargetVelocity(0);
-	if (status) {
-		return status;
-	}
-	status = this->setTorque(0);
-	if (status) {
-		return status;
-	}
+	this->setTargetPosition(0);
+	this->setTargetVelocity(0);
+	this->setTorque(0);
 
 	return HAL_OK;
 

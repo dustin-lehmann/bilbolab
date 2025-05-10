@@ -27,6 +27,7 @@ public:
 	virtual HAL_StatusTypeDef getVoltage(float &voltage) = 0;
 
 	virtual HAL_StatusTypeDef readSpeed(float &speed) = 0;
+	virtual HAL_StatusTypeDef readPosition(float &position) = 0;
 	virtual HAL_StatusTypeDef stop() = 0;
 
 	virtual HAL_StatusTypeDef setTorqueLimit(float maxTorque) = 0;

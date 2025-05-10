@@ -17,6 +17,8 @@ typedef struct twipr_sensors_config_t {
 } twipr_sensors_config_t;
 
 typedef struct twipr_sensors_data_t {
+	float position_left;
+	float position_right;
 	float speed_left;
 	float speed_right;
 	bmi160_acc acc;
