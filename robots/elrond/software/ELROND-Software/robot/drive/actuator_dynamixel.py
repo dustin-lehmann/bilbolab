@@ -19,7 +19,7 @@ class dynamixel_motor(enum.IntEnum):
 @dataclass
 class elrond_leg_params:
     # in mm
-    l1 : float = 46     # distance between the motors
+    l1 : float = 40.5     # distance between the motors
     l2 : float = 160    # length of the upper leg front
     l3 : float = 230    # length of the lower leg front
     l4 : float = 160    # length of upper leg back
@@ -126,6 +126,15 @@ class ELROND_Dynamixel_Handler:
         # Set the angle legs
         self.moveLegs(angles)
 
+    def extendLegsThetaHeight(self, theta: float, height: float):
+        # Calculate the x and y coordinates for the corresponding height and theta
+        x_target = height * np.sin(np.radians(theta))
+        y_target = height * np.cos(np.radians(theta))
+        #y_target = height
+
+        # Move legs with the calculated coordinates
+        print(f"Theta: {theta}, Height: {height}, X: {x_target}, Y: {y_target}")
+        self.extendLegs2D(x_target, y_target)
 
     def moveLegs(self, angles: actuator_angles_input):
         """
@@ -264,7 +273,7 @@ class ELROND_Dynamixel_Handler:
         theta1_deg = 180 - np.degrees(theta1)
         theta3_deg = np.degrees(theta3)
         angles_out = actuator_angles_input(theta3_deg,theta1_deg,theta3_deg,theta1_deg)
-
+        print("Theta 1: ", theta1_deg, "Theta 3: ", theta3_deg)
         return angles_out
 
     # direct mirrors of the lowlevel functions

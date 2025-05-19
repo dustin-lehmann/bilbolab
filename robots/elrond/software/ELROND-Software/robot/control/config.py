@@ -145,8 +145,8 @@ def generate_default_config_elrond():
     config.general.theta_offset = 0
     config.general.torque_offset = [0, 0]
 
-    config.statefeedback.gain = [0.725, 1.1, 0.4, 0.06,
-                                 0.725, 1.1, 0.4, -0.06]
+    config.statefeedback.gain = [0.5, 2.0, 0.4, 0.06,
+                                 0.5, 2.0, 0.4, -0.06]
 
     config.manual.torque.forward_torque_gain = 0.5
     config.manual.torque.turn_torque_gain = 0.2

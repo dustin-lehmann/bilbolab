@@ -28,13 +28,17 @@ def main():
 
     time.sleep(3)
     elrond.board.beep(repeats=2)
-    time.sleep(1)
+    #time.sleep(2)
     #elrond.control.setMode(BILBO_Control_Mode.BALANCING)
     #time.sleep(10)
     #elrond.control.setMode(BILBO_Control_Mode.OFF)
 
 
     while True:
+        #elrond.actuator.extendLegsThetaHeight(theta=-40, height=60)
+        #time.sleep(3)
+        #elrond.actuator.extendLegsThetaHeight(theta=0, height=60)
+        #time.sleep(3)
         elrond.update()
         time.sleep(0.05)
 
