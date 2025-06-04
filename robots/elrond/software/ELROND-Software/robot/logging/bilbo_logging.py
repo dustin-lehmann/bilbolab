@@ -268,6 +268,7 @@ class BILBO_Logging:
 
         self.sample = from_dict(BILBO_Sample, self._sample_buffer[self._index_sample_buffer - 1])
 
+
         elapsed_time = timer.stop()
 
         if elapsed_time > 0.1:

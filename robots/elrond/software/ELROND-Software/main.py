@@ -9,6 +9,7 @@ from robot.communication.serial.bilbo_serial_messages import BILBO_Debug_Message
 from robot.control.definitions import BILBO_Control_Mode
 from robot.lowlevel.stm32_sample import BILBO_LL_Sample
 from utils.logging_utils import setLoggerLevel, Logger
+from utils.teleplot import sendValue
 from utils.time import PerformanceTimer
 from robot.control.ElrondJoystick_Standalone import ElrondJoystick
 
@@ -21,26 +22,35 @@ logger.setLevel('DEBUG')
 def main():
     elrond = BILBO(reset_stm32=False)
     elrond.init()
+
+    def update_callback(*args, **kwargs):
+        theta = elrond.logging.sample.lowlevel.estimation.state.theta
+        #speed_left = elrond.logging.sample.lowlevel.sensors.speed_left
+        #speed_right = elrond.logging.sample.lowlevel.sensors.speed_right
+        v = elrond.logging.sample.lowlevel.estimation.state.v
+        sendValue('theta', math.degrees(theta))
+        #sendValue('speed_left', speed_left)
+        #sendValue('speed_right', speed_right)
+        sendValue('v', v)
+
+    #elrond.callbacks.update.register(update_callback)
+    #elrond.events.update.on(update_callback)
+
     joystick_control = ElrondJoystick(elrond, logger)
     elrond.start()
     joystick_control.start()
-    elrond.actuator.extendLegs2D(3, 10)
+    #elrond.actuator.extendLegs2D(3, 10)
+    #elrond.actuator.extendLegsThetaHeight(3,10)
+    #time.sleep(3)
+    elrond.actuator.extendLegsThetaHeight(2,5)
+
 
     time.sleep(3)
-    elrond.board.beep(repeats=2)
-    #time.sleep(2)
-    #elrond.control.setMode(BILBO_Control_Mode.BALANCING)
-    #time.sleep(10)
-    #elrond.control.setMode(BILBO_Control_Mode.OFF)
+    elrond.board.beep(1500,400,2)
 
 
     while True:
-        #elrond.actuator.extendLegsThetaHeight(theta=-40, height=60)
-        #time.sleep(3)
-        #elrond.actuator.extendLegsThetaHeight(theta=0, height=60)
-        #time.sleep(3)
-        elrond.update()
-        time.sleep(0.05)
+        time.sleep(1)
 
 
 

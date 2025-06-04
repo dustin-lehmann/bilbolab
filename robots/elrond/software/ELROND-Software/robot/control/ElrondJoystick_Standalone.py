@@ -1,12 +1,13 @@
 import threading
 import time
 
+from _tests.test_trajectories_elrond import elrond_experiment_test_trajectory, startManualExperimentButton, stopManualExperimentButton
 from utils.files import relativeToFullPath
 from utils.joystick.joystick import JoystickManager, Joystick
 from utils.logging_utils import Logger
 from robot.control.definitions import BILBO_Control_Mode
 from robot.drive.actuator_dynamixel import ELROND_Dynamixel_Handler
-from robot.bilbo import BILBO
+from robot.elrond import BILBO
 
 
 class ElrondJoystick:
@@ -64,25 +65,32 @@ class ElrondJoystick:
         # set all the button callbacks
         #self.joystick.setButtonCallback(0, 'down', self.reset)
 
+        # B Button on joystick
         self.joystick.setButtonCallback(button=0,
                                         event='down',
                                         function=self._elrond.control.setMode,
                                         parameters={'mode': BILBO_Control_Mode.OFF})
-
+        # A Button on joystick
         self.joystick.setButtonCallback(button=1,
                                         event='down',
                                         function=self._elrond.control.setMode,
                                         parameters={'mode': BILBO_Control_Mode.BALANCING})
 
-        self.joystick.setButtonCallback(button=3,
+        # Start Button on joystick
+        self.joystick.setButtonCallback(button=7,
                                         event='down',
-                                        function=self._elrond.actuator.extendLegs2D,
-                                        parameters={'x_target': 3, 'y_target': 10})
-
-        self.joystick.setButtonCallback(button=2,
+                                        function=startManualExperimentButton,
+                                        parameters={'elrond' :self._elrond})
+        # Select Button on joystick
+        self.joystick.setButtonCallback(button=6,
                                         event='down',
-                                        function=self._elrond.actuator.extendLegs2D,
-                                        parameters={'x_target': 3, 'y_target': 70})
+                                        function=stopManualExperimentButton,
+                                        parameters={'elrond' :self._elrond})
+        # Pixel Heart Button on joystick
+        self.joystick.setButtonCallback(button=10,
+                                       event='down',
+                                       function=elrond_experiment_test_trajectory,
+                                       parameters={'elrond': self._elrond})
 
         self.logger.info(f"New Joystick connected: {joystick.name}")
 

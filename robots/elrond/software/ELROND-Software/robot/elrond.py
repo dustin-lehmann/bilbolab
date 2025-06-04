@@ -1,4 +1,5 @@
 import ctypes
+import math
 import os
 import time
 
@@ -24,6 +25,7 @@ from utils.logging_utils import Logger, setLoggerLevel
 from robot.supervisor.twipr_supervisor import TWIPR_Supervisor
 from utils.revisions import get_versions, is_ll_version_compatible
 import robot.lowlevel.stm32_addresses as stm32_addresses
+from utils.teleplot import sendValue
 from utils.time import precise_sleep, PerformanceTimer
 from robot.drive.actuator_dynamixel import ELROND_Dynamixel_Handler
 

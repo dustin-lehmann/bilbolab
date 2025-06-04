@@ -55,8 +55,8 @@ void TWIPR_Sensors::update() {
 	this->_readImu();
 	this->_readMotorSpeed();
 	this->_readBatteryVoltage();
-	this->_config.drive->motor_left->readPosition(this->_data.position_left);
-	this->_config.drive->motor_right->readPosition(this->_data.position_right);
+	//this->_config.drive->motor_left->readPosition(this->_data.position_left);
+	//this->_config.drive->motor_right->readPosition(this->_data.position_right);
 }
 /* ======================================================= */
 twipr_sensors_data_t TWIPR_Sensors::getData() {
@@ -94,8 +94,9 @@ void TWIPR_Sensors::_readMotorSpeed() {
 
 /* ======================================================= */
 void TWIPR_Sensors::_readBatteryVoltage() {
-	float voltage = this->_config.drive->getVoltage();
-	this->_data.battery_voltage = voltage;
+	//float voltage = this->_config.drive->getVoltage();
+	//float voltage = this->_config.actuators->get_voltage_single_motor(0);
+	this->_data.battery_voltage = 0;
 }
 
 

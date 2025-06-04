@@ -402,7 +402,7 @@ HAL_StatusTypeDef TWIPR_Firmware::init() {
 	// Communication module configuration
 	twipr_communication_config_t twipr_comm_config = { .huart = BOARD_CM4_UART,
 			.hspi = BOARD_SPI_CM4, .sample_notification_gpio = core_utils_GPIO(
-			CM4_SAMPLE_NOTIFICATION_PORT, CM4_SAMPLE_NOTIFICATION_PIN),
+			/*CM4_SAMPLE_NOTIFICATION_PORT*/GPIOE, GPIO_PIN_8 /*CM4_SAMPLE_NOTIFICATION_PIN*/),
 			.sequence_rx_buffer = this->sequencer.rx_buffer,
 			.len_sequence_buffer = TWIPR_SEQUENCE_BUFFER_SIZE,
 			.reset_uart_exti = CM4_UART_RESET_EXTI, .modbus_huart =

@@ -11,14 +11,16 @@
 #include "core.h"
 #include "robot-control_board.h"
 #include "bilbo_drive.h"
+//#include "dynamixel.h"
 
 typedef struct twipr_sensors_config_t {
 	BILBO_Drive *drive;
+	//DynamixelHandler *actuators;
 } twipr_sensors_config_t;
 
 typedef struct twipr_sensors_data_t {
-	float position_left;
-	float position_right;
+    //float position_left;
+	//float position_right;
 	float speed_left;
 	float speed_right;
 	bmi160_acc acc;

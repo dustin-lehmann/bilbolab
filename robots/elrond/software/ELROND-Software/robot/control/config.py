@@ -57,7 +57,7 @@ class GeneralControl_Config:
 
 @dataclasses.dataclass
 class SafetyControl_Config:
-    max_speed: float = 30
+    max_speed: float = 40
     max_torque: float = 1.75
 
 
@@ -128,8 +128,8 @@ def generate_default_config_normal():
     #                              0.3, 0.3, 0.04, -0.036]
 
     # This is really aggressive!
-    config.statefeedback.gain = [0.3, 0.3, 0.04, 0.025,
-                                 0.3, 0.3, 0.04, -0.025]
+    config.statefeedback.gain = [0.3, 0.3, 0.02, 0.025,
+                                 0.3, 0.3, 0.02, -0.025]
 
     config.velocity_control.forward.feedback.Kp = -0.5
     config.velocity_control.forward.feedback.Ki = -0.6
@@ -145,11 +145,32 @@ def generate_default_config_elrond():
     config.general.theta_offset = 0
     config.general.torque_offset = [0, 0]
 
-    config.statefeedback.gain = [0.5, 2.0, 0.4, 0.06,
-                                 0.5, 2.0, 0.4, -0.06]
+    # This works for height = 0 - 10
+    config.statefeedback.gain = [0.6, 1.5, 0.18, 0.06,
+                                 0.6, 1.5, 0.18, -0.06]
+    config.manual.torque.forward_torque_gain = 0.7
+    config.manual.torque.turn_torque_gain = 0.35
 
-    config.manual.torque.forward_torque_gain = 0.5
-    config.manual.torque.turn_torque_gain = 0.2
+    # parameters for height = 70
+    # config.statefeedback.gain = [0.6, 3.0, 0.12, 0.05,
+    #                              0.6, 3.0, 0.12, -0.05]
+    # config.manual.torque.forward_torque_gain = 0.4
+    # config.manual.torque.turn_torque_gain = 0.2
+
+    # parameters for height = 140
+    # config.statefeedback.gain = [0.6, 5.0, 0.14, 0.03,
+    #                              0.6, 5.0, 0.14, -0.03]
+    #
+    # config.manual.torque.forward_torque_gain = 0.3
+    # config.manual.torque.turn_torque_gain = 0.15
+
+    # parameters for height = 200
+    # theta maybe higher
+    # config.statefeedback.gain = [0.6, 6.0, 0.16, 0.03,
+    #                              0.6, 6.0, 0.16, -0.03]
+    #
+    # config.manual.torque.forward_torque_gain = 0.25
+    # config.manual.torque.turn_torque_gain = 0.15
 
     config.velocity_control.forward.feedback.Kp = 0
     config.velocity_control.forward.feedback.Ki = 0

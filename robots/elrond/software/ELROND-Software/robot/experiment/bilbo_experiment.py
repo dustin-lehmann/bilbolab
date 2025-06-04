@@ -461,8 +461,8 @@ class BILBO_ExperimentHandler:
                 input_left = float(input[0])
                 input_right = float(input[1])
             else:
-                input_left = float(input)
-                input_right = float(input)
+                input_left = float(input)/2
+                input_right = float(input)/2
 
             trajectory_inputs[i] = BILBO_TrajectoryInput(
                 step=i,

@@ -19,7 +19,7 @@ class dynamixel_motor(enum.IntEnum):
 @dataclass
 class elrond_leg_params:
     # in mm
-    l1 : float = 40.5     # distance between the motors
+    l1 : float = 46     # distance between the motors
     l2 : float = 160    # length of the upper leg front
     l3 : float = 230    # length of the lower leg front
     l4 : float = 160    # length of upper leg back
@@ -55,26 +55,26 @@ class actuator_angles_input:
 
 @dataclass
 class actuator_admissible_range:
-    front_left_min: float = 0
+    front_left_min: float = -6
     front_left_max: float = 80
-    back_left_min: float = 0
+    back_left_min: float = -6
     back_left_max: float = 80
-    front_right_min: float = 0
+    front_right_min: float = -6
     front_right_max: float = 80
-    back_right_min: float = 0
+    back_right_min: float = -6
     back_right_max: float = 80
     height_min: float = 0 # in mm
-    height_max: float = 230 # in mm
+    height_max: float = 250 # in mm
 
 @dataclass
 class actuator_offsets:
-    front_left: float = 14
-    back_left: float = 14
-    front_right: float = 14
-    back_right: float = 14
+    front_left: float = 15
+    back_left: float = 15
+    front_right: float = 15
+    back_right: float = 15
     # height difference (mm) between absolute zero point
     # and initialization point, so that height 0 is driveable
-    height: float = 141
+    height: float = 125
 
 class ELROND_Dynamixel_Handler:
     comm: BILBO_Communication
@@ -128,13 +128,20 @@ class ELROND_Dynamixel_Handler:
 
     def extendLegsThetaHeight(self, theta: float, height: float):
         # Calculate the x and y coordinates for the corresponding height and theta
-        x_target = height * np.sin(np.radians(theta))
-        y_target = height * np.cos(np.radians(theta))
+        x_target = (height + self.offsets.height) * np.sin(np.radians(theta))
+        y_target = (height + self.offsets.height) * np.cos(np.radians(theta))
         #y_target = height
 
         # Move legs with the calculated coordinates
         print(f"Theta: {theta}, Height: {height}, X: {x_target}, Y: {y_target}")
-        self.extendLegs2D(x_target, y_target)
+        #self.extendLegs2D(x_target, y_target)
+
+        # Calculate the angles for the corresponding height
+        angles = self._calculate_angles(x_target,y_target)
+        print(angles)
+
+        # Set the angle legs
+        self.moveLegs(angles)
 
     def moveLegs(self, angles: actuator_angles_input):
         """

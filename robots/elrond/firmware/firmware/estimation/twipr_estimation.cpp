@@ -61,7 +61,7 @@ void TWIPR_Estimation::update() {
 	static float speed_left_smooth = 0;
 	static float speed_right_smooth = 0;
 //	static elapsedMillis speed_timer = 0;
-	static float alpha = 0.4f;
+	static float alpha = 1.0;
 
 	// Update the Sensors
 	this->config.sensors->update();

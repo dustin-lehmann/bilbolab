@@ -16,7 +16,7 @@ class bilbo_ll_sample_general_struct(ctypes.Structure):
 class BILBO_LL_Sample_General:
     tick: int = 0
     status: int = 0
-    error: int = 0
+    #error: int = 0
 
 
 class bilbo_ll_sample_errors_struct(ctypes.Structure):
