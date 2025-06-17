@@ -27,7 +27,7 @@
 
 // Control
 #define TWIPR_CONTROL_MAX_TORQUE 1.75f // Nm
-#define TWIPR_SAFETY_MAX_WHEEL_SPEED 3
+#define TWIPR_SAFETY_MAX_WHEEL_SPEED 40
 
 // Control - Trajectories
 #define TWIPR_SEQUENCE_TIME 30 // seconds

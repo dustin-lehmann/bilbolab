@@ -63,7 +63,7 @@ class actuator_admissible_range:
     front_right_max: float = 80
     back_right_min: float = -6
     back_right_max: float = 80
-    height_min: float = 0 # in mm
+    height_min: float = 5 # in mm
     height_max: float = 250 # in mm
 
 @dataclass
@@ -82,6 +82,7 @@ class ELROND_Dynamixel_Handler:
     angles: actuator_angles
     ranges: actuator_admissible_range
     offsets: actuator_offsets
+    height: float = 0 # current height over offset
 
     def __init__(self, comm: BILBO_Communication):
         self.comm = comm
@@ -104,25 +105,29 @@ class ELROND_Dynamixel_Handler:
     def initializeLegs(self):
         # move legs to a known position where the drive motors can spin
         angles = actuator_angles_input(0,0,0,0)
+        self.height = 0
         self.moveLegs(angles)
 
     def extendLegsStraight(self,height: float ):
 
         # Check if the height is ok
-       if height < self.ranges.height_min or height > self.ranges.height_max:
-           raise ValueError("Height is out of admissible range")
+        if height < self.ranges.height_min or height > self.ranges.height_max:
+            self.logger.error("Height is out of admissible range")
+        else:
+            # Calculate the angles for the corresponding height
+            angles = self._calculate_angles(0,height + self.offsets.height)
 
-        # Calculate the angles for the corresponding height
-       angles = self._calculate_angles(0,height + self.offsets.height)
+            # Set the height
+            self.height = height
 
-        # Set the angle legs
-       self.moveLegs(angles)
+            # Set the angle legs
+            self.moveLegs(angles)
 
     def extendLegs2D(self, x_target:float, y_target:float):
 
         # Calculate the angles for the corresponding height
         angles = self._calculate_angles(x_target, y_target + self.offsets.height)
-
+        self.height = y_target
         # Set the angle legs
         self.moveLegs(angles)
 
@@ -137,11 +142,27 @@ class ELROND_Dynamixel_Handler:
         #self.extendLegs2D(x_target, y_target)
 
         # Calculate the angles for the corresponding height
+        self.height = height
         angles = self._calculate_angles(x_target,y_target)
-        print(angles)
+        #print(angles)
 
         # Set the angle legs
         self.moveLegs(angles)
+
+    def increaseThetaHeight(self, theta: float, height_increase: float):
+        if self.height + height_increase > self.ranges.height_max:
+            self.extendLegsThetaHeight(theta, self.ranges.height_max)
+            self.logger.warning("Height is out of admissible range")
+
+        else:
+            self.extendLegsThetaHeight(theta, self.height + height_increase)
+
+    def decreaseThetaHeight(self, theta: float, height_decrease: float):
+        if self.height - height_decrease < self.ranges.height_min:
+            self.extendLegsThetaHeight(theta, self.ranges.height_min)
+            self.logger.warning("Height is out of admissible range")
+        else:
+            self.extendLegsThetaHeight(theta, self.height - height_decrease)
 
     def moveLegs(self, angles: actuator_angles_input):
         """
@@ -155,31 +176,31 @@ class ELROND_Dynamixel_Handler:
             angles (actuator_angles_input): The desired angles for the front-left, back-left,
                                             front-right, and back-right motors.
 
-        Raises:
-            ValueError: If any of the angles are out of the admissible range.
+        Sends:
+            logger warning: If any of the angles are out of the admissible range.
         """
         # Checking if the angles are within admissible ranges
         if not self._check_angles(angles):
-            raise ValueError("One or more angles are out of admissible range")
-
-        # Check if all angles are equal
-        if self._angles_equal(angles):
-            # Set torque and position for all motors if angles are equal
-            self.setTorque(True, dynamixel_motor.ALL_MOTORS)
-            self._setPosition(angles.front_left + self.offsets.front_left, dynamixel_motor.ALL_MOTORS)
+            self.logger.warning("One or more angles are out of admissible range")
         else:
-            # Set torque and position individually for each motor
-            self.setTorque(True, dynamixel_motor.FRONT_LEFT)
-            self._setPosition(angles.front_left + self.offsets.front_left, dynamixel_motor.FRONT_LEFT)
+            # Check if all angles are equal
+            if self._angles_equal(angles):
+                # Set torque and position for all motors if angles are equal
+                self.setTorque(True, dynamixel_motor.ALL_MOTORS)
+                self._setPosition(angles.front_left + self.offsets.front_left, dynamixel_motor.ALL_MOTORS)
+            else:
+                # Set torque and position individually for each motor
+                self.setTorque(True, dynamixel_motor.FRONT_LEFT)
+                self._setPosition(angles.front_left + self.offsets.front_left, dynamixel_motor.FRONT_LEFT)
 
-            self.setTorque(True, dynamixel_motor.BACK_LEFT)
-            self._setPosition(angles.back_left + self.offsets.back_left, dynamixel_motor.BACK_LEFT)
+                self.setTorque(True, dynamixel_motor.BACK_LEFT)
+                self._setPosition(angles.back_left + self.offsets.back_left, dynamixel_motor.BACK_LEFT)
 
-            self.setTorque(True, dynamixel_motor.FRONT_RIGHT)
-            self._setPosition(angles.front_right + self.offsets.front_right, dynamixel_motor.FRONT_RIGHT)
+                self.setTorque(True, dynamixel_motor.FRONT_RIGHT)
+                self._setPosition(angles.front_right + self.offsets.front_right, dynamixel_motor.FRONT_RIGHT)
 
-            self.setTorque(True, dynamixel_motor.BACK_RIGHT)
-            self._setPosition(angles.back_right + self.offsets.back_right, dynamixel_motor.BACK_RIGHT)
+                self.setTorque(True, dynamixel_motor.BACK_RIGHT)
+                self._setPosition(angles.back_right + self.offsets.back_right, dynamixel_motor.BACK_RIGHT)
 
 
 
@@ -209,13 +230,14 @@ class ELROND_Dynamixel_Handler:
     def _setPosition(self, position: float, motor: dynamixel_motor):
         """Set the position of a single motor or all motors to the given state."""
         if position < 0:
-            raise ValueError("Position cannot be negative")
-        position_pulses = int(position/0.088)
-        if motor == dynamixel_motor.ALL_MOTORS:
-            self._setPositionAll_LL(ctypes.c_uint32(position_pulses))
+            self.logger.warning("Position cannot be negative")
         else:
-            position_config = dynamixel_position_single_motor_LL(motor, ctypes.c_uint32(position_pulses))
-            self._setPositionSingle_LL(position_config)
+            position_pulses = int(position/0.088)
+            if motor == dynamixel_motor.ALL_MOTORS:
+                self._setPositionAll_LL(ctypes.c_uint32(position_pulses))
+            else:
+                position_config = dynamixel_position_single_motor_LL(motor, ctypes.c_uint32(position_pulses))
+                self._setPositionSingle_LL(position_config)
 
     ## helper functions
 
@@ -245,6 +267,7 @@ class ELROND_Dynamixel_Handler:
             Solves the inverse kinematics for a five-bar linkage with origin at midpoint.
             Returns the base joint angles (θ1, θ3) and intermediate angles (θ2, θ4).
             """
+        angles_out = None
         # Shift target to original frame (A0 at (0,0), B0 at (d,0))
         x = x_target + elrond_leg_params.l1 / 2
         y = y_target
@@ -254,33 +277,33 @@ class ELROND_Dynamixel_Handler:
         cos_theta2 = (r_sq - elrond_leg_params.l2 ** 2 - elrond_leg_params.l3 ** 2) / (2 * elrond_leg_params.l2 * elrond_leg_params.l3)
 
         if abs(cos_theta2) > 1:
-            raise ValueError("Target position not reachable by the first chain.")
+            self.logger.warning("Target position not reachable by the first chain.")
+        else:
+            theta2 = -np.arccos(cos_theta2)  # Elbow-up solution
 
-        theta2 = -np.arccos(cos_theta2)  # Elbow-up solution
+            # Calculate θ1
+            alpha = np.arctan2(y, x)
+            beta = np.arctan2(elrond_leg_params.l3 * np.sin(theta2), elrond_leg_params.l2 + elrond_leg_params.l3 * np.cos(theta2))
+            theta1 = alpha - beta
 
-        # Calculate θ1
-        alpha = np.arctan2(y, x)
-        beta = np.arctan2(elrond_leg_params.l3 * np.sin(theta2), elrond_leg_params.l2 + elrond_leg_params.l3 * np.cos(theta2))
-        theta1 = alpha - beta
+            # Second chain (B0 -> P)
+            r_prime_sq = (x - elrond_leg_params.l1) ** 2 + y ** 2
+            cos_theta4 = (r_prime_sq - elrond_leg_params.l4 ** 2 - elrond_leg_params.l5 ** 2) / (2 * elrond_leg_params.l4 * elrond_leg_params.l5)
 
-        # Second chain (B0 -> P)
-        r_prime_sq = (x - elrond_leg_params.l1) ** 2 + y ** 2
-        cos_theta4 = (r_prime_sq - elrond_leg_params.l4 ** 2 - elrond_leg_params.l5 ** 2) / (2 * elrond_leg_params.l4 * elrond_leg_params.l5)
+            if abs(cos_theta4) > 1:
+                self.logger.warning("Target position not reachable by the second chain.")
+            else:
+                theta4 = np.arccos(cos_theta4)  # Elbow-up solution
 
-        if abs(cos_theta4) > 1:
-            raise ValueError("Target position not reachable by the second chain.")
+                # Calculate θ3
+                alpha_prime = np.arctan2(y, x - elrond_leg_params.l1)
+                beta_prime = np.arctan2(elrond_leg_params.l5 * np.sin(theta4), elrond_leg_params.l4 + elrond_leg_params.l5 * np.cos(theta4))
+                theta3 = alpha_prime - beta_prime
 
-        theta4 = np.arccos(cos_theta4)  # Elbow-up solution
-
-        # Calculate θ3
-        alpha_prime = np.arctan2(y, x - elrond_leg_params.l1)
-        beta_prime = np.arctan2(elrond_leg_params.l5 * np.sin(theta4), elrond_leg_params.l4 + elrond_leg_params.l5 * np.cos(theta4))
-        theta3 = alpha_prime - beta_prime
-
-        theta1_deg = 180 - np.degrees(theta1)
-        theta3_deg = np.degrees(theta3)
-        angles_out = actuator_angles_input(theta3_deg,theta1_deg,theta3_deg,theta1_deg)
-        print("Theta 1: ", theta1_deg, "Theta 3: ", theta3_deg)
+                theta1_deg = 180 - np.degrees(theta1)
+                theta3_deg = np.degrees(theta3)
+                angles_out = actuator_angles_input(theta3_deg,theta1_deg,theta3_deg,theta1_deg)
+                #print("Theta 1: ", theta1_deg, "Theta 3: ", theta3_deg)
         return angles_out
 
     # direct mirrors of the lowlevel functions

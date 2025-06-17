@@ -92,6 +92,29 @@ class ElrondJoystick:
                                        function=elrond_experiment_test_trajectory,
                                        parameters={'elrond': self._elrond})
 
+        # Up on DPAD
+        # self.joystick.setJoyHatCallback(direction='up',
+        #                                 function=self._elrond.actuator.increaseThetaHeight,
+        #                                 parameters={'theta': 2, 'height_increase': 10})
+
+        # Down on DPAD
+        # self.joystick.setJoyHatCallback(direction='down',
+        #                                 function=self._elrond.actuator.decreaseThetaHeight,
+        #                                 parameters={'theta': 2, 'height_decrease': 10})
+
+
+        # X Button on joystick
+        self.joystick.setButtonCallback(button=3,
+                                        event='down',
+                                        function=self._elrond.actuator.increaseThetaHeight,
+                                        parameters={'theta': 2, 'height_increase': 10})
+
+        # Y Button on joystick
+        self.joystick.setButtonCallback(button=2,
+                                        event='down',
+                                        function=self._elrond.actuator.decreaseThetaHeight,
+                                        parameters={'theta': 2, 'height_decrease': 10})
+
         self.logger.info(f"New Joystick connected: {joystick.name}")
 
         self._joystick_thread = threading.Thread(target=self._joystick_task, daemon=True)
