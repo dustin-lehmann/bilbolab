@@ -145,11 +145,17 @@ def generate_default_config_elrond():
     config.general.theta_offset = 0
     config.general.torque_offset = [0, 0]
 
-    # This works for height = 0 - 10
+    # Normal preset, for demonstration and learning to drive
     config.statefeedback.gain = [0.6, 2.2, 0.2, 0.06,
                                  0.6, 2.2, 0.2, -0.06]
-    config.manual.torque.forward_torque_gain = 1.3
-    config.manual.torque.turn_torque_gain = 0.35
+    config.manual.torque.forward_torque_gain = 0.8
+    config.manual.torque.turn_torque_gain = 0.25
+
+    # Fast preset, harder to drive
+    # config.statefeedback.gain = [0.6, 2.2, 0.2, 0.06,
+    #                              0.6, 2.2, 0.2, -0.06]
+    # config.manual.torque.forward_torque_gain = 1.4
+    # config.manual.torque.turn_torque_gain = 0.35
 
     # parameters for height = 70
     # config.statefeedback.gain = [0.6, 3.0, 0.12, 0.05,
