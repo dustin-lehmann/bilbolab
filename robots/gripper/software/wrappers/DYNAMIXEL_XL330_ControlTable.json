@@ -1,0 +1,779 @@
+[
+        {
+        "Name": "Model Number",
+        "Area": "EEPROM",
+        "Address": 0,
+        "Access": "R",
+        "ByteSize": 2,
+        "InitialValue": 330,
+        "Range": [
+            330,
+            330
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Model Information",
+        "Area": "EEPROM",
+        "Address": 2,
+        "Access": "R",
+        "ByteSize": 4,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            0
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Firmware Version",
+        "Area": "EEPROM",
+        "Address": 6,
+        "Access": "R",
+        "ByteSize": 1,
+        "InitialValue": null,
+        "Range": [
+            0,
+            255
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "ID",
+        "Area": "EEPROM",
+        "Address": 7,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 1,
+        "Range": [
+            0,
+            252
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Baud Rate",
+        "Area": "EEPROM",
+        "Address": 8,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 3,
+        "Range": [
+            0,
+            7
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Return Delay Time",
+        "Area": "EEPROM",
+        "Address": 9,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 250,
+        "Range": [
+            0,
+            254
+        ],
+        "Unit": "\u00b5s"
+    },
+    {
+        "Name": "Drive Mode",
+        "Area": "EEPROM",
+        "Address": 10,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            5
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Operating Mode",
+        "Area": "EEPROM",
+        "Address": 11,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 3,
+        "Range": [
+            0,
+            16
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Secondary (Shadow) ID",
+        "Area": "EEPROM",
+        "Address": 12,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 255,
+        "Range": [
+            0,
+            252
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Protocol Type",
+        "Area": "EEPROM",
+        "Address": 13,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 2,
+        "Range": [
+            1,
+            2
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Homing Offset",
+        "Area": "EEPROM",
+        "Address": 20,
+        "Access": "RW",
+        "ByteSize": 4,
+        "InitialValue": 0,
+        "Range": [
+            -1044479,
+            1044479
+        ],
+        "Unit": "pulse"
+    },
+    {
+        "Name": "Moving Threshold",
+        "Area": "EEPROM",
+        "Address": 24,
+        "Access": "RW",
+        "ByteSize": 4,
+        "InitialValue": 10,
+        "Range": [
+            0,
+            1023
+        ],
+        "Unit": "rpm"
+    },
+    {
+        "Name": "Temperature Limit",
+        "Area": "EEPROM",
+        "Address": 31,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 70,
+        "Range": [
+            0,
+            100
+        ],
+        "Unit": "\u00b0C"
+    },
+    {
+        "Name": "Min Voltage Limit",
+        "Area": "EEPROM",
+        "Address": 32,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 35,
+        "Range": [
+            0,
+            70
+        ],
+        "Unit": "V"
+    },
+    {
+        "Name": "Max Voltage Limit",
+        "Area": "EEPROM",
+        "Address": 34,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 60,
+        "Range": [
+            0,
+            70
+        ],
+        "Unit": "V"
+    },
+    {
+        "Name": "PWM Limit",
+        "Area": "EEPROM",
+        "Address": 36,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 885,
+        "Range": [
+            0,
+            885
+        ],
+        "Unit": "%"
+    },
+    {
+        "Name": "Current Limit",
+        "Area": "EEPROM",
+        "Address": 38,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 1750,
+        "Range": [
+            0,
+            1750
+        ],
+        "Unit": "mA"
+    },
+    {
+        "Name": "Acceleration Limit",
+        "Area": "EEPROM",
+        "Address": 40,
+        "Access": "RW",
+        "ByteSize": 4,
+        "InitialValue": 32767,
+        "Range": [
+            0,
+            32767
+        ],
+        "Unit": "pulse/s^2"
+    },
+    {
+        "Name": "Velocity Limit",
+        "Area": "EEPROM",
+        "Address": 44,
+        "Access": "RW",
+        "ByteSize": 4,
+        "InitialValue": 415,
+        "Range": [
+            0,
+            415
+        ],
+        "Unit": "rpm"
+    },
+    {
+        "Name": "Max Position Limit",
+        "Area": "EEPROM",
+        "Address": 48,
+        "Access": "RW",
+        "ByteSize": 4,
+        "InitialValue": 4095,
+        "Range": [
+            0,
+            4095
+        ],
+        "Unit": "pulse"
+    },
+    {
+        "Name": "Min Position Limit",
+        "Area": "EEPROM",
+        "Address": 52,
+        "Access": "RW",
+        "ByteSize": 4,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            4095
+        ],
+        "Unit": "pulse"
+    },
+    {
+        "Name": "Shutdown",
+        "Area": "EEPROM",
+        "Address": 63,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 52,
+        "Range": [
+            0,
+            127
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Torque Enable",
+        "Area": "RAM",
+        "Address": 64,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            1
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "LED",
+        "Area": "RAM",
+        "Address": 65,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            1
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Status Return Level",
+        "Area": "RAM",
+        "Address": 68,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 2,
+        "Range": [
+            0,
+            2
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Registered Instruction",
+        "Area": "RAM",
+        "Address": 69,
+        "Access": "R",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            1
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Hardware Error Status",
+        "Area": "RAM",
+        "Address": 70,
+        "Access": "R",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            255
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Velocity I Gain",
+        "Area": "RAM",
+        "Address": 76,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 1920,
+        "Range": [
+            0,
+            16383
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Velocity P Gain",
+        "Area": "RAM",
+        "Address": 78,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 100,
+        "Range": [
+            0,
+            16383
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Position D Gain",
+        "Area": "RAM",
+        "Address": 80,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            16383
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Position I Gain",
+        "Area": "RAM",
+        "Address": 82,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            16383
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Position P Gain",
+        "Area": "RAM",
+        "Address": 84,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 800,
+        "Range": [
+            0,
+            16383
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Feedforward 2nd Gain",
+        "Area": "RAM",
+        "Address": 88,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            16383
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Feedforward 1st Gain",
+        "Area": "RAM",
+        "Address": 90,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            16383
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Bus Watchdog",
+        "Area": "RAM",
+        "Address": 98,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            127
+        ],
+        "Unit": "ms"
+    },
+    {
+        "Name": "Goal PWM",
+        "Area": "RAM",
+        "Address": 100,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [
+            -885,
+            885
+        ],
+        "Unit": "%"
+    },
+    {
+        "Name": "Goal Current",
+        "Area": "RAM",
+        "Address": 102,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [
+            -1750,
+            1750
+        ],
+        "Unit": "mA"
+    },
+    {
+        "Name": "Goal Velocity",
+        "Area": "RAM",
+        "Address": 104,
+        "Access": "RW",
+        "ByteSize": 4,
+        "InitialValue": 0,
+        "Range": [
+            -415,
+            415
+        ],
+        "Unit": "rpm"
+    },
+    {
+        "Name": "Profile Acceleration",
+        "Area": "RAM",
+        "Address": 108,
+        "Access": "RW",
+        "ByteSize": 4,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            32767
+        ],
+        "Unit": "pulse/s^2"
+    },
+    {
+        "Name": "Profile Velocity",
+        "Area": "RAM",
+        "Address": 112,
+        "Access": "RW",
+        "ByteSize": 4,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            32767
+        ],
+        "Unit": "pulse/s"
+    },
+    {
+        "Name": "Goal Position",
+        "Area": "RAM",
+        "Address": 116,
+        "Access": "RW",
+        "ByteSize": 4,
+        "InitialValue": null,
+        "Range": [
+            0,
+            4095
+        ],
+        "Unit": "pulse"
+    },
+    {
+        "Name": "Realtime Tick",
+        "Area": "RAM",
+        "Address": 120,
+        "Access": "R",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            32767
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Moving",
+        "Area": "RAM",
+        "Address": 122,
+        "Access": "R",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            1
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Moving Status",
+        "Area": "RAM",
+        "Address": 123,
+        "Access": "R",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [
+            0,
+            255
+        ],
+        "Unit": "-"
+    },
+    {
+        "Name": "Present PWM",
+        "Area": "RAM",
+        "Address": 124,
+        "Access": "R",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [
+            -885,
+            885
+        ],
+        "Unit": "%"
+    },
+    {
+        "Name": "Present Current",
+        "Area": "RAM",
+        "Address": 126,
+        "Access": "R",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [
+            -1750,
+            1750
+        ],
+        "Unit": "mA"
+    },
+    {
+        "Name": "Present Velocity",
+        "Area": "RAM",
+        "Address": 128,
+        "Access": "R",
+        "ByteSize": 4,
+        "InitialValue": 0,
+        "Range": [
+            -415,
+            415
+        ],
+        "Unit": "rpm"
+    },
+    {
+        "Name": "Present Position",
+        "Area": "RAM",
+        "Address": 132,
+        "Access": "R",
+        "ByteSize": 4,
+        "InitialValue": null,
+        "Range": [
+            0,
+            4095
+        ],
+        "Unit": "pulse"
+    },
+    {
+        "Name": "Velocity Trajectory",
+        "Area": "RAM",
+        "Address": 136,
+        "Access": "R",
+        "ByteSize": 4,
+        "InitialValue": 0,
+        "Range": [
+            -32767,
+            32767
+        ],
+        "Unit": "pulse/s"
+    },
+    {
+        "Name": "Position Trajectory",
+        "Area": "RAM",
+        "Address": 140,
+        "Access": "R",
+        "ByteSize": 4,
+        "InitialValue": null,
+        "Range": [
+            0,
+            4095
+        ],
+        "Unit": "pulse"
+    },
+    {
+        "Name": "Present Input Voltage",
+        "Area": "RAM",
+        "Address": 144,
+        "Access": "R",
+        "ByteSize": 2,
+        "InitialValue": null,
+        "Range": [
+            0,
+            70
+        ],
+        "Unit": "V"
+    },
+    {
+        "Name": "Present Temperature",
+        "Area": "RAM",
+        "Address": 146,
+        "Access": "R",
+        "ByteSize": 1,
+        "InitialValue": null,
+        "Range": [
+            0,
+            100
+        ],
+        "Unit": "\u00b0C"
+    },
+    {
+        "Name": "External Port Data 1",
+        "Area": "RAM",
+        "Address": 152,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [0, 255],
+        "Unit": "-"
+    },
+    {
+        "Name": "External Port Data 2",
+        "Area": "RAM",
+        "Address": 154,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [0, 255],
+        "Unit": "-"
+    },
+    {
+        "Name": "External Port Data 3",
+        "Area": "RAM",
+        "Address": 156,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [0, 255],
+        "Unit": "-"
+    },
+    {
+        "Name": "External Port Data 4",
+        "Area": "RAM",
+        "Address": 158,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 0,
+        "Range": [0, 255],
+        "Unit": "-"
+    },
+    {
+        "Name": "Indirect Address 1",
+        "Area": "RAM",
+        "Address": 168,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 224,
+        "Range": [0, 255],
+        "Unit": "-"
+    },
+    {
+        "Name": "Indirect Address 2",
+        "Area": "RAM",
+        "Address": 170,
+        "Access": "RW",
+        "ByteSize": 2,
+        "InitialValue": 225,
+        "Range": [0, 255],
+        "Unit": "-"
+    },
+    {
+        "Name": "Indirect Data 1",
+        "Area": "RAM",
+        "Address": 224,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [0, 255],
+        "Unit": "-"
+    },
+    {
+        "Name": "Indirect Data 2",
+        "Area": "RAM",
+        "Address": 225,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [0, 255],
+        "Unit": "-"
+    },
+    {
+        "Name": "Indirect Data 3",
+        "Area": "RAM",
+        "Address": 226,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [0, 255],
+        "Unit": "-"
+    },
+    {
+        "Name": "Indirect Data 4",
+        "Area": "RAM",
+        "Address": 227,
+        "Access": "RW",
+        "ByteSize": 1,
+        "InitialValue": 0,
+        "Range": [0, 255],
+        "Unit": "-"
+    }
+]
+
