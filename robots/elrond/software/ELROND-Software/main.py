@@ -3,15 +3,10 @@ import ctypes
 import math
 import time
 
-from robot.drive.actuator_dynamixel import dynamixel_motor
-from robot.elrond import BILBO
-from robot.communication.serial.bilbo_serial_messages import BILBO_Debug_Message, BILBO_Sequencer_Event_Message
-from robot.control.definitions import BILBO_Control_Mode
-from robot.lowlevel.stm32_sample import BILBO_LL_Sample
+import robot.lowlevel.stm32_addresses as addresses
+
+from exo_skeleton import Exo_Skeleton
 from utils.logging_utils import setLoggerLevel, Logger
-from utils.teleplot import sendValue
-from utils.time import PerformanceTimer
-from robot.control.ElrondJoystick_Standalone import ElrondJoystick
 
 setLoggerLevel('wifi', 'ERROR')
 
@@ -20,37 +15,47 @@ logger.setLevel('DEBUG')
 
 
 def main():
-    elrond = BILBO(reset_stm32=False)
-    elrond.init()
 
-    def update_callback(*args, **kwargs):
-        theta = elrond.logging.sample.lowlevel.estimation.state.theta
-        #speed_left = elrond.logging.sample.lowlevel.sensors.speed_left
-        #speed_right = elrond.logging.sample.lowlevel.sensors.speed_right
-        v = elrond.logging.sample.lowlevel.estimation.state.v
-        sendValue('theta', math.degrees(theta))
-        #sendValue('speed_left', speed_left)
-        #sendValue('speed_right', speed_right)
-        sendValue('v', v)
-
-    #elrond.callbacks.update.register(update_callback)
-    #elrond.events.update.on(update_callback)
-
-    joystick_control = ElrondJoystick(elrond, logger)
-    elrond.start()
-    joystick_control.start()
-    #elrond.actuator.extendLegs2D(3, 10)
-    #elrond.actuator.extendLegsThetaHeight(3,10)
+    # Set up exoskeleton
+    exo = Exo_Skeleton()
+    time.sleep(1)
+    #exo.exoSetMode(addresses.EXO_mab_motor_mode_t.MAB_MOTOR_MODE_POS_PID)
+    #exo.exoStartMotor()
+    #exo.exoSetTargetPosition(0.0)
     #time.sleep(3)
-    elrond.actuator.extendLegsThetaHeight(2,5)
-
-
-    time.sleep(3)
-    elrond.board.beep(1500,400,2)
-
+    #exo.exoSetTargetPosition(6.2)
+    #time.sleep(3)
+    #exo.exoSetTargetPosition(0.0)
+    #time.sleep(3)
+    #exo.exoSetTargetPosition(-6.2)
+    #time.sleep(3)
+    #exo.exoSetMode(addresses.EXO_mab_motor_mode_t.MAB_MOTOR_MODE_IMPEDANCE)
+    #exo.exoSetImpedanceParams(0.1, 0.0)
 
     while True:
-        time.sleep(1)
+        cmd = input("Command: \n")
+        cmds = cmd.split(" ")
+        if(cmds[0] == "torque"):
+            exo.exoSetMode(addresses.EXO_mab_motor_mode_t.MAB_MOTOR_MODE_RAW_TORQUE)
+            exo.exoSetTorque(float(cmds[1]))
+        elif(cmds[0] == "position"):
+            exo.exoSetMode(addresses.EXO_mab_motor_mode_t.MAB_MOTOR_MODE_POS_PID)
+            exo.exoSetTargetPosition(float(cmds[1]))
+        elif(cmds[0] == "stop"):
+            exo.exoStopMotor()
+        elif(cmds[0] == "start"):
+            exo.exoStartMotor()
+        elif(cmds[0] == "impedance"):
+            exo.exoSetMode(addresses.EXO_mab_motor_mode_t.MAB_MOTOR_MODE_IMPEDANCE)
+            exo.exoSetImpedanceParams(float(cmds[1]), float(cmds[2]))
+            if len(cmds) > 3:
+                if(cmds[3] == "pos"):
+                    exo.exoSetTargetPosition(float(cmds[4]))
+                elif(cmds[3] == "vel"):            
+                    exo.exoSetTargetVelocity(float(cmds[4]))
+                                         
+        else:
+            logger.warning(f"Unknow Command: {cmd}")
 
 
 

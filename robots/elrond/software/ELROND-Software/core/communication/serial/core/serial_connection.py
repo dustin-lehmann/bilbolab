@@ -6,7 +6,7 @@ from core.communication.serial.core.uart import UART_Socket
 from core.communication.serial.core.serial_protocol import UART_Protocol, UART_Message
 from utils.callbacks import callback_handler, CallbackContainer
 from utils.exit import ExitHandler
-
+from dataclasses import asdict
 
 @callback_handler
 class SerialConnection_Callbacks:
