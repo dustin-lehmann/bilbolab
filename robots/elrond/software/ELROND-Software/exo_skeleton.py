@@ -1,15 +1,14 @@
 import ctypes
 import time
 
-import robot.lowlevel.stm32_addresses as addresses
+import drivers.lowlevel.stm32_addresses as addresses
 
 
 
 from control_board.control_board import RobotControl_Board
-from control_board.lowlevel_definitions import bilbo_external_rgb_struct, BILBO_AddressTables, BILBO_GeneralAddresses, \
-    twipr_beep_struct
-from robot.communication.bilbo_communication import BILBO_Communication
-from robot.utilities.id import readID
+from control_board.lowlevel_definitions import BILBO_GeneralAddresses, twipr_beep_struct
+from drivers.communication.bilbo_communication import BILBO_Communication
+from drivers.utilities.id import readID
 from utils.logging_utils import setLoggerLevel, Logger
 
 setLoggerLevel('wifi', 'ERROR')

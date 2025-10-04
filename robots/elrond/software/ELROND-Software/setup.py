@@ -1,7 +1,7 @@
 from control_board.board_config import generate_board_config
-from robot.control.config import generate_default_config
-from robot.hardware import generate_hardware_definition
-from robot.setup import setup_bilbo
+from drivers.control.config import generate_default_config
+from drivers.hardware import generate_hardware_definition
+from drivers.setup import setup_bilbo
 
 
 def setup():

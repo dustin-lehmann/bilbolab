@@ -6,7 +6,7 @@ import time
 import json
 import os
 
-from robot.utilities.buzzer import beep
+from drivers.utilities.buzzer import beep
 
 # Path to the devices.json file
 devices_file_path = os.path.join(os.path.dirname(__file__), 'devices.json')
