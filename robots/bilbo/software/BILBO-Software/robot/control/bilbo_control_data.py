@@ -7,6 +7,8 @@ class BILBO_Control_Mode(enum.IntEnum):
     DIRECT = 1,
     BALANCING = 2,
     VELOCITY = 3,
+    POSITION = 4,
+
 
 
 @dataclasses.dataclass
@@ -103,6 +105,10 @@ class BILBO_Control_Input:
     u_ext: list = dataclasses.field(default_factory=lambda: [0.0, 0.0])
     v: list = dataclasses.field(default_factory=lambda: [0.0, 0.0])
 
+    # direct: BILBO_Control_Input_Direct = dataclasses.field(default_factory=BILBO_Control_Input_Direct)
+    # balancing: BILBO_Control_Input_Balancing = dataclasses.field(default_factory=BILBO_Control_Input_Balancing)
+    # velocity: BILBO_Control_Input_Velocity = dataclasses.field(default_factory=BILBO_Control_Input_Velocity)
+    # position: BILBO_Control_Input_Position = dataclasses.field(default_factory=BILBO_Control_Input_Position)
 
 @dataclasses.dataclass(frozen=True)
 class BILBO_Control_Sample:

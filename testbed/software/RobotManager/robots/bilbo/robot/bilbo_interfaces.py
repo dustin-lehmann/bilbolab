@@ -370,9 +370,13 @@ class BILBO_CLI_CommandSet(CommandSet):
         experiment_command_set = CommandSet(name='experiment',
                                             commands=[test_trajectory_command, test_experiment_command])
 
+
         super().__init__(name=f"{self.core.id}", commands=[beep_command,
                                                            speak_command,
                                                            mode_command,
+                                                           # sendWaypoints_command,
+                                                           # send_K_Pos_command,
+                                                           # send_Pos_config,
                                                            stop_command,
                                                            read_state_command,
                                                            test_communication],

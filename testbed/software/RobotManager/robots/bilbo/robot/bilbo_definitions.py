@@ -20,8 +20,8 @@ class BILBO_Control_Mode(enum.IntEnum):
     OFF = 0,
     DIRECT = 1,
     BALANCING = 2,
-    VELOCITY = 3
-    POSITION = 4
+    VELOCITY = 3,
+    POSITION = 4,
 
 
 # ----------------------------------------------------------------------------------------------------------------------

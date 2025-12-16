@@ -292,6 +292,9 @@ class BILBO_Control:
             self._setControlMode_LL(BILBO_Control_Mode_LL.VELOCITY)
             self.mode = BILBO_Control_Mode.VELOCITY
 
+        elif mode == BILBO_Control_Mode.POSITION:
+            self._setControlMode_LL(BILBO_Control_Mode_LL.POSITION)
+            self.mode = BILBO_Control_Mode.POSITION
         # Reset external input on mode change
         self._resetExternalInput()
         # Notify callbacks of the mode change
@@ -627,6 +630,8 @@ class BILBO_Control:
             mode = BILBO_Control_Mode.BALANCING
         elif mode_ll == BILBO_Control_Mode_LL.VELOCITY:
             mode = BILBO_Control_Mode.VELOCITY
+        elif mode_ll == BILBO_Control_Mode_LL.POSITION:
+            mode = BILBO_Control_Mode.POSITION
         else:
             raise Exception("Unknown low-level mode")
 
