@@ -5,6 +5,7 @@ import dataclasses
 import enum
 import json
 import threading
+import time
 from dataclasses import asdict
 from typing import Any, Union
 
@@ -372,6 +373,27 @@ class BILBO_ExperimentHandler:
     #     self.events.experiment_status_changed.set(data=None)
 
     # ------------------------------------------------------------------------------------------------------------------
+    def runPositionTest(self,waypoints: list = [[0.6, 0], [0.6, 0.75], [1.2, 0.75], [1.2, 1.7], [1.75, 1.7], [1.75, 1.7],
+                                           [1.75, 0.75], [1, 0.75], [0.5, 0.75], [0, 0]], controlParams: dict = None):
+        speak(f"Start position control test with {len(waypoints)} waypoints")
+        waypoints = [[0.6, 0], [0.6, 0.75], [1.2, 0.75], [1.2, 1.7], [1.75, 1.7], [1.75, 1.7], [1.2, 1.7], [1.2, 0.75],
+                     [0.6, 0.75], [0.6, 0], [0, 0]]
+        # ▊   sendKPos[
+        #     -0.35, -0.25, -0.35, -0.04, -0.04, -0.025, 0.5, 0, -0.35, -0.25, -0.35, -0.04, 0.04, 0.025, 0.5, 0]                                                                                                ▎
+        # self.device.function(function='setPositionControlKPos', data={
+        #     'K_Pos': controlParams
+        # })
+
+        self.control.initKpos()
+        speak("Initialized K position control gains")
+        time.sleep(5)
+
+        for waypoint in waypoints:
+            self.device.executeFunction(function_name='setPositionControlWaypoints', arguments={
+                'waypoints': waypoint
+            })
+            time.sleep(1)
+
     def run_trajectory(self, trajectory: BILBO_InputTrajectory) -> BILBO_TrajectoryData | None:
         assert len(trajectory.inputs) <= MAX_STEPS_TRAJECTORY
         assert trajectory.length == len(trajectory.inputs)
@@ -409,13 +431,13 @@ class BILBO_ExperimentHandler:
         if output_data_dict is None:
             self.logger.error(f"Trajectory \"{trajectory.name}\" failed due to missing data")
             return None
-        experiment_data = self.getTrajectoryExperimentDataFromDict(output_data_dict)
+        #experiment_data = self.getTrajectoryExperimentDataFromDict(output_data_dict)
 
-        self.events.trajectory_finished.set(data=experiment_data.data, flags={'trajectory_id': trajectory.id})
+        #self.events.trajectory_finished.set(data=experiment_data.data, flags={'trajectory_id': trajectory.id})
 
         self.logger.important(f"Trajectory \"{trajectory.name}\" finished.")
-        return experiment_data.data
-
+        #return experiment_data.data
+        return 0
     # ------------------------------------------------------------------------------------------------------------------
     def run_random_trajectory(self, time_s, frequency=2, gain=0.25):
 

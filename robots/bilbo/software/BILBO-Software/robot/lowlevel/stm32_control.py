@@ -29,7 +29,9 @@ class bilbo_control_speed_input_t(ctypes.Structure):
     _fields_ = [("forward", ctypes.c_float),
                 ("turn", ctypes.c_float), ]
 
-
+class bilbo_control_position_input_t(ctypes.Structure):
+    _fields_ = [("u_1", ctypes.c_float),
+                ("u_2", ctypes.c_float), ]
 class BILBO_Control_Status_LL(enum.IntEnum):
     ERROR = -1
     IDLE = 0

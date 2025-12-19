@@ -114,6 +114,21 @@ core_utils_RegisterEntry<twipr_control_configuration_t, void> reg_get_ctrl_conf(
 		&twipr_firmware.control,
 		&TWIPR_ControlManager::getControlConfiguration);
 
+/* sets the configurration for position Control*/
+core_utils_RegisterEntry<uint8_t, float[8]> reg_set_position_config(&register_map,
+		REG_ADDRESS_CONTROL_SET_POSITION_CONFIG, &twipr_firmware.control,
+		&TWIPR_ControlManager::setPositionConfig);
+
+/* Positionsregelung: Send Waypoint*/
+core_utils_RegisterEntry<void, twipr_position_control_input_t> reg_set_position(
+		&register_map, REG_ADDRESS_CONTROL_SET_POSITION, &twipr_firmware.control,
+		&TWIPR_ControlManager::setPosition);
+
+/*set Control Gain for Position Control*/
+core_utils_RegisterEntry<uint8_t, float[16]> reg_set_gain_pos(&register_map,
+REG_ADDRESS_CONTROL_SET_K_POSITION, &twipr_firmware.control,
+		&TWIPR_ControlManager::setPositionGain);
+
 /* Sequencer */
 
 /* Load Sequence Function Register Entry */

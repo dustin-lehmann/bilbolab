@@ -19,7 +19,7 @@ from core.utils.data import limit, are_lists_approximately_equal
 from core.utils.delayed_executor import delayed_execution
 
 # import robot.control.config as control_config
-
+from robot.control.PositionControl import *
 
 
 # === BILBO Control Callbacks ==========================================================================================
@@ -125,6 +125,8 @@ class BILBO_Control:
         self.callbacks = BILBO_Control_Callbacks()
         self.events = BILBO_Control_Events()
 
+        self.position_control = BilboPositionControl(self._comm)
+
         # Register commands to the WI-FI module for remote control
         self._comm.wifi.newCommand(identifier='setControlMode',
                                    function=self.set_mode,
@@ -159,6 +161,23 @@ class BILBO_Control:
         self._comm.serial.callbacks.event.register(self._ll_control_event_callback,
                                                    parameters={'messages': [BILBO_Control_Event_Message]})
 
+        self._comm.wifi.newCommand(identifier='setPositionControlWaypoints',
+                                   function=self.position_control.setWaypoints,
+                                   arguments=['waypoints'],
+                                   description='Sets the Waypoints')
+
+        self._comm.wifi.newCommand(identifier='setPositionControlKPos',
+                                   function=self.position_control.setKPos,
+                                   arguments=['K_Pos'],
+                                   description='Sets the Waypoints')
+        self._comm.wifi.newCommand(identifier='initPositionControlKPos',
+                                   function=self.position_control.setinitKPos(),
+                                   arguments=['K_Pos'],
+                                   description='Sets the Waypoints')
+        self._comm.wifi.newCommand(identifier='setPositionConfig',
+                                   function=self.position_control.setConfig,
+                                   arguments=['PosConfig'],
+                                   description='Sets the Position Control Configuration')
         # Optionally, a dedicated thread could be started for continuous control updates
         # self._thread = threading.Thread(target=self._threadFunction)
 

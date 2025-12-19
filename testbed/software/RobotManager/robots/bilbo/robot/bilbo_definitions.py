@@ -2,7 +2,7 @@ import dataclasses
 import enum
 
 
-HOST_EXPERIMENT_FOLDER = "/Users/lehmann/bilbolab/testbed/software/RobotManager/applications/BILBO/experiments"
+HOST_EXPERIMENT_FOLDER = "/Users/tizianohumpert/Documents/IMES/Bilbo_Main/bilbolab/testbed/software/RobotManager/applications/BILBO/experiments/general/test/"
 
 
 BILBO_HOST_NAMES = ['bilbo1', 'bilbo2', 'bilbo3', 'bilbo4', 'bilbo5']

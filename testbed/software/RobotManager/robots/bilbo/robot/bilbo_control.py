@@ -76,8 +76,25 @@ class BILBO_Control:
         })
 
     def setWaypoints(self, waypoints):
-        self.device.executeFunction(function_name='setWaypoints', arguments={
+        self.device.executeFunction(function_name='setPositionControlWaypoints', arguments={
             'waypoints': waypoints
+        })
+
+    def setStateFeedbackGainPos(self, KPos):
+        # Waypoint als array [x, y] koordinate
+        self.device.executeFunction(function_name='setPositionControlKPos', arguments={
+            'K_Pos': KPos
+        })
+
+    def initKpos(self):
+        K_Pos = [-0.35,-0.25,-0.35,-0.04,-0.04,-0.025,0.5,0.0,-0.35,-0.25,-0.35,-0.04, 0.04,0.025,0.5,0.0]
+
+        self.device.executeFunction(function_name='setPositionControlKPos', arguments={'K_Pos': K_Pos})
+
+    def setPosConfig(self, PosConfig):
+        # Waypoint als array [x, y] koordinate
+        self.device.executeFunction(function_name='setPositionConfig', arguments={
+            'PosConfig': PosConfig
         })
 
     # ------------------------------------------------------------------------------------------------------------------
