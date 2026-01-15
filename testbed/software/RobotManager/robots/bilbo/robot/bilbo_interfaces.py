@@ -270,6 +270,49 @@ class BILBO_CLI_CommandSet(CommandSet):
                                                    default=None)
                                ], )
 
+        sendWaypoints_command = Command(name='sendWaypoints',
+                                        function=self.control.setWaypoints,
+                                        allow_positionals=True,
+                                        arguments=[
+                                            CommandArgument(name='waypoints',
+                                                            type=list[float],
+                                                            array_size=2,
+                                                            short_name='w',
+                                                            description='Waypoints to send to the robot',
+                                                            optional=False,
+                                                            )
+                                        ], )
+        send_K_Pos_command = Command(name='sendKPos',
+                                     function=self.control.setStateFeedbackGainPos,
+                                     allow_positionals=True,
+                                     arguments=[
+                                         CommandArgument(name='KPos',
+                                                         type=list[float],
+                                                         array_size=16,
+                                                         short_name='K',
+                                                         description='State feedback gain for position',
+                                                         optional=False,
+                                                         )
+                                     ], )
+
+        init_K_Pos_command = Command(name='initKPos',
+                                     function=self.control.initKpos(),
+                                     allow_positionals=True,
+                                     arguments=[], )
+
+        send_Pos_config = Command(name='sendPosConfig',
+                                  function=self.control.setPosConfig,
+                                  allow_positionals=True,
+                                  arguments=[
+                                      CommandArgument(name='PosConfig',
+                                                      type=list[float],
+                                                      array_size=8,
+                                                      short_name='Config',
+                                                      description='set Config for Position Control',
+                                                      optional=False,
+                                                      )
+                                  ], )
+
         stop_command = Command(name='stop',
                                function=Callback(
                                    function=self.control.setControlMode,
@@ -392,6 +435,19 @@ class BILBO_CLI_CommandSet(CommandSet):
                                                               optional=True,
                                                               default=0.1),
                                           ])
+        startPositionSteps = Command(name='startPositionSteps',
+                                     allow_positionals=True,
+                                     function=self.experiments.runPositionTest,
+                                     execute_in_thread=True,
+                                     arguments=[
+                                         CommandArgument(name='waypoints',
+                                                         short_name='wps',
+                                                         type=list[float],
+                                                         description='waypoints',
+                                                         optional=True,
+                                                         ),
+
+                                     ])
 
         test_experiment_command = Command(name='exp',
                                           function=self.experiments.run_experiment_from_file,
@@ -428,6 +484,10 @@ class BILBO_CLI_CommandSet(CommandSet):
         super().__init__(name=f"{self.core.id}", commands=[beep_command,
                                                            speak_command,
                                                            mode_command,
+                                                           sendWaypoints_command,
+                                                           send_K_Pos_command,
+                                                           init_K_Pos_command,
+                                                           send_Pos_config,
                                                            stop_command,
                                                            stable_command,
                                                            read_state_command,

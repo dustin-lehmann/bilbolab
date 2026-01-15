@@ -16,6 +16,7 @@
 #include "firmware_defs.h"
 #include "firmware_core.h"
 #include "bilbo_drive.h"
+#include "twipr_position_control.h"
 
 class BILBO_Sequencer;
 class TWIPR_Supervisor;
@@ -33,6 +34,7 @@ typedef enum twipr_control_mode_t {
 	TWIPR_CONTROL_MODE_DIRECT = 1,
 	TWIPR_CONTROL_MODE_BALANCING = 2,
 	TWIPR_CONTROL_MODE_VELOCITY = 3,
+	TWIPR_CONTROL_MODE_POSITION = 4,
 } twipr_control_mode_t;
 
 typedef enum twipr_control_status_t {
@@ -53,6 +55,8 @@ typedef struct twipr_control_external_input_t {
 	float u_balancing_2;
 	float u_velocity_forward;
 	float u_velocity_turn;
+	float u_position_forward;
+	float u_position_turnangle;
 } twipr_control_external_input_t;
 
 typedef struct twipr_control_data_t {
@@ -157,13 +161,16 @@ public:
 	void setDirectInput(twipr_control_direct_input_t input);
 	bool setBalancingInput(twipr_balancing_control_input_t input);
 	void setSpeed(twipr_speed_control_input_t speed);
+	void setPosition(twipr_position_control_input_t position);
+
 
 	uint8_t setBalancingGain(float *K);
 	uint8_t setVelocityControlForwardPID(float *K);
 	uint8_t setVelocityControlForwardPID(float Kp, float Ki, float Kd);
 	uint8_t setVelocityControlTurnPID(float *K);
 	uint8_t setVelocityControlTurnPID(float Kp, float Ki, float Kd);
-
+	uint8_t setPositionGain(float *K);
+	uint8_t setPositionConfig(float *K);
 	bool setControlConfiguration(twipr_control_configuration_t config);
 	twipr_control_configuration_t getControlConfiguration();
 
@@ -186,6 +193,8 @@ public:
 private:
 	TWIPR_BalancingControl _balancing_control;
 	TWIPR_SpeedControl _speed_control;
+	TWIPR_PositionControl _position_control;
+
 	twipr_control_external_input_t _external_input;
 
 	twipr_control_output_t _output;
@@ -215,6 +224,10 @@ private:
 			twipr_balancing_control_input_t input,
 			twipr_estimation_state_t state);
 
+	twipr_position_control_output_t _update_position_control(
+				twipr_position_control_input_t input,
+				twipr_estimation_state_t state);
+
 	void _setBalancingInput(twipr_balancing_control_input_t input);
 
 	twipr_control_output_t _step_off();
@@ -225,6 +238,8 @@ private:
 			twipr_estimation_state_t state);
 	twipr_control_output_t _step_velocity(twipr_control_external_input_t input,
 			twipr_estimation_state_t state);
+	twipr_control_output_t _step_position(twipr_control_external_input_t input,
+				twipr_estimation_state_t state);
 
 	void _setTorque(twipr_control_output_t output);
 

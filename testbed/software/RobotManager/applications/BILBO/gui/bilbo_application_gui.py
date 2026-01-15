@@ -306,6 +306,7 @@ class BILBO_Application_GUI_Robot_Category:
         mode_mapping = {
             BILBO_Control_Mode.OFF: 'OFF',
             BILBO_Control_Mode.BALANCING: 'BALANCING',
+            BILBO_Control_Mode.POSITION: 'BALANCING',
         }
 
         # Initial state

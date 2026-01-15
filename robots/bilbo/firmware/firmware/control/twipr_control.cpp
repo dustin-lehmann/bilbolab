@@ -36,6 +36,9 @@ void TWIPR_ControlManager::init(twipr_control_init_config_t config) {
 
 	this->_speed_control.init(speed_control_config);
 
+    twipr_position_control_config_t position_control_config; // ggf. Parameter setzen
+    this->_position_control.init(position_control_config);
+
 	this->status = TWIPR_CONTROL_STATUS_IDLE;
 	this->mode = TWIPR_CONTROL_MODE_OFF;
 
@@ -48,6 +51,8 @@ void TWIPR_ControlManager::init(twipr_control_init_config_t config) {
 uint8_t TWIPR_ControlManager::start() {
 	this->status = TWIPR_CONTROL_STATUS_RUNNING;
 	this->_balancing_control.start();
+	this->_position_control.start();
+
 	return 1;
 }
 
@@ -166,6 +171,11 @@ void TWIPR_ControlManager::update() {
 					_dynamic_state);
 			break;
 		}
+		case (TWIPR_CONTROL_MODE_POSITION): {
+			control_output = this->_step_position(_external_input,
+					_dynamic_state);
+			break;
+		}
 
 			break;
 		}
@@ -181,12 +191,13 @@ void TWIPR_ControlManager::update() {
 	control_output.u_right = limit(control_output.u_right,
 			this->config.max_torque);
 
+//	control_output.u_left = 0;
+//	control_output.u_right = 0;
 	// Write the output to the data
 	this->_data.output_left = control_output.u_left;
 	this->_data.output_right = control_output.u_right;
 
-//	control_output.u_left = 0;
-//	control_output.u_right = 0;
+
 //	 Write the output to the motors
 //	send_info("Control output: %f %f", control_output.u_left, control_output.u_right);
 
@@ -239,6 +250,13 @@ uint8_t TWIPR_ControlManager::setMode(twipr_control_mode_t mode) {
 //		}
 		this->_balancing_control.setMode(TWIPR_BALANCING_CONTROL_MODE_ON);
 		this->_speed_control.reset();
+		break;
+	}
+	case TWIPR_CONTROL_MODE_POSITION: {
+		//		if (this->config.drive->status != TWIPR_DRIVE_STATUS_RUNNING)
+		//			this->config.drive->start();
+		this->_position_control.setMode(TWIPR_position_CONTROL_MODE_ON);
+		send_debug("POSITION-Modus");
 		break;
 	}
 	}
@@ -295,6 +313,18 @@ bool TWIPR_ControlManager::setBalancingInput(
 	this->_setBalancingInput(input);
 	return true;
 }
+void TWIPR_ControlManager::setPosition(twipr_position_control_input_t position) {
+
+	if (this->_externalInputEnabled == false) {
+		return;
+	}
+	send_debug("waypointsachen erhalten");
+	osSemaphoreAcquire(semaphore_external_input, portMAX_DELAY);
+	this->_external_input.u_position_forward = position.u_1;
+	this->_external_input.u_position_turnangle = position.u_2;
+	osSemaphoreRelease(semaphore_external_input);
+}
+
 
 /* ======================================================== */
 void TWIPR_ControlManager::_setBalancingInput(twipr_balancing_control_input_t input) {
@@ -362,6 +392,47 @@ uint8_t TWIPR_ControlManager::setBalancingGain(float *K) {
 	this->_balancing_control.set_K(K);
 
 	memcpy(this->control_config.K, K, sizeof(float) * 8);
+
+	return 1;
+}
+
+uint8_t TWIPR_ControlManager::setPositionGain(float *K) {
+	// This is only allowed if the controller is off
+	if (this->status != TWIPR_CONTROL_STATUS_RUNNING) {
+		return 0;
+//		return;
+	}
+	if (this->mode != TWIPR_CONTROL_MODE_OFF) {
+		return 0;
+//		return;
+	}
+
+    this->_position_control.set_K_Pos(K); //
+
+	//memcpy(this->control_config.K, K, sizeof(float) * 8);
+
+	return 1;
+}
+
+/* ======================================================== */
+uint8_t TWIPR_ControlManager::setPositionConfig(float *K) {
+	// This is only allowed if the controller is off
+	if (this->status != TWIPR_CONTROL_STATUS_RUNNING) {
+		return 0;
+//		return;
+	}
+//	if (this->mode != TWIPR_CONTROL_MODE_OFF) {
+//		return 0;
+////		return;
+//	}
+	if (K[0] == 1){
+		send_debug("reset inputs for position control");
+//		this->_external_input.u_position_forward = 0;
+//		this->_external_input.u_position_turnangle = 0;
+	}
+    this->_position_control.set_Pos_Config(K); //
+
+	//memcpy(this->control_config.K, K, sizeof(float) * 8);
 
 	return 1;
 }
@@ -487,6 +558,30 @@ twipr_control_output_t TWIPR_ControlManager::_step_balancing(
 	return output;
 
 }
+twipr_control_output_t TWIPR_ControlManager::_step_position(
+		twipr_control_external_input_t input, twipr_estimation_state_t state) {
+
+	twipr_control_output_t output = { 0, 0 };
+
+	twipr_position_control_input_t position_control_input = {
+			input.u_position_forward, input.u_position_turnangle, };
+
+	this->_data.input_balancing_1 = position_control_input.u_1;
+	this->_data.input_balancing_2 = position_control_input.u_2;
+
+	twipr_position_control_output_t position_control_output =
+			this->_update_position_control(position_control_input, state);
+
+
+//	float output_velocity_integral_control = this->_updateVelocityIntegralController(state.v);
+//	float output_tic = this->_updateTIC(state.theta);
+
+	output.u_left = position_control_output.u_1;// + output_velocity_integral_control + output_tic;
+	output.u_right = position_control_output.u_2;// + output_velocity_integral_control + output_tic;
+	//send_info("Control output: %f %f", output.u_left, output.u_right);
+	return output;
+
+}
 
 /* ======================================================== */
 float TWIPR_ControlManager::_updateVelocityIntegralController(float velocity){
@@ -601,6 +696,18 @@ twipr_balancing_control_output_t TWIPR_ControlManager::_update_balancing_control
 
 	// Update the balancing controller
 	this->_balancing_control.update(state, input, &output);
+
+	return output;
+}
+
+/* ======================================================== */
+twipr_position_control_output_t TWIPR_ControlManager::_update_position_control(
+		twipr_position_control_input_t input, twipr_estimation_state_t state) {
+
+	twipr_position_control_output_t output = { 0, 0 };
+
+	// Update the balancing controller
+	this->_position_control.update(state, input, &output);
 
 	return output;
 }

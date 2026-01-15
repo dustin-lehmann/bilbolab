@@ -1,9 +1,11 @@
 import dataclasses
 import enum
 
-HOST_EXPERIMENT_FOLDER = "/Users/lehmann/bilbolab/testbed/software/RobotManager/applications/BILBO/experiments"
 
-BILBO_HOST_NAMES = ['bilbo1', 'bilbo2', 'bilbo3', 'bilbo4', 'bilbo5']
+HOST_EXPERIMENT_FOLDER = "/Users/tizianohumpert/Documents/IMES/Bilbo_Main/bilbolab/testbed/software/RobotManager/applications/BILBO/experiments/general/test/"
+
+
+BILBO_HOST_NAMES = ['bilbo1', 'bilbo2', 'bilbo3', 'bilbo4', 'bilbo5','bilbo2-imes']
 
 PATH_TO_MAIN = '/home/admin/robot/software/main.py'
 PYENV_SHIM_PATH = '/home/admin/.pyenv/shims/python3'
@@ -189,6 +191,7 @@ class BILBO_ControlConfig:
     balancing_control: TWIPR_Balancing_Control_Config = dataclasses.field(
         default_factory=TWIPR_Balancing_Control_Config)
     speed_control: SpeedControl_Config = dataclasses.field(default_factory=SpeedControl_Config)
+
 
 
 @dataclasses.dataclass
