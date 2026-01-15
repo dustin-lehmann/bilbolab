@@ -170,10 +170,7 @@ class BILBO_Control:
                                    function=self.position_control.setKPos,
                                    arguments=['K_Pos'],
                                    description='Sets the Waypoints')
-        self._comm.wifi.newCommand(identifier='initPositionControlKPos',
-                                   function=self.position_control.setinitKPos(),
-                                   arguments=['K_Pos'],
-                                   description='Sets the Waypoints')
+
         self._comm.wifi.newCommand(identifier='setPositionConfig',
                                    function=self.position_control.setConfig,
                                    arguments=['PosConfig'],
