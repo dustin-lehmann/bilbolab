@@ -421,14 +421,14 @@ uint8_t TWIPR_ControlManager::setPositionConfig(float *K) {
 		return 0;
 //		return;
 	}
-	if (this->mode != TWIPR_CONTROL_MODE_OFF) {
-		return 0;
-//		return;
-	}
+//	if (this->mode != TWIPR_CONTROL_MODE_OFF) {
+//		return 0;
+////		return;
+//	}
 	if (K[0] == 1){
 		send_debug("reset inputs for position control");
-		this->_external_input.u_position_forward = 0;
-		this->_external_input.u_position_turnangle = 0;
+//		this->_external_input.u_position_forward = 0;
+//		this->_external_input.u_position_turnangle = 0;
 	}
     this->_position_control.set_Pos_Config(K); //
 

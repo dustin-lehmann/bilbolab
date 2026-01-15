@@ -6,6 +6,7 @@
  */
 
 #include <twipr_position_control.h>
+#include "ekf.h"
 
 TWIPR_PositionControl::TWIPR_PositionControl() {
 	this->mode = TWIPR_position_CONTROL_MODE_OFF;
@@ -81,14 +82,29 @@ void TWIPR_PositionControl::_calculateOutput(twipr_estimation_state_t state,
 	this->x += state.v * Ts;
 	this->angle += state.psi_dot * Ts;
 
+	float z[2] = {0, 0};
+	bool meas_valid = this->position_update_flag;
+
 	if (this->position_update_flag == true){
-		this->e_1 =0;
-		this->e_2 =0;
-		this->x = config2.conf[1];
-		this->angle = config2.conf[2];
+//		this->e_1 =0;
+//		this->e_2 =0;
+//		this->x = config2.conf[1];
+//		this->angle = config2.conf[2];
 		this->position_update_flag = false;
+
+		z[0] = config2.conf[1];
+		z[1] = config2.conf[2];
+
+
 		send_debug("integrators reset and position set to: %.2f %.2f", this->x, this->angle);
 	}
+
+
+	ekf_state_t est;
+	ekf_robot_update(state.v, state.psi_dot, z, meas_valid, &est);
+	this->x = est.x;
+	this->angle = est.psi;
+
 
 	/* check 2 pi periodicity */
 	if (this->angle >= 6.28){
@@ -138,6 +154,10 @@ void TWIPR_PositionControl::_calculateOutput(twipr_estimation_state_t state,
 		send_debug(
 			        "%.2f:%.2fu%.2f:%.2f",
 			        input.u_1,  input.u_2,  this->x , this->angle
+			    );
+		send_debug(
+			        "est %.2f:%.2f:%.2f",
+			        est.x  ,est.y, est.psi
 			    );
 
 	    this->debug_counter = 0;
