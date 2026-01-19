@@ -479,6 +479,7 @@ class BILBO_CLI_CommandSet(CommandSet):
                                             commands=[test_trajectory_command,
                                                       test_trajectory_experiment_command,
                                                       dilc_example_command,
+                                                      startPositionSteps,
                                                       test_experiment_command])
 
         super().__init__(name=f"{self.core.id}", commands=[beep_command,
