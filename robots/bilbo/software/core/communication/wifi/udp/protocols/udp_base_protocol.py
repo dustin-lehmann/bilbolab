@@ -1,7 +1,7 @@
 from typing import Union
 
 from core.communication.protocol import Protocol, Message
-from core.utils.network import ipv4_to_bytes, bytes_to_ipv4
+from core.hardware.network import ipv4_to_bytes, bytes_to_ipv4
 # from utilities.logging import Logger
 
 

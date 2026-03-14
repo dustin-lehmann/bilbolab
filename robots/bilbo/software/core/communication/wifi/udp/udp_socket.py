@@ -5,7 +5,7 @@ import time
 from cobs import cobs
 
 from core.utils.exit import register_exit_callback
-from core.utils.network import getLocalIP_RPi
+from core.hardware.network import getLocalIP_RPi
 from core.utils.logging_utils import Logger
 from core.utils.callbacks import callback_definition, CallbackContainer
 

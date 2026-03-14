@@ -13,7 +13,6 @@ from core.utils.callbacks import callback_definition, CallbackContainer, Callbac
 from core.utils.events import event_definition, Event
 from core.utils.logging_utils import Logger
 import core
-
 # === GLOBAL VARIABLES =================================================================================================
 
 logger = Logger('SERIAL')
