@@ -1,0 +1,28 @@
+id: hold_position
+description: Enable position control and hold current position for a duration
+timeout: 60.0
+requirements:
+  optitrack: true
+  control_mode: "OFF"
+variables:
+  duration: "10.0"
+guards:
+  - type: disable_external_input
+  - type: zero_input
+actions:
+  - type: set_mode
+    mode: BALANCING
+  - type: wait_time
+    time: "2.0"
+  - type: set_mode
+    mode: POSITION
+  - type: beep
+    frequency: 800
+    duration: 0.2
+  - type: wait_time
+    time: "${duration}"
+  - type: set_mode
+    mode: "OFF"
+  - type: beep
+    frequency: 400
+    duration: 0.3

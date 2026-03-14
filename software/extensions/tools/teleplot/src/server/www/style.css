@@ -1,0 +1,640 @@
+html {
+	font-family: Verdana, Geneva, Tahoma, sans-serif;
+	font-size: 12px;
+}
+
+button {
+	background-color: #ecf0f1;
+    border: 1px solid #bdc3c7;
+    border-radius: 3px;
+    color: #2c3e50;
+    padding: 0.5em 0.5em;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.top-banner {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	background-color: #2980b9;
+	padding-top: 0px;
+	padding-bottom: 0px;
+	padding-left: 10px;
+	padding-right: 10px;
+	color: white;
+	justify-content: space-between;
+	align-items: center;
+	min-height: 50px;
+}
+
+.top-banner-left {
+	display: flex;
+	flex-direction: row;
+    align-items: center;
+	height: 100%;
+    justify-content: flex-start;
+    width: 100%;
+    flex: 1;
+}
+
+.top-banner-title {
+	display: block;
+	font-size: 30px;
+}
+
+#session-json-input {
+	position: absolute;
+	width: 0px;
+	left: 0px;
+	opacity: 0;
+}
+
+.header-button {
+	background-color: #216490;
+    padding: 5px 10px 5px 10px;
+    color: white;
+    cursor: pointer;
+    border-radius: 50px;
+    border: 0px;
+    font-size: 11px;
+    margin: 1px;
+	line-height: 15px;
+}
+
+.play-pause-button {
+	width: 34px;
+	height: 34px;
+	font-size: 16px;
+	margin-right: 10px;
+}
+
+.play-pause-button-paused {
+	background-color: #2ecc71;
+}
+
+.style-button {
+	color: 	#2d2d30;
+	text-decoration: underline;
+	cursor: pointer;
+	margin-left: 0.25em;
+}
+
+body {
+	margin: 0px;
+	padding: 0px;
+}
+
+.main-body {
+	background-color: #ecf0f1;
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+.left-col {
+	min-width: min(250px, max(100px, 20%));
+}
+.center-col {
+	min-width: min(400px, 50%);
+	/*Thanks to this padding, the zone to drop new widget goes even under already existant widgets*/
+	padding-bottom: 200px;
+	flex: 3;
+}
+.right-col {
+	min-width: min(350px, max(250px, 30%));
+	flex: 1;
+	margin-right: 10px;
+}
+
+.vrow {
+	height: 20px;
+	padding-left: 10px;
+	padding-right: 10px;
+	color: #ecf0f1;
+	cursor: pointer;
+	white-space: nowrap;
+	z-index: 100;
+	margin-left: 4px;
+}
+
+.log-vue-selected {
+	background-color: #27ae60;
+}
+
+.log-container {
+	/* direction:rtl; we want the scroll bar to be on the left */
+	background-color: #2c3e50;
+}
+
+.right-reduce-btn {
+	width: 60px;
+	margin-top: 0;
+	margin-right: -10px;
+	padding: 2px;
+	background-color: #2980b9;
+	font-weight: bold;
+	color: white;
+	border: 0px;
+	border-radius: 0 0 0 5px;
+	align-self: flex-end;
+}
+
+.help-container {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	font-size: 16px;
+	color: #7f8c8d;
+}
+
+.help-container img {
+	display: block;
+	width: 300px;
+	margin-top: 100px;
+}
+.help-container span {
+	display: block;
+	margin-top: 100px;
+}
+
+.telem-container {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-content: stretch;
+	align-items: center;
+	padding: 5px;
+}
+
+.telem-vue {
+	flex: 1 1;
+	align-self: auto;
+	min-width: max(300px, 45%);
+	box-shadow: 0px 0px 8px rgba(0,0,0,0.2);
+	border-radius: 3px;
+	margin: 5px;
+}
+
+.telem-vue-header {
+	display: flex;
+	flex-direction: row;
+	justify-content: space-around;
+	flex-wrap: wrap;
+}
+
+.telem-vue-title {
+	display: block;
+	font-size: 22px;
+	text-align: center;
+}
+
+.var-container {
+	display: flex;
+	flex-direction: column;
+}
+
+.var-vue {
+    margin: 2px 0px 2px 5px;
+    font-size: 13px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    cursor: grab;
+    overflow: hidden;
+}
+
+.var-vue-name {
+	color: black;
+    max-width: 200px;
+    word-break: break-all;
+    border: 1px solid #2ecc71;
+    flex: 1;
+    padding: 0px 0px 1px 3px;
+    border-radius: 5px 0px 0px 5px;
+	text-align: center;
+	position: relative;
+}
+
+.var-vue-value {
+	background-color: #2ecc71;
+    padding: 1px 0px 1px 0px;
+    color: white;
+    width: 60px;
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+	border-radius: 0px 5px 5px 0px;
+}
+
+.symbol-text-format-telem{
+	position: absolute;
+	left: 3px;
+	color: #2ecc71;
+
+}
+
+.symbol-3d-telem{
+	position: absolute;
+	left: 3px;
+	color: #2ecc71;
+}
+
+.cmd-container {
+	display: flex;
+	flex-direction: column;
+}
+
+.cmd-container-title {
+	font-size: 18px;
+	margin-top: 10px;
+}
+
+.cmd-vue {
+	padding-top: 10px;
+}
+
+/* the rows of the logs pannel */
+
+.left-rounded-btn {
+	border-radius: 50%;
+    padding-right: 0px;
+    display: block;
+    margin-left: -20px;
+    width: 60px;
+    height: 60px;
+    background-color: #2980b9;
+    font-weight: bold;
+    color: white;
+    border: 0px;
+    margin-top: 5px;
+}
+
+.right-rounded-btn {
+	border-radius: 50%;
+    padding-left: 0px;
+    display: block;
+    margin-right: -20px;
+    width: 60px;
+    height: 60px;
+    background-color: #2980b9;
+    font-weight: bold;
+    color: white;
+    border: 0px;
+    margin-top: 5px;
+}
+
+.left-reduce-btn {
+	width: 60px;
+	margin-top: 0;
+	padding: 2px;
+	background-color: #2980b9;
+	font-weight: bold;
+	color: white;
+	border: 0px;
+	border-radius: 0 0 5px 0;
+}
+
+
+.send-text-container {
+	display: flex;
+	flex-direction: row;
+}
+
+
+.widget-container {
+	padding: 5px;
+	display:grid;
+	grid-template-columns: repeat(12,calc(100% / 12));
+	grid-auto-rows: 50px;
+}
+
+.widget-vue {
+	flex: 1 1;
+	align-self: auto;
+	min-width: max(150px, 45%);
+	box-shadow: 0px 0px 8px rgba(0,0,0,0.15);
+	border-radius: 3px;
+	margin: 3px;
+	border: 1px solid transparent;
+	position: relative;
+}
+
+.widget-drag-over {
+	border: 1px solid #009aff;
+}
+
+.widget-vue-header {
+	font-size: 12px;
+	padding: 5px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
+}
+
+.serie-name {
+    color: black;
+}
+
+.serie-header-container {
+	height: 40px;
+	width: 100%;
+	z-index: 110;
+	overflow-y: auto;
+	white-space: nowrap;
+	text-align: center;
+}
+.serie-header {
+	display: inline-block;
+	margin-left: 7px;
+	margin-right: 7px;
+}
+
+
+.serie-color {
+	display: inline-block;
+	border-width: 2px;
+    border-style: solid;
+	margin-right: 3px;
+}
+
+.serie-name, .serie-unit {
+	margin-right: 3px;
+	margin-left: 3px;
+}
+
+.serie-value {
+	margin-left: 3px;
+    border-radius: 3px;
+    color: black;
+    padding: 0px 4px;
+}
+.serie-header-small {
+	font-size: 8px;
+}
+
+.serie-header-small .serie-value {
+	margin-left: 0px;
+    padding: 0px 1px;
+}
+
+.serie-remove {
+	color: #bdc3c7;
+	padding: 0px;
+    margin: -5px;
+    font-size: 1.2em;
+    cursor: pointer;
+}
+
+.widget-option-container {
+	display: flex;
+	flex-direction: row;
+}
+
+.widget-option{
+	color: #bdc3c7;
+	margin-left: 4px;
+	margin-right: 4px;
+	cursor: pointer;
+	z-index: 200;
+
+	/* user can't highlight the element ( useful for when resizing ) */
+	user-select: none;
+}
+
+.widget-option-resize{
+	display: inline-block;  
+   	z-index: 1;     
+   	padding: 1.5em;
+	position: absolute;
+	right: 10px;
+	bottom: 10px;
+	color: #bdc3c7;
+	cursor: nwse-resize;
+	
+	/* negative margin, to make the clickable zone bigger */
+	margin: -2em;
+
+	/* user can't highlight the element ( useful for when resizing ) */
+	user-select: none;
+}
+
+.new-chart-drop-zone, .new-chart-drop-zone-over  {
+	margin: 5px;
+    padding: 5px;
+	border: 2px dashed #3498db;
+    border-radius: 5px;
+    color: #3498db;
+	text-align: center;
+
+	border-bottom: 1px dashed #3498db;
+	margin-bottom: 0px;
+}
+
+.last-value-drop-zone, .last-value-drop-zone-over   {
+	margin: 5px;
+    padding: 5px;
+    border: 2px dashed #3498db;
+    border-radius: 5px;
+    color: #3498db;
+	text-align: center;
+
+	border-top: 1px dashed #3498db;
+	margin-top: 0px;
+}
+
+.new-chart-drop-zone-over, .last-value-drop-zone-over {
+	background-color: rgb(255, 255, 0,0.1);
+} 
+
+.serie-name-container {
+	text-align: center;
+}
+
+.serie-stat-container, .serie-3d-details-container {
+	display: flex;
+    flex-direction: row;
+    align-items: center;
+	flex-wrap: wrap;
+}
+
+.details-3d-x {
+	/* this text color should match RedXAxis in constants.js */
+	color: #e74c3c; 
+}
+
+.details-3d-y {
+	color: #3ba30b;
+}
+
+.details-3d-z {
+	/* this text color should match RedZAxis in constants.js */
+	color: #2980b9;
+}
+
+.serie-stat, .serie-3d-details {
+	display: inline-block;
+	margin: 1px 1px 1px 2px;
+    line-height: 0.7em;
+	z-index: 100;
+}
+
+.serie-stat-value {
+	font-size: 11px;
+	color: #2c3e50;
+}
+.serie-stat-name {
+	font-size: 9px;
+	color: #7f8c8d;
+}
+
+
+
+.connection-container {
+	display: flex;
+	flex-direction: row;
+	height: 100%;
+	flex-wrap: wrap;
+}
+
+.connection {
+	display: flex;
+	flex-direction: column;
+	margin: 2px 2px 2px 5px;
+}
+
+.connection-header {
+	font-size: 11px;
+    background-color: #216490;
+    padding: 0px 5px;
+    border-radius: 3px 3px 0px 0px;
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+}
+
+.connection-name {
+
+}
+
+.connection-button-container {
+	cursor: pointer;
+}
+
+.connection-button {
+    margin-left: 10px;
+}
+
+.connection-input-container {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+    background-color: #2164909e;
+    border-radius: 0px 0px 5px 5px;
+    overflow: hidden;
+}
+
+.connection-input {
+	display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    padding-left: 5px;
+    padding-right: 5px;
+    border-width: 2px 2px 2px 2px;
+    border-color: #216490;
+    border-style: solid;
+}
+
+.connection-input-header {
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+}
+
+.connection-input-name-container {
+	display: flex;
+	flex-direction: row;
+}
+
+.connection-input-name {
+	font-size: 12px;
+}
+
+.connection-input-status-not-connected {
+	background-color: #e74c3c;
+    padding: 1px 5px 1px 5px;
+    color: white;
+	font-size: 11px;
+    border-radius: 50px;
+}
+
+.connection-serial-input {
+	display: flex;
+	flex-direction: row;
+}
+
+.connection-serial-input-params {
+	display: flex;
+	flex-direction: row;	
+}
+
+.connection-serial-input-params > select {
+	font-size: 11px;
+}
+
+.connection-serial-buttons {
+	display: flex;
+	flex-direction: row;
+}
+
+.connection-serial-buttons > button {
+	padding: 0px 5px;
+    margin-left: 2px;
+}
+
+.connection-new-container {
+	display: flex;
+	flex-direction: row;
+	font-size: 12px;
+    margin-left: 10px;
+	align-items: center;
+	justify-content: center;
+}
+
+.connection-new-plus-button {
+	background-color: #216490;
+	color: white;
+	border: 0;
+	height: 30px;
+	width: 30px;
+	border-radius: 15px;
+}
+
+
+.pre-defined-connection-create-button {
+	background-color: #216490;
+	color: white;
+	border: 0;
+	height: 30px;
+	border-radius: 15px;
+	margin-right: 5px;
+}
+
+.flex-row {
+	display: flex;
+	flex-direction: row;	
+}
+
+.flex-col {
+	display: flex;
+	flex-direction: column;	
+}
+
+.uplot-vue {
+	/* this is done to raise a bit the uplot vue */
+	margin-top: -8px;
+}

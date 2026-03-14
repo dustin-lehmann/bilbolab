@@ -1,0 +1,182 @@
+# Default plot presets for the Experiment Viewer.
+# Each preset defines a label, an optional category for grouping,
+# and a list of sample field paths to plot.
+#
+# Field paths use dot-notation into the sample dict, e.g.:
+#   estimation.state.theta   -> sample["estimation"]["state"]["theta"]
+#   lowlevel.control.output.u_left -> sample["lowlevel"]["control"]["output"]["u_left"]
+#
+# You can create additional .yaml files in this directory —
+# they are all loaded and merged automatically.
+
+presets:
+
+  # ── High-level state ──────────────────────────────────────────────────────
+
+  - label: State (full)
+    category: Estimation
+    fields:
+      - estimation.state.x
+      - estimation.state.y
+      - estimation.state.v
+      - estimation.state.theta
+      - estimation.state.theta_dot
+      - estimation.state.psi
+      - estimation.state.psi_dot
+
+  - label: Position
+    category: Estimation
+    fields:
+      - estimation.state.x
+      - estimation.state.y
+
+  - label: Pitch
+    category: Estimation
+    fields:
+      - estimation.state.theta
+      - estimation.state.theta_dot
+
+  - label: Heading
+    category: Estimation
+    fields:
+      - estimation.state.psi
+      - estimation.state.psi_dot
+
+  - label: Velocity
+    category: Estimation
+    fields:
+      - estimation.state.v
+
+  # ── Drive ─────────────────────────────────────────────────────────────────
+
+  - label: Motor Torque
+    category: Drive
+    fields:
+      - drive.left.torque
+      - drive.right.torque
+
+  - label: Motor Speed
+    category: Drive
+    fields:
+      - drive.left.speed
+      - drive.right.speed
+
+  - label: Drive (all)
+    category: Drive
+    fields:
+      - drive.left.torque
+      - drive.right.torque
+      - drive.left.speed
+      - drive.right.speed
+
+  # ── Sensors ───────────────────────────────────────────────────────────────
+
+  - label: IMU Accel
+    category: Sensors
+    fields:
+      - sensors.imu.acc.x
+      - sensors.imu.acc.y
+      - sensors.imu.acc.z
+
+  - label: IMU Gyro
+    category: Sensors
+    fields:
+      - sensors.imu.gyr.x
+      - sensors.imu.gyr.y
+      - sensors.imu.gyr.z
+
+  - label: Power
+    category: Sensors
+    fields:
+      - sensors.power.bat_voltage
+      - sensors.power.bat_current
+
+  # ── Low-Level (firmware 100 Hz) ──────────────────────────────────────────
+
+  - label: LL State
+    category: Low-Level
+    fields:
+      - lowlevel.estimation.state.x
+      - lowlevel.estimation.state.y
+      - lowlevel.estimation.state.v
+      - lowlevel.estimation.state.theta
+      - lowlevel.estimation.state.theta_dot
+      - lowlevel.estimation.state.psi
+      - lowlevel.estimation.state.psi_dot
+
+  - label: LL Pitch
+    category: Low-Level
+    fields:
+      - lowlevel.estimation.state.theta
+      - lowlevel.estimation.state.theta_dot
+
+  - label: LL Velocity
+    category: Low-Level
+    fields:
+      - lowlevel.estimation.state.v
+
+  - label: LL Vel Command
+    category: Low-Level
+    fields:
+      - lowlevel.control.velocity_command.v
+      - lowlevel.control.velocity_command.psidot
+
+  - label: LL Vel Output
+    category: Low-Level
+    fields:
+      - lowlevel.control.velocity_output.v
+      - lowlevel.control.velocity_output.psidot
+
+  - label: LL Vel Loop
+    category: Low-Level
+    description: Command vs. actual velocity (v and psidot)
+    fields:
+      - lowlevel.control.velocity_command.v
+      - lowlevel.control.velocity_output.v
+      - lowlevel.control.velocity_command.psidot
+      - lowlevel.control.velocity_output.psidot
+
+  - label: LL Balancing Out
+    category: Low-Level
+    fields:
+      - lowlevel.control.balancing_output.u_left
+      - lowlevel.control.balancing_output.u_right
+
+  - label: LL Motor Output
+    category: Low-Level
+    fields:
+      - lowlevel.control.output.u_left
+      - lowlevel.control.output.u_right
+
+  - label: LL Ext Input
+    category: Low-Level
+    fields:
+      - lowlevel.control.input_ext.forward
+      - lowlevel.control.input_ext.turn
+
+  # ── OptiTrack ─────────────────────────────────────────────────────────────
+
+  - label: OptiTrack Pos
+    category: OptiTrack
+    fields:
+      - estimation.state_optitrack.x
+      - estimation.state_optitrack.y
+      - estimation.state_optitrack.z
+
+  - label: OptiTrack Angles
+    category: OptiTrack
+    fields:
+      - estimation.state_optitrack.theta
+      - estimation.state_optitrack.psi
+
+  # ── System ────────────────────────────────────────────────────────────────
+
+  - label: RPi Temperature
+    category: System
+    fields:
+      - general.rpi_temperature
+
+  - label: Connection
+    category: System
+    fields:
+      - general.connection_strength

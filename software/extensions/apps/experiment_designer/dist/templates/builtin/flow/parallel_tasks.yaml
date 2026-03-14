@@ -1,0 +1,28 @@
+id: parallel_tasks
+description: Run multiple action sequences in parallel
+actions:
+  - type: log
+    message: "Starting parallel tasks"
+  - type: parallel
+    id: parallel_block
+    actions:
+      - type: group
+        id: task_a
+        actions:
+          - type: log
+            message: "Task A — step 1"
+          - type: wait_time
+            time: "2.0"
+          - type: log
+            message: "Task A — step 2"
+      - type: group
+        id: task_b
+        actions:
+          - type: log
+            message: "Task B — step 1"
+          - type: wait_time
+            time: "1.0"
+          - type: log
+            message: "Task B — step 2"
+  - type: log
+    message: "All parallel tasks completed"

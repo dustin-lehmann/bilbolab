@@ -1,0 +1,29 @@
+id: event_sync
+description: Synchronize parallel branches using events
+actions:
+  - type: parallel
+    id: sync_block
+    actions:
+      - type: group
+        id: producer
+        actions:
+          - type: log
+            message: "Producer: preparing data..."
+          - type: wait_time
+            time: "2.0"
+          - type: log
+            message: "Producer: data ready, emitting event"
+          - type: emit_event
+            event: data_ready
+      - type: group
+        id: consumer
+        actions:
+          - type: log
+            message: "Consumer: waiting for data..."
+          - type: wait_for_event
+            event: data_ready
+            timeout: 10.0
+          - type: log
+            message: "Consumer: received data, processing"
+  - type: log
+    message: "Synchronization complete"

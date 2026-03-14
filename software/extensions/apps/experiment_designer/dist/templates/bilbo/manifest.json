@@ -1,0 +1,52 @@
+{
+  "bilbo": {
+    "label": "BILBO",
+    "folders": {
+      "audio": {
+        "label": "Audio",
+        "templates": [
+          {
+            "id": "countdown",
+            "label": "Countdown",
+            "file": "bilbo/audio/countdown.yaml",
+            "description": "Audio countdown with beeps and speech"
+          }
+        ]
+      },
+      "control": {
+        "label": "Control",
+        "templates": [
+          {
+            "id": "balance_test",
+            "label": "Balance Test",
+            "file": "bilbo/control/balance_test.yaml",
+            "description": "Enable balancing mode, hold for a duration, then disable"
+          },
+          {
+            "id": "velocity_ramp",
+            "label": "Velocity Ramp",
+            "file": "bilbo/control/velocity_ramp.yaml",
+            "description": "Ramp forward velocity up and back down in velocity mode"
+          }
+        ]
+      },
+      "navigation": {
+        "label": "Navigation",
+        "templates": [
+          {
+            "id": "move_to_point",
+            "label": "Move To Point",
+            "file": "bilbo/navigation/move_to_point.yaml",
+            "description": "Navigate to a single target position using position control"
+          },
+          {
+            "id": "waypoint_square",
+            "label": "Waypoint Square",
+            "file": "bilbo/navigation/waypoint_square.yaml",
+            "description": "Navigate a square path using position control waypoints"
+          }
+        ]
+      }
+    }
+  }
+}

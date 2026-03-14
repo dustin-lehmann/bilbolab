@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300" viewBox="0 0 500 300">
+  <rect width="500" height="300" rx="12" fill="#111"/>
+  <rect x="30" y="30" width="210" height="170" rx="8" fill="#1a1a1a" stroke="#a855f7" stroke-width="2"/>
+  <circle cx="80" cy="75" r="18" fill="#a855f7" opacity="0.3"/>
+  <polygon points="30,175 100,100 160,145 200,85 240,175" fill="#a855f7" opacity="0.2"/>
+  <rect x="260" y="30" width="210" height="170" rx="8" fill="#1a1a1a" stroke="#a855f7" stroke-width="2"/>
+  <circle cx="310" cy="75" r="18" fill="#a855f7" opacity="0.3"/>
+  <polygon points="260,175 330,105 390,145 430,90 470,175" fill="#a855f7" opacity="0.2"/>
+  <circle cx="200" cy="240" r="5" fill="#a855f7"/>
+  <circle cx="220" cy="240" r="5" fill="#a855f7" opacity="0.4"/>
+  <circle cx="240" cy="240" r="5" fill="#a855f7" opacity="0.4"/>
+  <circle cx="260" cy="240" r="5" fill="#a855f7" opacity="0.4"/>
+  <circle cx="280" cy="240" r="5" fill="#a855f7" opacity="0.4"/>
+  <circle cx="300" cy="240" r="5" fill="#a855f7" opacity="0.4"/>
+  <text x="250" y="280" text-anchor="middle" fill="#555" font-family="system-ui,sans-serif" font-size="13">Figure Gallery</text>
+</svg>

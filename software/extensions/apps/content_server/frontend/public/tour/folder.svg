@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300" viewBox="0 0 500 300">
+  <rect width="500" height="300" rx="12" fill="#111"/>
+  <path d="M100,80 L200,80 L220,60 L400,60 L400,240 L100,240 Z" fill="#1a1a1a" stroke="#6b7280" stroke-width="2" rx="8"/>
+  <rect x="130" y="110" width="240" height="10" rx="4" fill="#333"/>
+  <rect x="130" y="135" width="180" height="10" rx="4" fill="#292929"/>
+  <rect x="130" y="160" width="210" height="10" rx="4" fill="#292929"/>
+  <rect x="130" y="195" width="100" height="24" rx="6" fill="#6b7280" opacity="0.3"/>
+  <text x="180" y="212" fill="#9ca3af" font-family="system-ui,sans-serif" font-size="11">3 items</text>
+  <text x="250" y="280" text-anchor="middle" fill="#555" font-family="system-ui,sans-serif" font-size="13">Folder</text>
+</svg>

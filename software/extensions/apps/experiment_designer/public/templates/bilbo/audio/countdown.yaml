@@ -1,0 +1,20 @@
+id: countdown
+description: Audio countdown with beeps and speech
+actions:
+  - type: speak
+    text: "Experiment starting in"
+  - type: loop
+    id: countdown_loop
+    count: "3"
+    variable: i
+    actions:
+      - type: beep
+        frequency: 600
+        duration: 0.15
+      - type: wait_time
+        time: "1.0"
+  - type: beep
+    frequency: 1000
+    duration: 0.4
+  - type: speak
+    text: "Go"

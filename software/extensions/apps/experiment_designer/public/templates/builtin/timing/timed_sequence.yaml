@@ -1,0 +1,17 @@
+id: timed_sequence
+description: Execute actions with precise timing between steps
+actions:
+  - type: log
+    message: "T=0s — Start"
+  - type: wait_time
+    time: "1.0"
+  - type: log
+    message: "T=1s — First checkpoint"
+  - type: wait_time
+    time: "2.0"
+  - type: log
+    message: "T=3s — Second checkpoint"
+  - type: wait_time
+    time: "0.5"
+  - type: log
+    message: "T=3.5s — Done"

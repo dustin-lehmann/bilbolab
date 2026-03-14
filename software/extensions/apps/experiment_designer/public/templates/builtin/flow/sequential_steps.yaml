@@ -1,0 +1,11 @@
+id: sequential_steps
+description: Simple sequential flow — actions execute one after another
+actions:
+  - type: log
+    message: "Step 1: Starting"
+  - type: wait_time
+    time: "1.0"
+  - type: log
+    message: "Step 2: Done waiting"
+  - type: log
+    message: "Step 3: Finished"

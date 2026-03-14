@@ -1,0 +1,35 @@
+{
+  "id": "db9c836b",
+  "title": "BILBO Dynamics - Forward",
+  "description": "This works nicely",
+  "type": "synchronized",
+  "date": "2026-03-07",
+  "draft": false,
+  "thumbnail": "db9c836b_thumb.jpg",
+  "videos": [
+    {
+      "file": "exp2_compressed.mp4",
+      "name": "Dynamics - Forward",
+      "overlayStyle": {},
+      "overlays": [
+        {
+          "duration": 2,
+          "text": "Here something is happening",
+          "time": 3
+        }
+      ]
+    }
+  ],
+  "markers": [],
+  "figures": [],
+  "file": "",
+  "language": "python",
+  "model": "",
+  "chapter": "2",
+  "section": "2",
+  "subsection": "",
+  "page": "",
+  "additionalInfo": "This is additional information",
+  "overlays": [],
+  "overlayStyle": {}
+}

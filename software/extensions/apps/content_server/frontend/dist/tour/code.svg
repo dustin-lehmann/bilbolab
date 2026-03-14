@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300" viewBox="0 0 500 300">
+  <rect width="500" height="300" rx="12" fill="#111"/>
+  <rect x="30" y="25" width="440" height="230" rx="8" fill="#0d0d0d" stroke="#06b6d4" stroke-width="2"/>
+  <circle cx="52" cy="45" r="6" fill="#ef4444" opacity="0.6"/>
+  <circle cx="70" cy="45" r="6" fill="#f59e0b" opacity="0.6"/>
+  <circle cx="88" cy="45" r="6" fill="#22c55e" opacity="0.6"/>
+  <text x="55" y="82" fill="#06b6d4" font-family="monospace" font-size="13" opacity="0.9">def</text>
+  <text x="87" y="82" fill="#e2e8f0" font-family="monospace" font-size="13">train_model</text>
+  <text x="196" y="82" fill="#555" font-family="monospace" font-size="13">(data, lr=0.01):</text>
+  <text x="75" y="105" fill="#555" font-family="monospace" font-size="13"># Initialize the network</text>
+  <text x="75" y="128" fill="#a855f7" font-family="monospace" font-size="13">model</text>
+  <text x="125" y="128" fill="#555" font-family="monospace" font-size="13">= Network(layers=</text>
+  <text x="290" y="128" fill="#f59e0b" font-family="monospace" font-size="13">[64, 32]</text>
+  <text x="355" y="128" fill="#555" font-family="monospace" font-size="13">)</text>
+  <text x="75" y="151" fill="#06b6d4" font-family="monospace" font-size="13">for</text>
+  <text x="107" y="151" fill="#e2e8f0" font-family="monospace" font-size="13">epoch</text>
+  <text x="157" y="151" fill="#06b6d4" font-family="monospace" font-size="13">in</text>
+  <text x="178" y="151" fill="#555" font-family="monospace" font-size="13">range(</text>
+  <text x="225" y="151" fill="#f59e0b" font-family="monospace" font-size="13">100</text>
+  <text x="250" y="151" fill="#555" font-family="monospace" font-size="13">):</text>
+  <text x="95" y="174" fill="#e2e8f0" font-family="monospace" font-size="13">loss = model.step(data, lr)</text>
+  <text x="95" y="197" fill="#06b6d4" font-family="monospace" font-size="13">if</text>
+  <text x="118" y="197" fill="#e2e8f0" font-family="monospace" font-size="13">loss &lt;</text>
+  <text x="173" y="197" fill="#f59e0b" font-family="monospace" font-size="13">1e-4</text>
+  <text x="210" y="197" fill="#555" font-family="monospace" font-size="13">:</text>
+  <text x="115" y="220" fill="#06b6d4" font-family="monospace" font-size="13">break</text>
+  <text x="75" y="243" fill="#06b6d4" font-family="monospace" font-size="13">return</text>
+  <text x="130" y="243" fill="#a855f7" font-family="monospace" font-size="13">model</text>
+  <text x="250" y="280" text-anchor="middle" fill="#555" font-family="system-ui,sans-serif" font-size="13">Code Snippet</text>
+</svg>

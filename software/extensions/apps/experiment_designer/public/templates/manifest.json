@@ -1,0 +1,28 @@
+{
+  "builtin": {
+    "label": "Built-in",
+    "folders": {
+      "flow": {
+        "label": "Flow",
+        "templates": [
+          { "id": "sequential_steps", "label": "Sequential Steps", "file": "builtin/flow/sequential_steps.yaml", "description": "Simple sequential flow" },
+          { "id": "loop_counter", "label": "Loop Counter", "file": "builtin/flow/loop_counter.yaml", "description": "Loop with counter variable" },
+          { "id": "condition_branch", "label": "Condition Branch", "file": "builtin/flow/condition_branch.yaml", "description": "If/else branching" },
+          { "id": "parallel_tasks", "label": "Parallel Tasks", "file": "builtin/flow/parallel_tasks.yaml", "description": "Parallel action sequences" }
+        ]
+      },
+      "timing": {
+        "label": "Timing",
+        "templates": [
+          { "id": "timed_sequence", "label": "Timed Sequence", "file": "builtin/timing/timed_sequence.yaml", "description": "Precise timing between steps" }
+        ]
+      },
+      "events": {
+        "label": "Events",
+        "templates": [
+          { "id": "event_sync", "label": "Event Synchronization", "file": "builtin/events/event_sync.yaml", "description": "Synchronize parallel branches" }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "id": "b7924501",
+  "title": "Final Deployment",
+  "description": "This is a description 2",
+  "type": "video",
+  "date": "2026-03-07",
+  "draft": false,
+  "thumbnail": "b7924501_thumb.jpg",
+  "file": "final.mp4",
+  "markers": [
+    {
+      "label": "Marker",
+      "time": 2
+    }
+  ],
+  "videos": [],
+  "figures": [],
+  "language": "python",
+  "model": "",
+  "chapter": "2",
+  "section": "1",
+  "subsection": "4",
+  "page": 15,
+  "overlayStyle": {
+    "backgroundColor": "rgba(0, 0, 0, 0.75)",
+    "fontColor": "#ffffff",
+    "fontSize": 16,
+    "horizontalPosition": "center",
+    "opacity": 0.8,
+    "verticalPosition": "bottom"
+  },
+  "overlays": [
+    {
+      "duration": 3,
+      "text": "Final Deployment — BILBO Robot",
+      "time": 0
+    },
+    {
+      "duration": 2,
+      "text": "Initializing balancing control...",
+      "time": 3
+    },
+    {
+      "duration": 2,
+      "text": "Mode: VELOCITY — forward drive",
+      "time": 5
+    },
+    {
+      "duration": 2,
+      "text": "Switching to POSITION control",
+      "time": 8
+    },
+    {
+      "duration": 2,
+      "text": "Target reached — settling",
+      "time": 11
+    },
+    {
+      "duration": 3,
+      "text": "Experiment complete ✓",
+      "time": 14
+    }
+  ],
+  "additionalInfo": "# Final Deployment Details\n\nThis experiment shows the **final deployment** of the BILBO robot in the lab environment. Below is a showcase of what's possible with the *Additional Information* panel.\n\n## Key Parameters\n\n| Parameter | Value | Unit |\n|-----------|-------|------|\n| Control frequency | 100 | Hz |\n| Max velocity | 0.8 | m/s |\n| Wheel diameter | 80 | mm |\n| Battery capacity | 2200 | mAh |\n\n## Observations\n\n1. The robot maintained **stable balance** throughout the entire run\n2. Velocity tracking error stayed below ±0.05 m/s\n3. Position control achieved a settling time of ~2.3 seconds\n\n### Things to note\n\n- The initial oscillation is expected during mode transition\n- Wind disturbances were present but handled well\n- The `VELOCITY` mode was used for the first phase, then switched to `POSITION`\n\n## Code Reference\n\nThe control loop runs the following core logic:\n\n```python\ndef control_step(state, target):\n    error = target - state.position\n    velocity_cmd = pid.compute(error)\n    pitch_cmd = velocity_controller.update(velocity_cmd)\n    torque = lqr.compute(pitch_cmd, state)\n    return torque\n```\n\n## Links & Resources\n\n- [SimplexMotion Motor Docs](https://simplexmotion.com)\n- See also: Chapter 4 of the thesis for the full control derivation\n\n> **Note:** This deployment used firmware v2.3.1 with the updated LQR gains from the November calibration session.\n\n## Images\n\nImages can be included from the item's own files folder:\n\n![BILBO Robot - Lab Deployment](/content/files/b7924501/placeholder.png)\n\nThe syntax is:\n\n```\n![Description](/content/files/<item_id>/<filename>)\n```\n\nOr from external URLs:\n\n```\n![Robot](https://example.com/robot.jpg)\n```\n\n---\n\n*This panel supports full GitHub-flavored Markdown including tables, code blocks, blockquotes, lists, links, images, and more.*"
+}

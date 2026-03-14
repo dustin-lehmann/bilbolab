@@ -1,0 +1,30 @@
+id: condition_branch
+description: If/else branching based on a variable comparison
+variables:
+  threshold: "10"
+  value: "15"
+actions:
+  - type: compare
+    id: check_value
+    value_a: "${value}"
+    operator: ">"
+    value_b: "${threshold}"
+    transitions:
+      then: above
+      else: below
+  - type: log
+    id: above
+    trigger: transition
+    message: "Value ${value} is above threshold ${threshold}"
+    transitions:
+      done: end_log
+  - type: log
+    id: below
+    trigger: transition
+    message: "Value ${value} is below or equal to threshold ${threshold}"
+    transitions:
+      done: end_log
+  - type: log
+    id: end_log
+    trigger: transition
+    message: "Branch complete"

@@ -1,0 +1,48 @@
+id: velocity_ramp
+description: Ramp forward velocity up and back down in velocity mode
+timeout: 30.0
+requirements:
+  control_mode: "OFF"
+actions:
+  - type: set_mode
+    mode: BALANCING
+  - type: wait_time
+    time: "2.0"
+  - type: set_mode
+    mode: VELOCITY
+  - type: speak
+    text: "Starting velocity ramp"
+  - type: set_velocity
+    forward: 0.1
+    turn: 0.0
+  - type: wait_time
+    time: "2.0"
+  - type: set_velocity
+    forward: 0.2
+    turn: 0.0
+  - type: wait_time
+    time: "2.0"
+  - type: set_velocity
+    forward: 0.3
+    turn: 0.0
+  - type: wait_time
+    time: "2.0"
+  - type: set_velocity
+    forward: 0.2
+    turn: 0.0
+  - type: wait_time
+    time: "2.0"
+  - type: set_velocity
+    forward: 0.1
+    turn: 0.0
+  - type: wait_time
+    time: "2.0"
+  - type: set_velocity
+    forward: 0.0
+    turn: 0.0
+  - type: wait_time
+    time: "1.0"
+  - type: set_mode
+    mode: "OFF"
+  - type: speak
+    text: "Velocity ramp complete"

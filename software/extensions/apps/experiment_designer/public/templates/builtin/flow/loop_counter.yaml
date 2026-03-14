@@ -1,0 +1,14 @@
+id: loop_counter
+description: Loop with a counter variable — runs N iterations
+actions:
+  - type: loop
+    id: main_loop
+    count: "5"
+    variable: i
+    actions:
+      - type: log
+        message: "Iteration ${i}"
+      - type: wait_time
+        time: "0.5"
+  - type: log
+    message: "Loop finished"

@@ -1,0 +1,6 @@
+id: wait_for_resume
+description: Wait indefinitely until the resume event is triggered (DPAD right / WiFi resume command)
+timeout: 0
+actions:
+  - type: wait_for_external_event
+    event: "*resume"

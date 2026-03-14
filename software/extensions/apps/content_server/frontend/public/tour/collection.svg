@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300" viewBox="0 0 500 300">
+  <rect width="500" height="300" rx="12" fill="#111"/>
+  <rect x="30" y="35" width="135" height="100" rx="6" fill="#1a1a1a" stroke="#f59e0b" stroke-width="2"/>
+  <polygon points="80,60 80,110 115,85" fill="#f59e0b" opacity="0.8"/>
+  <rect x="185" y="35" width="135" height="100" rx="6" fill="#1a1a1a" stroke="#f59e0b" stroke-width="2"/>
+  <polygon points="235,60 235,110 270,85" fill="#f59e0b" opacity="0.8"/>
+  <rect x="340" y="35" width="135" height="100" rx="6" fill="#1a1a1a" stroke="#f59e0b" stroke-width="2"/>
+  <polygon points="390,60 390,110 425,85" fill="#f59e0b" opacity="0.8"/>
+  <rect x="105" y="155" width="135" height="100" rx="6" fill="#1a1a1a" stroke="#f59e0b" stroke-width="1.5" opacity="0.6"/>
+  <polygon points="155,180 155,230 190,205" fill="#f59e0b" opacity="0.5"/>
+  <rect x="260" y="155" width="135" height="100" rx="6" fill="#1a1a1a" stroke="#f59e0b" stroke-width="1.5" opacity="0.6"/>
+  <polygon points="310,180 310,230 345,205" fill="#f59e0b" opacity="0.5"/>
+  <text x="250" y="285" text-anchor="middle" fill="#555" font-family="system-ui,sans-serif" font-size="13">Video Collection</text>
+</svg>

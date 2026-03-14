@@ -1,0 +1,47 @@
+id: forward_backward
+description: Drive forward, pause, then drive backward at the same speed
+timeout: 30.0
+requirements:
+  control_mode: "OFF"
+variables:
+  speed: "0.2"
+  duration: "3.0"
+  pause: "1.0"
+guards:
+  - type: disable_external_input
+  - type: zero_input
+actions:
+  - type: set_mode
+    mode: BALANCING
+  - type: wait_time
+    time: "2.0"
+  - type: set_mode
+    mode: VELOCITY
+  - type: beep
+    frequency: 800
+    duration: 0.2
+  - type: set_velocity
+    forward: "${speed}"
+    turn: 0.0
+  - type: wait_time
+    time: "${duration}"
+  - type: set_velocity
+    forward: 0.0
+    turn: 0.0
+  - type: wait_time
+    time: "${pause}"
+  - type: set_velocity
+    forward: "-${speed}"
+    turn: 0.0
+  - type: wait_time
+    time: "${duration}"
+  - type: set_velocity
+    forward: 0.0
+    turn: 0.0
+  - type: wait_time
+    time: "1.0"
+  - type: set_mode
+    mode: "OFF"
+  - type: beep
+    frequency: 400
+    duration: 0.3
