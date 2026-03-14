@@ -449,6 +449,8 @@ class TestbedDisplay:
             print(f"[Network] Invalid JSON: {exc}; message={message!r}", file=sys.stderr)
             return
 
+
+
         if not isinstance(msg, dict):
             print(f"[Network] Ignoring non-dict JSON message: {msg!r}", file=sys.stderr)
             return
@@ -618,7 +620,8 @@ class TestbedDisplay:
         title_surface = None
         title_rect = None
         if self.title:
-            title_surface = self._render_text(self.title, self.title_size, self.title_color)
+            title_surface = self._render_text(self.title, self.title_size, self.title_color,
+                                                max_width=self.window_width - 2 * margin)
             title_rect = title_surface.get_rect()
             title_rect.top = margin
             self._apply_horizontal_alignment(
@@ -642,7 +645,8 @@ class TestbedDisplay:
         draw_text = not (self.clock_running and self.clock_mode == "replace_text")
 
         if self.text and draw_text:
-            text_surface = self._render_text(self.text, self.text_size, self.text_color)
+            text_surface = self._render_text(self.text, self.text_size, self.text_color,
+                                             max_width=self.window_width - 2 * margin)
             text_rect = text_surface.get_rect()
             text_rect.centery = center_y
             self._apply_horizontal_alignment(
@@ -681,13 +685,28 @@ class TestbedDisplay:
         pygame.display.flip()
 
     # ------------------------------------------------------------------------------------------------------------------
-    def _render_text(self, text: str, size: int, color, emoji: bool = False, mono: bool = False):
+    def _render_text(self, text: str, size: int, color, emoji: bool = False, mono: bool = False,
+                     max_width: int = 0, min_size: int = 24):
         """
         Render text with caching for fonts.
 
         - emoji=True: try an emoji-capable font
         - mono=True: use a monospace font (for clock)
+        - max_width: if > 0, shrink font until text fits within this width
+        - min_size: minimum font size when auto-shrinking
         """
+        if max_width > 0:
+            current_size = size
+            while current_size >= min_size:
+                font = self._get_font(current_size, emoji=emoji, mono=mono)
+                surface = font.render(text, True, color)
+                if surface.get_width() <= max_width:
+                    return surface
+                current_size -= 1
+            # At min size, render anyway
+            font = self._get_font(min_size, emoji=emoji, mono=mono)
+            return font.render(text, True, color)
+
         font = self._get_font(size, emoji=emoji, mono=mono)
         return font.render(text, True, color)
 
