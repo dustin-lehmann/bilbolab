@@ -18,7 +18,7 @@
 
 void sendMessage(BILBO_Message_t &message);
 
-typedef enum bilbo_drive_type_t {
+typedef enum bilbo_drive_type_t : uint8_t {
 	BILBO_DRIVE_SM_RS485 = 1,
 	BILBO_DRIVE_SM_CAN = 2,
 	BILBO_DRIVE_MAB = 3
@@ -42,7 +42,7 @@ typedef struct bilbo_drive_input_t {
 	float torque_right;
 } bilbo_drive_input_t;
 
-typedef enum bilbo_drive_status_t {
+typedef enum bilbo_drive_status_t : uint8_t {
 	BILBO_DRIVE_STATUS_OK = 1,
 	BILBO_DRIVE_STATUS_ERROR = 2,
 } bilbo_drive_status_t;

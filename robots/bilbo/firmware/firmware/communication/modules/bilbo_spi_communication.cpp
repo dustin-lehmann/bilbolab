@@ -38,7 +38,7 @@ void BILBO_SPI_Communication::init(bilbo_spi_comm_config_t config) {
 	// Create a hardware SPI configuration structure and initialize buffers.
 	core_hardware_spi_config_t spi_config = { .hspi = this->config.hspi,
 			.rx_buffer = (uint8_t*) this->config.sequence_buffer, .tx_buffer =
-					(uint8_t*) this->config.sample_buffer, };
+					this->config.sample_response_buffer, };
 
 	// Initialize the SPI slave with the configuration.
 	this->spi_slave.init(spi_config);
@@ -52,8 +52,6 @@ void BILBO_SPI_Communication::init(bilbo_spi_comm_config_t config) {
 	this->spi_slave.registerCallback(CORE_HARDWARE_SPI_CALLBACK_TX,
 			core_utils_Callback<void, void>(this,
 					&BILBO_SPI_Communication::tx_cmplt_function));
-
-	this->_samples_read = false;
 
 	// The RXTX callback and command buffer settings are currently commented out.
 	// Uncomment and configure if full-duplex command processing is required.
@@ -95,7 +93,6 @@ void BILBO_SPI_Communication::startListeningForCommand() {
 	this->_commandBuffer[3] = 0;
 
 	this->_trajectory_length = 0;
-	this->_samples_read = false;
 
 	this->mode = BILBO_SPI_COMM_MODE_LISTENING_FOR_COMMAND;
 	this->spi_slave.receiveData(this->_commandBuffer,
@@ -108,11 +105,8 @@ void BILBO_SPI_Communication::startListeningForCommand() {
  * This function calls the overloaded provideSampleData function using the
  * default sample buffer and length provided in the configuration.
  */
-void BILBO_SPI_Communication::provideSampleData() {
-
-	this->spi_slave.provideData((uint8_t*) this->config.sample_buffer,
-			sizeof(bilbo_logging_sample_t) * this->config.len_sample_buffer,
-			(uint8_t*) this->config.sample_buffer_dummy);
+void BILBO_SPI_Communication::sendSampleResponse(uint8_t *buffer, uint32_t len, uint8_t *dummy_rx) {
+	this->spi_slave.provideData(buffer, len, dummy_rx);
 }
 
 /**
@@ -191,9 +185,8 @@ void BILBO_SPI_Communication::_handleCommand() {
 	uint16_t length = bytearray_to_uint16(&this->_commandBuffer[2]);
 
 	if (command == BILBO_SPI_COMMAND_SAMPLES_READ) {
-		this->_samples_read = 0;
 		this->mode = BILBO_SPI_COMM_MODE_TX_SAMPLES;
-		this->provideSampleData();
+		this->callbacks.sample_command.call();
 
 	} else if (command == BILBO_SPI_COMMAND_TRAJECTORY_WRITE) {
 		this->_trajectory_length = length;

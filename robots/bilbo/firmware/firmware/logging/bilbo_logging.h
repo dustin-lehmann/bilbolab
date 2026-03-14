@@ -46,7 +46,7 @@ typedef struct bilbo_logging_config_t {
 	BILBO_ErrorHandler* error_handler;
 } bilbo_logging_config_t;
 
-typedef enum bilbo_logging_buffer_status_t {
+typedef enum bilbo_logging_buffer_status_t : uint8_t {
 	BILBO_LOGGING_BUFFER_FULL = 1,
 	BILBO_LOGGING_BUFFER_NOT_FULL = 0,
 }bilbo_logging_buffer_status_t;

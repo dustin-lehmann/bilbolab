@@ -21,21 +21,22 @@
 core_utils_RegisterMap<256> register_map = core_utils_RegisterMap<256>(BILBO_REGISTER_MAP_GENERAL);
 
 
-//bilbo_logging_sample_t _sample_buffer_hold[BILBO_FIRMWARE_SAMPLE_BUFFER_SIZE]; ///< Buffer for sample data transmission.
+// Ring buffer: MAX_PENDING slots, each holding one batch of samples
+bilbo_logging_sample_t _sample_ring[BILBO_MAX_PENDING_BATCHES][BILBO_FIRMWARE_SAMPLE_BUFFER_SIZE];
+volatile uint32_t _ring_head = 0;  // Next slot to write (task context only)
+volatile uint32_t _ring_tail = 0;  // Next slot to read  (ISR context only)
 
-bilbo_logging_sample_t _sample_buffer_tx[BILBO_FIRMWARE_SAMPLE_BUFFER_SIZE]; ///< Buffer for sample data transmission.
-bilbo_logging_sample_t _sample_buffer_dummy[BILBO_FIRMWARE_SAMPLE_BUFFER_SIZE]; ///< Buffer for sample data transmission.
+// Response buffer: [uint32_t count] + up to MAX_PENDING batches (contiguous for SPI DMA)
+#define SAMPLE_BATCH_BYTE_SIZE   (BILBO_FIRMWARE_SAMPLE_BUFFER_SIZE * sizeof(bilbo_logging_sample_t))
+#define SAMPLE_RESPONSE_HEADER   sizeof(uint32_t)
+#define SAMPLE_RESPONSE_MAX_SIZE (SAMPLE_RESPONSE_HEADER + BILBO_MAX_PENDING_BATCHES * SAMPLE_BATCH_BYTE_SIZE)
+
+uint8_t _sample_response_buffer[SAMPLE_RESPONSE_MAX_SIZE];
+uint8_t _sample_response_dummy[SAMPLE_RESPONSE_MAX_SIZE];
 /**
  * Static buffer for outgoing serial messages used for communication responses.
  */
 static core_comm_SerialMessage outgoing_msg;
-
-/**
- * Forward declaration of the DMA transfer complete callback function.
- *
- * @param hdma Pointer to the DMA handle structure.
- */
-void sample_dma_transfer_cmplt_callback(DMA_HandleTypeDef *hdma);
 
 /**
  * Global pointer to the active communication manager instance.
@@ -99,9 +100,9 @@ void BILBO_CommunicationManager::init(bilbo_communication_config_t config) {
     // ---------------------------
     bilbo_spi_comm_config_t spi_config = {
         .hspi = this->config.hspi,
-        .sample_buffer = _sample_buffer_tx,
-		.sample_buffer_dummy = _sample_buffer_dummy,
-        .len_sample_buffer = BILBO_FIRMWARE_SAMPLE_BUFFER_SIZE,
+        .sample_response_buffer = _sample_response_buffer,
+        .sample_response_dummy = _sample_response_dummy,
+        .sample_response_max_size = SAMPLE_RESPONSE_MAX_SIZE,
         .sequence_buffer = this->config.sequence_rx_buffer,
         .len_sequence_buffer = this->config.len_sequence_buffer,
         .path_rx_buffer = this->config.path_rx_buffer,
@@ -122,13 +123,9 @@ void BILBO_CommunicationManager::init(bilbo_communication_config_t config) {
     this->spi_interface.callbacks.path_received.registerFunction(this,
     		&BILBO_CommunicationManager::_spi_rxPath_callback);
 
-
-
-    // Register the DMA transfer complete callback for sample data transfers.
-    HAL_DMA_RegisterCallback(
-        BILBO_FIRMWARE_SAMPLE_DMA_STREAM,
-        HAL_DMA_XFER_CPLT_CB_ID,
-        sample_dma_transfer_cmplt_callback);
+    // Register callback for when Pi sends READ_SAMPLE command
+    this->spi_interface.callbacks.sample_command.registerFunction(this,
+    		&BILBO_CommunicationManager::_spi_sampleCommand_callback);
 
     // ---------------------------
     // Initialize the CAN Bus Interface
@@ -181,6 +178,7 @@ void BILBO_CommunicationManager::resetUART() {
 
 
 void BILBO_CommunicationManager::resetSPI() {
+	this->resetSampleRing();
 	this->spi_interface.reset();
 }
 
@@ -358,18 +356,54 @@ void BILBO_CommunicationManager::_spi_rxPath_callback(uint16_t len) {
 }
 
 /**
- * @brief Callback invoked when DMA completes transferring sample data.
- *
- * This function stops the current SPI transmission, provides sample data to the SPI interface,
- * and toggles the sample notification GPIO to signal successful transfer.
+ * @brief Reset the sample ring buffer state.
  */
-void BILBO_CommunicationManager::sampleBufferDMATransfer_callback() {
-    // Toggle the GPIO to notify that sample data has been transferred.
-    this->config.sample_notification_gpio.toggle();
+void BILBO_CommunicationManager::resetSampleRing() {
+    _ring_head = 0;
+    _ring_tail = 0;
+}
 
-    if (_sample_buffer_tx[0].tick > 0){
-        rc_status_led_2.toggle();
+/**
+ * @brief Callback invoked when the Pi sends a READ_SAMPLE command.
+ */
+void BILBO_CommunicationManager::_spi_sampleCommand_callback() {
+    _prepareSampleResponse();
+}
+
+/**
+ * @brief Prepare and send the sample response containing all pending batches.
+ *
+ * Runs in ISR context (SPI RX complete callback chain).
+ * Wire format: [uint32_t count][batch_0][batch_1]...[batch_{count-1}]
+ */
+void BILBO_CommunicationManager::_prepareSampleResponse() {
+    uint32_t head = _ring_head;
+    uint32_t tail = _ring_tail;
+
+    uint32_t count = head - tail;
+    if (count > BILBO_MAX_PENDING_BATCHES) {
+        count = BILBO_MAX_PENDING_BATCHES;
     }
+
+    // Write count header
+    memcpy(_sample_response_buffer, &count, sizeof(uint32_t));
+
+    // Copy pending batches into response buffer
+    uint8_t *dst = _sample_response_buffer + SAMPLE_RESPONSE_HEADER;
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t slot = (tail + i) % BILBO_MAX_PENDING_BATCHES;
+        memcpy(dst, _sample_ring[slot], SAMPLE_BATCH_BYTE_SIZE);
+        dst += SAMPLE_BATCH_BYTE_SIZE;
+    }
+
+    // Advance tail past consumed batches
+    _ring_tail = tail + count;
+
+    // Arm SPI to transmit the full response buffer
+    this->spi_interface.sendSampleResponse(
+        _sample_response_buffer,
+        SAMPLE_RESPONSE_MAX_SIZE,
+        _sample_response_dummy);
 }
 
 /**
@@ -398,33 +432,28 @@ void BILBO_CommunicationManager::_spi_txSamples_callback() {
 
 
 /**
- * @brief Provide sample data to the SPI interface via DMA.
+ * @brief Copy a sample batch into the ring buffer and notify the Pi.
  *
- * This function starts a DMA transfer to move sample data from the provided buffer into the
- * transmission buffer used by the SPI interface.
+ * Called from the FreeRTOS control task when a batch of samples is ready.
+ * If the ring is full, the oldest batch is dropped to make room.
  *
- * @param buffer Pointer to the sample data buffer.
+ * @param buffer Pointer to the sample data buffer (one batch).
  */
 void BILBO_CommunicationManager::provideSampleData(bilbo_logging_sample_t *buffer) {
-    HAL_DMA_Start_IT(
-        BILBO_FIRMWARE_SAMPLE_DMA_STREAM,
-        (uint32_t) buffer,
-        (uint32_t) &_sample_buffer_tx,
-        BILBO_FIRMWARE_SAMPLE_BUFFER_SIZE * sizeof(bilbo_logging_sample_t)
-    );
+    uint32_t head = _ring_head;
+    uint32_t tail = _ring_tail;
 
-}
+    // If the ring is full, drop the oldest batch
+    if ((head - tail) >= BILBO_MAX_PENDING_BATCHES) {
+        _ring_tail = tail + 1;
+    }
 
-/**
- * @brief Global DMA transfer complete callback.
- *
- * This function is called by the DMA driver when a sample data transfer completes.
- * It delegates the handling to the active communication manager instance.
- *
- * @param hdma Pointer to the DMA handle structure.
- */
-void sample_dma_transfer_cmplt_callback(DMA_HandleTypeDef *hdma) {
-    active_manager->sampleBufferDMATransfer_callback();
+    uint32_t slot = head % BILBO_MAX_PENDING_BATCHES;
+    memcpy(_sample_ring[slot], buffer, SAMPLE_BATCH_BYTE_SIZE);
+    _ring_head = head + 1;
+
+    // Toggle GPIO to notify the Pi that new data is available
+    this->config.sample_notification_gpio.toggle();
 }
 
 /**

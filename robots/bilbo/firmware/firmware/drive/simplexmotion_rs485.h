@@ -60,7 +60,7 @@
 
 
 
-typedef enum simplexmotion_rs485_mode_t {
+typedef enum simplexmotion_rs485_mode_t : uint8_t {
 	SIMPLEXMOTION_RS485_MODE_OFF = 0,
 	SIMPLEXMOTION_RS485_MODE_RESET = 1,
 	SIMPLEXMOTION_RS485_MODE_TORQUE = 40,

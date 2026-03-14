@@ -52,6 +52,13 @@ public:
 	bilbo_firmware_revision_t revision = { .major =
 			BILBO_FIRMWARE_REVISION_MAJOR, .minor =
 			BILBO_FIRMWARE_REVISION_MINOR };
+
+	bilbo_firmware_info_t firmware_info = {
+			.board_revision = BILBO_BOARD_REV_VALUE,
+			.model = BILBO_MODEL_VALUE,
+			.drive_interface = BILBO_DRIVE_INTERFACE_VALUE,
+	};
+
 	uint32_t tick = 0;
 
 	BILBO_CommunicationManager comm;

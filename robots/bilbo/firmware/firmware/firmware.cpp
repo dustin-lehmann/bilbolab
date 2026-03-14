@@ -303,7 +303,7 @@ void BILBO_Firmware::task() {
 
 		case BILBO_FIRMWARE_STATE_ERROR:
 			rc_rgb_led_status.setColor(120, 0, 0);  // Red = error
-			extender.rgbLEDStrip_extern_setColor({ 100, 0, 0 });
+			rc_led_strip.setColor({ 100, 0, 0 });
 			break;
 
 		default:
@@ -381,13 +381,13 @@ void BILBO_Firmware::setControlModeLed() {
 void BILBO_Firmware::updateExternalLedStrip(bilbo_control_mode_t mode) {
 	switch (mode) {
 	case bilbo_control_mode_t::OFF:
-		extender.rgbLEDStrip_extern_setColor({ 3, 3, 3 });    break;
+		rc_led_strip.setColor({ 3, 3, 3 });    break;
 	case bilbo_control_mode_t::BALANCING:
-		extender.rgbLEDStrip_extern_setColor({ 0, 6, 0 });    break;
+		rc_led_strip.setColor({ 0, 6, 0 });    break;
 	case bilbo_control_mode_t::VELOCITY:
-		extender.rgbLEDStrip_extern_setColor({ 0, 6, 6 });    break;
+		rc_led_strip.setColor({ 0, 6, 6 });    break;
 	case bilbo_control_mode_t::POSITION:
-		extender.rgbLEDStrip_extern_setColor({ 5, 0, 5 });    break;
+		rc_led_strip.setColor({ 5, 0, 5 });    break;
 	default:
 		break;
 	}

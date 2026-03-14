@@ -34,9 +34,9 @@ core_utils_RegisterEntry<bilbo_firmware_revision_t, void> reg_fw_rev(
 		&register_map, REG_ADDRESS_R_FIRMWARE_REVISION,
 		&bilbo_firmware.revision);
 
-core_utils_RegisterEntry<uint8_t, void> reg_board_rev(
-		&register_map, REG_ADDRESS_R_BOARD_REVISION,
-		&board_revision);
+core_utils_RegisterEntry<bilbo_firmware_info_t, void> reg_fw_info(
+		&register_map, REG_ADDRESS_R_FIRMWARE_INFO,
+		&bilbo_firmware.firmware_info);
 
 core_utils_RegisterEntry<void, buzzer_beep_struct_t> reg_fw_beep(
 		&register_map, REG_ADDRESS_F_FIRMWARE_BEEP,
@@ -44,11 +44,11 @@ core_utils_RegisterEntry<void, buzzer_beep_struct_t> reg_fw_beep(
 
 core_utils_RegisterEntry<void, rgb_color_struct_t> reg_set_ext_led(
 		&register_map, REG_ADDRESS_F_EXTERNAL_LED,
-		&extender, &RobotControl_Extender::rgbLEDStrip_extern_setColor);
+		&rc_led_strip, &RobotControl_LEDStrip::setColor);
 
 core_utils_RegisterEntry<void, external_led_colors_struct_t> reg_set_all_ext_led(
 		&register_map, REG_ADDRESS_F_ALL_EXTERNAL_LEDS,
-		&extender, &RobotControl_Extender::rgbLEDStrip_extern_setAllColors);
+		&rc_led_strip, &RobotControl_LEDStrip::setAllColors);
 
 core_utils_RegisterEntry<uint8_t, uint8_t> reg_debug1(
 		&register_map, REG_ADDRESS_RW_DEBUG_1,

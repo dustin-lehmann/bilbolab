@@ -275,6 +275,8 @@ bool BILBO_Control::set_mode(bilbo_control_mode_t mode) {
 			control_event_t::CONTROL_MODE_CHANGED, .mode = mode, .data =
 			this->_data, .tick = tick_global };
 
+	send_info("Control mode changed to %d. Tick: %d", (int) mode, tick_global);
+
 	BILBO_Message_Control_Event message(event_message_data);
 	sendMessage(message);
 

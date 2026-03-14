@@ -44,7 +44,7 @@ typedef struct bilbo_supervisor_config_t {
 } bilbo_supervisor_config_t;
 
 
-typedef enum bilbo_supervisor_dings_t {
+typedef enum bilbo_supervisor_dings_t : uint8_t {
 	BILBO_SUPERVISOR_NONE = 0,
 
 	BILBO_SUPERVISOR_MAX_WHEEL_SPEED = 1,

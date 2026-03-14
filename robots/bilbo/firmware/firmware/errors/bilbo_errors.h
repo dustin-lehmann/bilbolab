@@ -17,7 +17,7 @@
 
 class BILBO_Firmware;
 
-typedef enum bilbo_error_type_t {
+typedef enum bilbo_error_type_t : uint8_t {
 	BILBO_ERROR_NONE = 0,
 	BILBO_ERROR_WARNING = 1,
 	BILBO_ERROR_MINOR = 2,
@@ -25,7 +25,7 @@ typedef enum bilbo_error_type_t {
 	BILBO_ERROR_CRITICAL = 4
 } bilbo_error_type_t;
 
-typedef enum bilbo_error_t {
+typedef enum bilbo_error_t : uint8_t {
 	BILBO_ERROR_UNSPECIFIED = 0,
 	BILBO_WARNING_WHEEL_SPEED = 1,
 	BILBO_WARNING_MANUAL_STOP = 2,

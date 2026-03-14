@@ -33,9 +33,9 @@
  */
 typedef struct bilbo_spi_comm_config_t {
     SPI_HandleTypeDef *hspi;                      ///< Pointer to the SPI hardware handle.
-    bilbo_logging_sample_t *sample_buffer;        ///< Buffer for sample data transmission.
-    bilbo_logging_sample_t *sample_buffer_dummy;        ///< Buffer for sample data transmission.
-    uint16_t len_sample_buffer;                   ///< Length of the sample data buffer.
+    uint8_t *sample_response_buffer;              ///< Pre-assembled response buffer ([count][batches...]).
+    uint8_t *sample_response_dummy;               ///< Dummy RX buffer for SPI TransmitReceive.
+    uint32_t sample_response_max_size;            ///< Max size of response buffer.
     bilbo_sequence_input_t *sequence_buffer;      ///< Buffer for receiving trajectory inputs.
     uint16_t len_sequence_buffer;                 ///< Length of the trajectory sequence buffer.
     uint8_t *path_rx_buffer;                      ///< Buffer for receiving path points via SPI.
@@ -47,7 +47,7 @@ typedef struct bilbo_spi_comm_config_t {
  *
  * Defines the operating mode for the SPI communication interface.
  */
-typedef enum bilbo_spi_comm_mode_t {
+typedef enum bilbo_spi_comm_mode_t : uint8_t {
     BILBO_SPI_COMM_MODE_NONE = 0,   ///< No operation mode.
 	BILBO_SPI_COMM_MODE_LISTENING_FOR_COMMAND = 1,
     BILBO_SPI_COMM_MODE_RX_TRAJECTORY   = 2,   ///< Reception mode.
@@ -135,12 +135,13 @@ public:
     void stopTransmission();
 
     /**
-     * @brief Provide sample data using the default configuration.
+     * @brief Send a pre-assembled sample response buffer via SPI DMA.
      *
-     * Calls the overloaded provideSampleData function with the default sample buffer
-     * and buffer length provided in the configuration.
+     * @param buffer   Pointer to the response buffer ([uint32_t count][batches...]).
+     * @param len      Total transfer length in bytes.
+     * @param dummy_rx Dummy RX buffer of the same length.
      */
-    void provideSampleData();
+    void sendSampleResponse(uint8_t *buffer, uint32_t len, uint8_t *dummy_rx);
 
     /**
      * @brief Receive trajectory inputs over SPI.
@@ -199,7 +200,6 @@ private:
 
 
 
-    bool _samples_read;
     uint16_t _trajectory_length;
     uint16_t _path_length;
 };

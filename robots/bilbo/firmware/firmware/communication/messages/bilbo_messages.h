@@ -35,7 +35,7 @@ typedef BILBO_Message<debug_message_data_t, MSG_EVENT, BILBO_MESSAGE_PRINT> BILB
 
 
 // =========================================================================================================== //
-typedef enum sequencer_event_t {
+typedef enum sequencer_event_t : uint8_t {
 	TRAJECTORY_STARTED = 1,
 	TRAJECTORY_FINISHED = 2,
 	TRAJECTORY_ABORTED = 3,

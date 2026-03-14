@@ -11,7 +11,7 @@
 #include "firmware_core.h"
 
 // Common motor mode enum — values match SimplexMotion register 400
-typedef enum simplexmotion_mode_t {
+typedef enum simplexmotion_mode_t : uint8_t {
 	SM_MODE_OFF = 0,
 	SM_MODE_RESET = 1,
 	SM_MODE_SHUTDOWN = 4,

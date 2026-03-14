@@ -30,7 +30,7 @@
 #define MSG_COMMAND_ECHO    0x08 ///< Command code for echo testing.
 
 
-typedef enum serial_message_type_t {
+typedef enum serial_message_type_t : uint8_t {
 	MSG_WRITE = MSG_COMMAND_WRITE,
 	MSG_READ = MSG_COMMAND_READ,
 	MSG_ANSWER = MSG_COMMAND_ANSWER,
@@ -60,7 +60,7 @@ typedef struct bilbo_uart_comm_config_t {
  *
  * Enumerates the different callback events available in UART communication.
  */
-typedef enum bilbo_uart_comm_callback_id_t {
+typedef enum bilbo_uart_comm_callback_id_t : uint8_t {
     BILBO_UART_COMM_CALLBACK_RX_MSG,   ///< Callback for receiving a message.
     BILBO_UART_COMM_CALLBACK_MSG_WRITE,///< Callback for write message events.
     BILBO_UART_COMM_CALLBACK_MSG_READ, ///< Callback for read message events.

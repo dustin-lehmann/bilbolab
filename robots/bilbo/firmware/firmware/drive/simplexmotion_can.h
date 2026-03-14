@@ -54,7 +54,7 @@
 #define SIMPLEXMOTION_CAN_REG_APPLDATA0 620
 
 
-typedef enum simplexmotion_can_mode_t {
+typedef enum simplexmotion_can_mode_t : uint8_t {
 	SIMPLEXMOTION_CAN_MODE_OFF = 0,
 	SIMPLEXMOTION_CAN_MODE_RESET = 1,
 	SIMPLEXMOTION_CAN_MODE_TORQUE = 40,

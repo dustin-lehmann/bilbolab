@@ -215,11 +215,9 @@ public:
     bilbo_communication_callbacks_t callbacks;
 
     /**
-     * @brief DMA transfer complete callback for sample data.
-     *
-     * Called when DMA transfers for sample data are complete.
+     * @brief Reset ring buffer state (call before SPI reset).
      */
-    void sampleBufferDMATransfer_callback();
+    void resetSampleRing();
 
     // Public member variables for configuration and interfaces.
     bilbo_communication_config_t config; ///< Communication configuration parameters.
@@ -238,6 +236,8 @@ private:
     void _spi_rxTrajectory_callback(uint16_t len);
     void _spi_rxPath_callback(uint16_t len);
     void _spi_txSamples_callback();
+    void _spi_sampleCommand_callback();
+    void _prepareSampleResponse();
 
     /**
      * @brief Helper function to send an error response over UART.

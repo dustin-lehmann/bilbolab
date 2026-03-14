@@ -27,7 +27,7 @@ enum class bilbo_balancing_control_status_t: int8_t {
 	RUNNING = 2,
 };
 
-typedef enum bilbo_balancing_control_callback_id_t {
+typedef enum bilbo_balancing_control_callback_id_t : uint8_t {
 	BILBO_BALANCING_CONTROL_CALLBACK_ERROR = 1,
 } bilbo_balancing_control_callback_id_t;
 

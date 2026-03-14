@@ -26,7 +26,7 @@ typedef struct bilbo_sequencer_config_t {
 /**
  * @brief High-level state of the sequencer.
  */
-typedef enum bilbo_sequencer_mode_t {
+typedef enum bilbo_sequencer_mode_t : uint8_t {
 	BILBO_SEQUENCER_MODE_IDLE = 0,
 	BILBO_SEQUENCER_MODE_RUNNING = 1,
 	BILBO_SEQUENCER_MODE_ERROR = 2
@@ -49,7 +49,7 @@ typedef struct bilbo_sequencer_sequence_data_t {
 /**
  * @brief Callback identifiers for application-level hooks.
  */
-typedef enum bilbo_sequencer_callback_id_t {
+typedef enum bilbo_sequencer_callback_id_t : uint8_t {
 	BILBO_SEQUENCER_CALLBACK_SEQUENCE_STARTED = 1,
 	BILBO_SEQUENCER_CALLBACK_SEQUENCE_FINISHED = 2,
 	BILBO_SEQUENCER_CALLBACK_SEQUENCE_ABORTED = 3,

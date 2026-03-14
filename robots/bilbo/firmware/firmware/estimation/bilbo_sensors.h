@@ -25,7 +25,7 @@ typedef struct bilbo_sensors_data_t {
 } bilbo_sensors_data_t;
 
 
-typedef enum bilbo_sensors_status_t {
+typedef enum bilbo_sensors_status_t : int8_t {
 	BILBO_SENSORS_STATUS_ERROR = -1,
 	BILBO_SENSORS_STATUS_IDLE = 0,
 	BILBO_SENSORS_STATUS_RUNNING = 1,

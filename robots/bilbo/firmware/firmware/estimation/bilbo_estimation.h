@@ -19,7 +19,7 @@
 #define BILBO_ESTIMATION_TS (1.0 / BILBO_CONTROL_TASK_FREQ)
 #define BILBO_ESTIMATION_STATE_BUFFER_SIZE BILBO_ESTIMATION_FREQUENCY*1
 
-typedef enum bilbo_estimation_status_t {
+typedef enum bilbo_estimation_status_t : int8_t {
 	BILBO_ESTIMATION_STATUS_NONE = 0,
 	BILBO_ESTIMATION_STATUS_IDLE = 1,
 	BILBO_ESTIMATION_STATUS_OK = 2,
@@ -42,7 +42,7 @@ typedef struct bilbo_position_state_t {
 	float psi;
 } bilbo_position_state_t;
 
-typedef enum bilbo_estimation_callback_id {
+typedef enum bilbo_estimation_callback_id : uint8_t {
 	BILBO_ESTIMATION_CALLBACK_UPDATE = 0,
 	BILBO_ESTIMATION_CALLBACK_ERROR = 1,
 	BILBO_ESTIMATION_CALLBACK_ANGLE = 2,
