@@ -1,0 +1,181 @@
+id: robot_calibration
+description: >
+  A realistic combined example simulating a robot calibration procedure.
+  Uses loops, conditions, parallel execution, variables, events, and timing.
+
+variables:
+  num_samples: 5
+  threshold: 0.1
+  calibration_ok: false
+  error_count: 0
+  measurements: 0
+  best_offset: 0.0
+
+actions:
+  - type: log
+    message: "============================================"
+  - type: log
+    message: "  Robot Calibration Procedure"
+  - type: log
+    message: "  samples=${num_samples}, threshold=${threshold}"
+  - type: log
+    message: "============================================"
+
+  # Phase 1: Initialize sensors in parallel
+  - type: log
+    message: "--- Phase 1: Initialize Sensors ---"
+  - type: parallel
+    actions:
+      - type: group
+        actions:
+          - type: log
+            message: "  [IMU] Warming up..."
+          - type: wait_time
+            time: 0.1
+          - type: log
+            message: "  [IMU] Ready."
+      - type: group
+        actions:
+          - type: log
+            message: "  [Encoder] Zeroing..."
+          - type: wait_time
+            time: 0.08
+          - type: log
+            message: "  [Encoder] Ready."
+      - type: group
+        actions:
+          - type: log
+            message: "  [Motor] Self-test..."
+          - type: wait_time
+            time: 0.12
+          - type: log
+            message: "  [Motor] Ready."
+
+  - type: marker
+    name: sensors_initialized
+
+  # Phase 2: Collect calibration samples
+  - type: log
+    message: "--- Phase 2: Collecting ${num_samples} samples ---"
+  - type: set_variable
+    name: offset_sum
+    value: 0.0
+  - type: loop
+    count: "$num_samples"
+    variable: sample_idx
+    actions:
+      # Simulate a measurement (compute a fake offset)
+      - type: set_variable
+        name: current_offset
+        value: "${0.1 * (sample_idx + 1) - 0.25}"
+      - type: set_variable
+        name: offset_sum
+        value: "${offset_sum + current_offset}"
+      - type: set_variable
+        name: measurements
+        value: "${measurements + 1}"
+
+      # Check if this sample is an outlier
+      - type: condition
+        test: "${abs(current_offset) > threshold}"
+        then:
+          - type: set_variable
+            name: error_count
+            value: "${error_count + 1}"
+          - type: log
+            message: "  Sample ${sample_idx}: offset=${current_offset} [OUTLIER]"
+            level: warning
+        else:
+          - type: log
+            message: "  Sample ${sample_idx}: offset=${current_offset} [OK]"
+
+      - type: wait_time
+        time: 0.05
+
+  # Phase 3: Compute and validate
+  - type: log
+    message: "--- Phase 3: Compute Result ---"
+  - type: set_variable
+    name: best_offset
+    value: "${offset_sum / num_samples}"
+  - type: log
+    message: "  Average offset = ${best_offset}"
+  - type: log
+    message: "  Outliers: ${error_count} / ${measurements}"
+
+  - type: condition
+    test: "${error_count <= 1}"
+    then:
+      - type: set_variable
+        name: calibration_ok
+        value: true
+      - type: log
+        message: "  Calibration PASSED"
+    else:
+      - type: set_variable
+        name: calibration_ok
+        value: false
+      - type: log
+        message: "  Calibration FAILED (too many outliers)"
+        level: warning
+
+  # Phase 4: Retry loop if failed
+  - type: set_variable
+    name: retry
+    value: 0
+  - type: while
+    test: "${calibration_ok == false and retry < 2}"
+    max_iterations: 2
+    actions:
+      - type: set_variable
+        name: retry
+        value: "${retry + 1}"
+      - type: log
+        message: "--- Retry ${retry}: re-calibrating with stricter threshold ---"
+      - type: set_variable
+        name: threshold
+        value: "${threshold + 0.2}"
+      - type: set_variable
+        name: error_count
+        value: 0
+      - type: loop
+        count: "$num_samples"
+        variable: ri
+        actions:
+          - type: set_variable
+            name: current_offset
+            value: "${0.1 * (ri + 1) - 0.25}"
+          - type: condition
+            test: "${abs(current_offset) > threshold}"
+            then:
+              - type: set_variable
+                name: error_count
+                value: "${error_count + 1}"
+      - type: condition
+        test: "${error_count <= 1}"
+        then:
+          - type: set_variable
+            name: calibration_ok
+            value: true
+          - type: log
+            message: "  Retry ${retry} PASSED with threshold=${threshold}"
+        else:
+          - type: log
+            message: "  Retry ${retry} FAILED"
+
+  # Final status
+  - type: log
+    message: "============================================"
+  - type: condition
+    test: "$calibration_ok"
+    then:
+      - type: log
+        message: "  RESULT: Calibration successful!"
+      - type: log
+        message: "  offset=${best_offset}, threshold=${threshold}"
+    else:
+      - type: log
+        message: "  RESULT: Calibration failed after retries."
+        level: error
+  - type: log
+    message: "============================================"

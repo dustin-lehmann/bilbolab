@@ -229,6 +229,16 @@ class GTTSVoiceEngine(VoiceEngine):
         tts.save(file_path)
 
 
+# Voice presets for easy selection by name
+VOICE_PRESETS = {
+    'male': {'voice': 'en-GB-RyanNeural', 'robot_filter': False},
+    'female': {'voice': 'en-GB-LibbyNeural', 'robot_filter': False},
+    'robot_male': {'voice': 'en-GB-RyanNeural', 'robot_filter': True},
+    'robot_female': {'voice': 'en-GB-LibbyNeural', 'robot_filter': True},
+    'robot': {'voice': 'en-GB-RyanNeural', 'robot_filter': True},
+}
+
+
 class EdgeTTSVoiceEngine(VoiceEngine):
     """
 Edge TTS voice engine implementation using edge-tts library.

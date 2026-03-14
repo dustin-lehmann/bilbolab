@@ -2,6 +2,7 @@ import socket
 import threading
 import time
 
+from core.utils.callbacks import callback_definition, CallbackContainer
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger
 from core.utils.timecode.timecode import Timecode
@@ -14,6 +15,12 @@ TIMECODE_INTERVAL = 2.0
 ALLOWED_JITTER = 0.02
 
 
+@callback_definition
+class TimecodeClientCallbacks:
+    new_timecode: CallbackContainer
+    sync: CallbackContainer
+
+
 class TimecodeClient:
     _thread: threading.Thread
 
@@ -24,17 +31,21 @@ class TimecodeClient:
 
     _last_packet_arrival_time: float | None = None  # when we last RECEIVED a packet (accepted or not)
 
+    internal_fps: float | None = None
     fps: float | None = None
 
     _lock: threading.Lock
 
-    def __init__(self):
-        self.logger = Logger("TimecodeClient")
+    _synced: bool = False
 
+    def __init__(self, internal_fps: float | None = None):
+        self.logger = Logger("TimecodeClient", "DEBUG")
+        self.internal_fps = internal_fps
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind(("", PORT))
         self._thread = threading.Thread(target=self._task, daemon=True)
         self._lock = threading.Lock()
+        self.callbacks = TimecodeClientCallbacks()
         register_exit_callback(self.close)
 
     # === METHODS ======================================================================================================
@@ -53,6 +64,7 @@ class TimecodeClient:
         if self._thread.is_alive():
             self._thread.join()
 
+
     # ------------------------------------------------------------------------------------------------------------------
     def get_timecode(self) -> Timecode | None:
         with self._lock:
@@ -60,7 +72,7 @@ class TimecodeClient:
                 return None
 
             now = time.monotonic()
-            # Predict current timecode from last accepted one using elapsed time
+            # Predict current timecode from the last accepted one using elapsed time
             out_timecode = self._last_timecode + (now - self._last_timecode_time)
 
         return out_timecode
@@ -77,9 +89,16 @@ class TimecodeClient:
             now = time.monotonic()
             timecode = Timecode.from_bytes(data)
 
+            if not self._synced:
+                self.callbacks.sync.call(timecode)
+                self._synced = True
+
             if self.fps is None:
                 self.fps = timecode.fps
                 self.logger.info(f"First timecode received: {timecode}. FPS: {self.fps}")
+
+            if self.internal_fps is None:
+                self.internal_fps = self.fps
 
             with self._lock:
                 # First packet ever → accept and lock on
@@ -107,6 +126,20 @@ class TimecodeClient:
                     continue
 
                 # Within allowed jitter → accept and update both state timestamps
-                self._last_timecode = timecode
+                if self.internal_fps == timecode.fps:
+                    self._last_timecode = timecode
+                else:
+                    self._last_timecode = timecode.rebase_fps(self.internal_fps)
+
                 self._last_timecode_time = now
                 self._last_packet_arrival_time = now
+                self.logger.debug(f"New timecode: {timecode}")
+                self.callbacks.new_timecode.call(timecode)
+
+
+if __name__ == '__main__':
+    client = TimecodeClient()
+    client.start()
+
+    while True:
+        time.sleep(10)

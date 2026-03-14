@@ -10,6 +10,7 @@ Supported platforms:
 - Linux: zenity (GTK) or kdialog (KDE)
 """
 
+import os
 import platform
 import subprocess
 import shutil
@@ -29,16 +30,13 @@ def get_os() -> str:
         return "Unknown"
 
 
-def _build_file_filter_macos(allowed_extensions: list[str] | None) -> str:
-    """Build AppleScript file type filter."""
+def _check_extension(path: str, allowed_extensions: list[str] | None) -> bool:
+    """Check if a file path has one of the allowed extensions."""
     if not allowed_extensions:
-        return ""
-
-    # Clean extensions (remove leading dots if present)
-    exts = [ext.lstrip('.') for ext in allowed_extensions]
-    # AppleScript format: {"txt", "pdf"}
-    ext_list = ', '.join(f'"{ext}"' for ext in exts)
-    return f' of type {{{ext_list}}}'
+        return True
+    exts = {('.' + ext.lstrip('.')).lower() for ext in allowed_extensions}
+    _, file_ext = os.path.splitext(path)
+    return file_ext.lower() in exts
 
 
 def _build_file_filter_windows(allowed_extensions: list[str] | None) -> str:
@@ -46,10 +44,7 @@ def _build_file_filter_windows(allowed_extensions: list[str] | None) -> str:
     if not allowed_extensions:
         return "All Files (*.*)|*.*"
 
-    # Clean extensions
     exts = [ext.lstrip('.') for ext in allowed_extensions]
-
-    # Build filter like: "Allowed Files (*.txt;*.pdf)|*.txt;*.pdf|All Files (*.*)|*.*"
     ext_patterns = ';'.join(f'*.{ext}' for ext in exts)
     ext_display = ', '.join(f'*.{ext}' for ext in exts)
     return f"Allowed Files ({ext_display})|{ext_patterns}|All Files (*.*)|*.*"
@@ -60,13 +55,14 @@ def _build_file_filter_linux(allowed_extensions: list[str] | None) -> list[str]:
     if not allowed_extensions:
         return []
 
-    # Clean extensions
     exts = [ext.lstrip('.') for ext in allowed_extensions]
-
-    # For zenity: --file-filter="Name | *.ext1 *.ext2"
     patterns = ' '.join(f'*.{ext}' for ext in exts)
     return [f'--file-filter=Allowed files | {patterns}', '--file-filter=All files | *']
 
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# pick_file — single file selection
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
 
 def pick_file(
     title: str = "Select a file",
@@ -86,18 +82,6 @@ def pick_file(
 
     Returns:
         The absolute path of the selected file, or None if cancelled.
-
-    Raises:
-        RuntimeError: If the file picker could not be opened (e.g., missing dependencies on Linux).
-
-    Example:
-        >>> path = pick_file(
-        ...     title="Select a YAML file",
-        ...     initial_dir="/home/user/configs",
-        ...     allowed_extensions=['yaml', 'yml']
-        ... )
-        >>> if path:
-        ...     print(f"Selected: {path}")
     """
     os_type = get_os()
 
@@ -116,21 +100,12 @@ def _pick_file_macos(
     initial_dir: str | None,
     allowed_extensions: list[str] | None
 ) -> Optional[str]:
-    """Open file picker on macOS using AppleScript."""
-    file_filter = _build_file_filter_macos(allowed_extensions)
-
-    # Build AppleScript
+    """Open file picker on macOS using AppleScript with Python-side extension validation."""
     script_parts = ['set theFile to choose file']
-
     if title:
         script_parts.append(f'with prompt "{title}"')
-
     if initial_dir:
-        # Convert path to POSIX file reference
         script_parts.append(f'default location POSIX file "{initial_dir}"')
-
-    if file_filter:
-        script_parts.append(file_filter)
 
     script = ' '.join(script_parts)
     script += '\nreturn POSIX path of theFile'
@@ -138,16 +113,19 @@ def _pick_file_macos(
     try:
         result = subprocess.run(
             ['osascript', '-e', script],
-            capture_output=True,
-            text=True,
-            timeout=300  # 5 minute timeout
+            capture_output=True, text=True, timeout=300
         )
 
         if result.returncode == 0:
             path = result.stdout.strip()
-            return path if path else None
+            if not path:
+                return None
+            # macOS AppleScript 'of type' doesn't work for extensions without a UTI (like .yaml),
+            # so we validate the extension in Python after selection.
+            if not _check_extension(path, allowed_extensions):
+                return None
+            return path
         else:
-            # User cancelled or error
             return None
 
     except subprocess.TimeoutExpired:
@@ -164,7 +142,6 @@ def _pick_file_windows(
     """Open file picker on Windows using PowerShell and Windows Forms."""
     file_filter = _build_file_filter_windows(allowed_extensions)
 
-    # Build PowerShell script
     ps_script = '''
 Add-Type -AssemblyName System.Windows.Forms
 $dialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -208,11 +185,9 @@ def _pick_file_linux(
 ) -> Optional[str]:
     """Open file picker on Linux using zenity or kdialog."""
 
-    # Try zenity first (GTK-based, most common)
     if shutil.which('zenity'):
         return _pick_file_zenity(title, initial_dir, allowed_extensions)
 
-    # Fall back to kdialog (KDE)
     if shutil.which('kdialog'):
         return _pick_file_kdialog(title, initial_dir, allowed_extensions)
 
@@ -235,25 +210,16 @@ def _pick_file_zenity(
     if initial_dir:
         cmd.append(f'--filename={initial_dir}/')
 
-    # Add file filters
     filter_args = _build_file_filter_linux(allowed_extensions)
     cmd.extend(filter_args)
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode == 0:
             path = result.stdout.strip()
             return path if path else None
         else:
-            # User cancelled (returncode 1) or error
             return None
-
     except subprocess.TimeoutExpired:
         return None
     except Exception as e:
@@ -268,13 +234,11 @@ def _pick_file_kdialog(
     """Open file picker using kdialog (KDE)."""
     cmd = ['kdialog', '--getopenfilename']
 
-    # kdialog uses startdir as positional argument
     if initial_dir:
         cmd.append(initial_dir)
     else:
         cmd.append('.')
 
-    # File filter for kdialog: "*.txt *.pdf|Allowed files"
     if allowed_extensions:
         exts = [ext.lstrip('.') for ext in allowed_extensions]
         patterns = ' '.join(f'*.{ext}' for ext in exts)
@@ -283,24 +247,21 @@ def _pick_file_kdialog(
     cmd.extend(['--title', title])
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode == 0:
             path = result.stdout.strip()
             return path if path else None
         else:
             return None
-
     except subprocess.TimeoutExpired:
         return None
     except Exception as e:
         raise RuntimeError(f"Failed to open file picker: {e}")
 
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# pick_files — multiple file selection
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
 
 def pick_files(
     title: str = "Select files",
@@ -337,22 +298,14 @@ def _pick_files_macos(
     initial_dir: str | None,
     allowed_extensions: list[str] | None
 ) -> list[str]:
-    """Open multi-file picker on macOS."""
-    file_filter = _build_file_filter_macos(allowed_extensions)
-
+    """Open multi-file picker on macOS using AppleScript."""
     script_parts = ['set theFiles to choose file with multiple selections allowed']
-
     if title:
         script_parts.append(f'with prompt "{title}"')
-
     if initial_dir:
         script_parts.append(f'default location POSIX file "{initial_dir}"')
 
-    if file_filter:
-        script_parts.append(file_filter)
-
     script = ' '.join(script_parts)
-    # Convert list of aliases to newline-separated POSIX paths
     script += '''
 set pathList to ""
 repeat with aFile in theFiles
@@ -364,17 +317,14 @@ return pathList
     try:
         result = subprocess.run(
             ['osascript', '-e', script],
-            capture_output=True,
-            text=True,
-            timeout=300
+            capture_output=True, text=True, timeout=300
         )
-
         if result.returncode == 0:
-            paths = result.stdout.strip().split('\n')
-            return [p for p in paths if p]
-        else:
-            return []
-
+            paths = [p for p in result.stdout.strip().split('\n') if p]
+            if allowed_extensions:
+                paths = [p for p in paths if _check_extension(p, allowed_extensions)]
+            return paths
+        return []
     except subprocess.TimeoutExpired:
         return []
     except Exception as e:
@@ -409,17 +359,13 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {{
     try:
         result = subprocess.run(
             ['powershell', '-NoProfile', '-Command', ps_script],
-            capture_output=True,
-            text=True,
-            timeout=300
+            capture_output=True, text=True, timeout=300
         )
-
         if result.returncode == 0:
             paths = result.stdout.strip().split('\n')
             return [p for p in paths if p]
         else:
             return []
-
     except subprocess.TimeoutExpired:
         return []
     except Exception as e:
@@ -462,15 +408,8 @@ def _pick_files_linux(
         )
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode == 0:
-            # zenity uses \n separator, kdialog uses space
             output = result.stdout.strip()
             if '\n' in output:
                 paths = output.split('\n')
@@ -479,12 +418,154 @@ def _pick_files_linux(
             return [p for p in paths if p]
         else:
             return []
-
     except subprocess.TimeoutExpired:
         return []
     except Exception as e:
         raise RuntimeError(f"Failed to open file picker: {e}")
 
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# save_file — save dialog
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+
+def save_file(
+    title: str = "Save file",
+    initial_dir: str | None = None,
+    suggested_name: str | None = None,
+    allowed_extensions: list[str] | None = None
+) -> Optional[str]:
+    """
+    Open a native save-file dialog and return the selected path.
+
+    This function can be called from any thread.
+
+    Args:
+        title: Dialog window title.
+        initial_dir: Starting directory for the dialog.
+        suggested_name: Default filename to suggest.
+        allowed_extensions: List of allowed file extensions.
+
+    Returns:
+        The absolute path chosen by the user, or None if cancelled.
+    """
+    os_type = get_os()
+
+    if os_type == "Mac":
+        return _save_file_macos(title, initial_dir, suggested_name)
+    elif os_type == "Windows":
+        return _save_file_windows(title, initial_dir, suggested_name, allowed_extensions)
+    elif os_type == "Linux":
+        return _save_file_linux(title, initial_dir, suggested_name, allowed_extensions)
+    else:
+        raise RuntimeError(f"Unsupported operating system: {os_type}")
+
+
+def _save_file_macos(title: str, initial_dir: str | None, suggested_name: str | None) -> Optional[str]:
+    """Open save dialog on macOS using AppleScript."""
+    script_parts = ['set theFile to choose file name']
+    if title:
+        script_parts.append(f'with prompt "{title}"')
+    if initial_dir:
+        script_parts.append(f'default location POSIX file "{initial_dir}"')
+    if suggested_name:
+        script_parts.append(f'default name "{suggested_name}"')
+    script = ' '.join(script_parts)
+    script += '\nreturn POSIX path of theFile'
+
+    try:
+        result = subprocess.run(
+            ['osascript', '-e', script],
+            capture_output=True, text=True, timeout=300
+        )
+        if result.returncode == 0:
+            path = result.stdout.strip()
+            return path if path else None
+        return None
+    except subprocess.TimeoutExpired:
+        return None
+    except Exception as e:
+        raise RuntimeError(f"Failed to open save dialog: {e}")
+
+
+def _save_file_windows(title: str, initial_dir: str | None, suggested_name: str | None,
+                       allowed_extensions: list[str] | None) -> Optional[str]:
+    """Open save dialog on Windows using PowerShell."""
+    file_filter = _build_file_filter_windows(allowed_extensions)
+    ps_script = '''
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.SaveFileDialog
+$dialog.Title = "{title}"
+$dialog.Filter = "{filter}"
+{initial_dir}
+{filename}
+$result = $dialog.ShowDialog()
+if ($result -eq [System.Windows.Forms.DialogResult]::OK) {{
+    Write-Output $dialog.FileName
+}}
+'''.format(
+        title=title.replace('"', '`"'),
+        filter=file_filter.replace('"', '`"'),
+        initial_dir=f'$dialog.InitialDirectory = "{initial_dir}"' if initial_dir else '',
+        filename=f'$dialog.FileName = "{suggested_name}"' if suggested_name else ''
+    )
+
+    try:
+        result = subprocess.run(
+            ['powershell', '-NoProfile', '-Command', ps_script],
+            capture_output=True, text=True, timeout=300
+        )
+        if result.returncode == 0:
+            path = result.stdout.strip()
+            return path if path else None
+        return None
+    except subprocess.TimeoutExpired:
+        return None
+    except Exception as e:
+        raise RuntimeError(f"Failed to open save dialog: {e}")
+
+
+def _save_file_linux(title: str, initial_dir: str | None, suggested_name: str | None,
+                     allowed_extensions: list[str] | None) -> Optional[str]:
+    """Open save dialog on Linux using zenity or kdialog."""
+    if shutil.which('zenity'):
+        cmd = ['zenity', '--file-selection', '--save', '--confirm-overwrite', f'--title={title}']
+        if initial_dir and suggested_name:
+            cmd.append(f'--filename={initial_dir}/{suggested_name}')
+        elif initial_dir:
+            cmd.append(f'--filename={initial_dir}/')
+        elif suggested_name:
+            cmd.append(f'--filename={suggested_name}')
+        filter_args = _build_file_filter_linux(allowed_extensions)
+        cmd.extend(filter_args)
+    elif shutil.which('kdialog'):
+        cmd = ['kdialog', '--getsavefilename']
+        if initial_dir:
+            cmd.append(initial_dir + ('/' + suggested_name if suggested_name else ''))
+        else:
+            cmd.append(suggested_name or '.')
+        if allowed_extensions:
+            exts = [ext.lstrip('.') for ext in allowed_extensions]
+            patterns = ' '.join(f'*.{ext}' for ext in exts)
+            cmd.append(f'{patterns}|Allowed files')
+        cmd.extend(['--title', title])
+    else:
+        raise RuntimeError("No file picker available. Please install 'zenity' or 'kdialog'.")
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode == 0:
+            path = result.stdout.strip()
+            return path if path else None
+        return None
+    except subprocess.TimeoutExpired:
+        return None
+    except Exception as e:
+        raise RuntimeError(f"Failed to open save dialog: {e}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# pick_directory — directory selection
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
 
 def pick_directory(
     title: str = "Select a directory",
@@ -515,12 +596,10 @@ def pick_directory(
 
 
 def _pick_directory_macos(title: str, initial_dir: str | None) -> Optional[str]:
-    """Open directory picker on macOS."""
+    """Open directory picker on macOS using AppleScript."""
     script_parts = ['set theFolder to choose folder']
-
     if title:
         script_parts.append(f'with prompt "{title}"')
-
     if initial_dir:
         script_parts.append(f'default location POSIX file "{initial_dir}"')
 
@@ -530,18 +609,12 @@ def _pick_directory_macos(title: str, initial_dir: str | None) -> Optional[str]:
     try:
         result = subprocess.run(
             ['osascript', '-e', script],
-            capture_output=True,
-            text=True,
-            timeout=300
+            capture_output=True, text=True, timeout=300
         )
-
         if result.returncode == 0:
             path = result.stdout.strip()
-            # Remove trailing slash if present
             return path.rstrip('/') if path else None
-        else:
-            return None
-
+        return None
     except subprocess.TimeoutExpired:
         return None
     except Exception as e:
@@ -567,17 +640,13 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {{
     try:
         result = subprocess.run(
             ['powershell', '-NoProfile', '-Command', ps_script],
-            capture_output=True,
-            text=True,
-            timeout=300
+            capture_output=True, text=True, timeout=300
         )
-
         if result.returncode == 0:
             path = result.stdout.strip()
             return path if path else None
         else:
             return None
-
     except subprocess.TimeoutExpired:
         return None
     except Exception as e:
@@ -608,19 +677,12 @@ def _pick_directory_linux(title: str, initial_dir: str | None) -> Optional[str]:
         )
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode == 0:
             path = result.stdout.strip()
             return path if path else None
         else:
             return None
-
     except subprocess.TimeoutExpired:
         return None
     except Exception as e:
@@ -636,8 +698,8 @@ if __name__ == "__main__":
 
         # Test single file picker
         path = pick_file(
-            title="Select a Python file",
-            allowed_extensions=['json', 'pyw']
+            title="Select a YAML file",
+            allowed_extensions=['yaml', 'yml']
         )
         print(f"Selected file: {path}")
 

@@ -1,0 +1,30 @@
+id: yaml_example
+description: A simple experiment loaded from a YAML file.
+
+variables:
+  target: 45.0
+  current: 0.0
+
+actions:
+  - type: log
+    message: "Target angle: ${target}"
+
+  - type: loop
+    count: 3
+    variable: step
+    actions:
+      - type: set_variable
+        name: current
+        value: "${current + target / 3}"
+      - type: log
+        message: "  Step ${step}: angle = ${current}"
+
+  - type: condition
+    test: "${current >= target - 1}"
+    then:
+      - type: log
+        message: "Target reached! current=${current}"
+    else:
+      - type: log
+        message: "Target missed. current=${current}"
+        level: warning

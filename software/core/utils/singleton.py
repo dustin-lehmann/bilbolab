@@ -1,4 +1,3 @@
-# --- add near the imports ---
 import sys
 import threading
 from typing import Any

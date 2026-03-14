@@ -230,6 +230,13 @@ if threading.current_thread() == threading.main_thread():
     # Also register our handler with the atexit module for normal shutdown.
     atexit.register(_global_exit_handler, None, None)
 
+
+def infinite_loop():
+    """Block the calling thread forever, sleeping in 1-second intervals."""
+    while True:
+        time.sleep(1)
+
+
 # --- Example and Simulation Scenarios ---
 if __name__ == '__main__':
     print("Registering exit callbacks from various contexts...\n")

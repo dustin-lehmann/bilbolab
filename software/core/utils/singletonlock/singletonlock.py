@@ -54,11 +54,12 @@ class SingletonLock:
         mode (str): An optional mode string to write into the lock file.
     """
 
-    def __init__(self, lock_file="default.lock", override=False, timeout=None, mode=None):
+    def __init__(self, lock_file="default.lock", override=False, timeout=None, mode=None, override_timeout=5):
         self.lock_file = resolve_lock_file_path(lock_file)
         self.lock_fd = None
         self.override = override
         self.timeout = timeout
+        self.override_timeout = override_timeout
         self.lock_acquired = False
         self.mode = mode
         register_exit_callback(self._release_lock)
@@ -106,7 +107,7 @@ class SingletonLock:
                                 os.kill(pid, signal.SIGTERM)
                                 time.sleep(1)  # Allow time for the process to clean up
                                 elapsed = 0
-                                while os.path.exists(self.lock_file) and elapsed < 5:  # Wait up to 5 seconds
+                                while os.path.exists(self.lock_file) and elapsed < self.override_timeout:
                                     time.sleep(0.1)
                                     elapsed = time.time() - start_time
                                 if os.path.exists(self.lock_file):

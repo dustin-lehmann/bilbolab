@@ -1,4 +1,5 @@
 import ctypes
+from contextlib import contextmanager
 from typing import Callable
 import time
 import threading
@@ -34,6 +35,35 @@ def disable_precision_timing_windows():
     global PRECISION_TIMING_WINDOWS_ENABLED
     PRECISION_TIMING_WINDOWS_ENABLED = False
     timeEndPeriod(1)
+
+
+def wait_until(
+        predicate: Callable[[], bool],
+        timeout_s: float,
+        poll_period_s: float = 0.1,
+) -> bool:
+    """
+    Wait until `predicate()` becomes True or timeout expires.
+
+    Args:
+        predicate: zero-argument callable returning bool
+        timeout_s: timeout in seconds
+        poll_period_s: sleep time between evaluations
+
+    Returns:
+        True  -> predicate became True before timeout
+        False -> timeout expired first
+    """
+    deadline = time.monotonic() + timeout_s
+
+    while True:
+        if predicate():
+            return True
+
+        if time.monotonic() >= deadline:
+            return False
+
+        time.sleep(poll_period_s)
 
 
 # ======================================================================================================================
@@ -85,9 +115,7 @@ def setTimeout(func: Callable, timeout: float, *args, **kwargs):
     delayed_execution(func, timeout, *args, **kwargs)
 
 
-def set_timeout(func: Callable, timeout: float, *args, **kwargs):
-    setTimeout(func, timeout, *args, **kwargs)
-
+set_timeout = setTimeout
 
 # ======================================================================================================================
 
@@ -435,40 +463,11 @@ def clearInterval(timer: Timer) -> None:
         timer.stop()
 
 
-# ======================================================================================================================
-def wait_until(
-        predicate: Callable[[], bool],
-        timeout_s: float,
-        poll_period_s: float = 0.1,
-) -> bool:
-    """
-    Wait until `predicate()` becomes True or timeout expires.
-
-    Args:
-        predicate: zero-argument callable returning bool
-        timeout_s: timeout in seconds
-        poll_period_s: sleep time between evaluations
-
-    Returns:
-        True  -> predicate became True before timeout
-        False -> timeout expired first
-    """
-    deadline = time.monotonic() + timeout_s
-
-    while True:
-        if predicate():
-            return True
-
-        if time.monotonic() >= deadline:
-            return False
-
-        time.sleep(poll_period_s)
-
-
-# ======================================================================================================================
-def get_timestamp_string() -> str:
-    date = time.strftime("%Y-%m-%d_%H:%M:%S")
-    return date
+@contextmanager
+def measure_time(label="Operation"):
+    start = time.perf_counter()
+    yield
+    print(f"{label} took {(time.perf_counter() - start) * 1000:.1f} ms")
 
 
 # ======================================================================================================================
