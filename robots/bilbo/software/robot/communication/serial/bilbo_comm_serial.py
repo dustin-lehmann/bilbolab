@@ -3,7 +3,7 @@ import ctypes
 from core.communication.serial.serial_interface import Serial_Interface, SerialMessage
 import robot.lowlevel.stm32_addresses as addresses
 from robot.communication.serial.bilbo_serial_messages import BILBO_SERIAL_MESSAGES
-from robot.lowlevel.stm32_general import bilbo_firmware_revision
+from robot.lowlevel.stm32_general import bilbo_firmware_revision, bilbo_firmware_info
 from core.utils.callbacks import callback_definition, CallbackContainer, OPTIONAL
 from core.utils.ctypes_utils import CType
 from core.utils.events import Event, event_definition, EventFlag
@@ -86,6 +86,14 @@ class BILBO_Serial_Communication:
                                        type=bilbo_firmware_revision)
 
         return revision
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def readFirmwareInfo(self):
+        info = self.interface.read(module=addresses.BILBO_AddressTables.REGISTER_TABLE_GENERAL,
+                                   address=addresses.BILBO_SystemAddresses.FIRMWARE_INFO,
+                                   type=bilbo_firmware_info)
+
+        return info
 
     # ------------------------------------------------------------------------------------------------------------------
     def debug(self, state):

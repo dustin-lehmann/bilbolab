@@ -390,17 +390,23 @@ class OptiTrack:
                     marker_size = labeled[marker_description.label]['size'][0]
                     marker_description.size = marker_size
                 else:
-                    self.logger.warning(
-                        f"Marker {marker_id} of rigid body \"{rigid_body_name}\" currently not visible. "
-                        f"Its size will be inferred from the other markers."
+                    self.logger.debug(
+                        f"Marker {marker_id} of rigid body \"{rigid_body_name}\" not visible, "
+                        f"size will be inferred"
                     )
 
             # Second pass: infer missing sizes
             sizes = [md.size for md in rigid_body_description.markers.values() if md.size is not None]
+            missing_count = sum(1 for md in rigid_body_description.markers.values() if md.size is None)
             if not sizes:
-                self.logger.error(f"No markers of rigid body {rigid_body_name} are visible")
+                self.logger.debug(f"No markers of rigid body \"{rigid_body_name}\" are visible, inferring sizes")
                 inferred = 0.0
             else:
+                if missing_count > 0:
+                    self.logger.debug(
+                        f"{missing_count}/{rigid_body_description.marker_count} markers of "
+                        f"\"{rigid_body_name}\" not visible, inferring sizes"
+                    )
                 inferred = float(sum(sizes) / len(sizes))
             for md in rigid_body_description.markers.values():
                 if md.size is None:

@@ -211,7 +211,7 @@ class BILBO_Estimation:
         self._comm.events.rx_stm32_sample.on(self._onSample)
 
         self.logger = Logger('Estimation')
-        self.logger.setLevel('DEBUG')
+        self.logger.setLevel('INFO')
 
         # Register WiFi commands
         self._register_wifi_commands()
@@ -510,6 +510,34 @@ class BILBO_Estimation:
             input_type=bilbo_estimation_config_t,
             output_type=None
         )
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def set_origin(self, origin_config: 'BILBO_OriginConfig | None'):
+        """Update the OptiTrack origin used for coordinate transformation.
+
+        If the tracker is running, this replaces the tracked origin (or removes it if None).
+        """
+        if self.tracker is None:
+            self.logger.warning('Cannot set origin: tracker is not enabled')
+            return
+
+        from robot.estimation.optitrack_tracker import TrackedOrigin
+
+        if origin_config is not None:
+            prev_id = self.tracker.tracked_origin.id if self.tracker.tracked_origin else None
+            if prev_id and prev_id != origin_config.id:
+                self.logger.info(f'Switching OptiTrack origin: {prev_id} -> {origin_config.id}')
+            else:
+                self.logger.info(f'Setting OptiTrack origin to \'{origin_config.id}\'')
+            new_origin = TrackedOrigin(id=origin_config.id, definition=origin_config)
+            self.tracker.tracked_origin = new_origin
+            if self.tracker.tracked_object is not None:
+                self.tracker.tracked_object.origin = new_origin
+        else:
+            self.logger.info('Clearing origin')
+            self.tracker.tracked_origin = None
+            if self.tracker.tracked_object is not None:
+                self.tracker.tracked_object.origin = None
 
     # ==================================================================================================================
     def update(self):

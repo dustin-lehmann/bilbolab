@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Tuple, Optional
 
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger
-from core.utils.network import getHostIP
+from core.hardware.network import getHostIP
 from core.utils.websockets import WebsocketServer
 
 import board

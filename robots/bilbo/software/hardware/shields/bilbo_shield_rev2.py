@@ -6,7 +6,7 @@ from hardware.hardware.gpio import GPIO_Output
 from core.utils.files import file_exists, deleteFile, get_absolute_path
 from hardware.shields.definitions import BILBO_SHIELD_REV_2_ID, SHIELD_ID_ADDRESS, BILBO_SHIELD_REV2_CONFIG_FILE
 from core.utils.json_utils import writeJSON
-from core.utils.button import Button
+from core.hardware.button import Button
 from robot.paths import CONFIG_PATH
 
 bilbo_shield_rev_2_config = {

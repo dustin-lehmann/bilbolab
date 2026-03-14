@@ -112,6 +112,12 @@ class RobotControl_Board:
                                        input_type=bilbo_external_rgb_struct,
                                        data=color_struct)
 
+        time.sleep(0.01)
+        self.serial_interface.function(address=BILBO_GeneralAddresses.ADDRESS_FIRMWARE_EXTERNAL_LED,
+                                       module=BILBO_AddressTables.REGISTER_TABLE_GENERAL,
+                                       input_type=bilbo_external_rgb_struct,
+                                       data=color_struct)
+
     # ------------------------------------------------------------------------------------------------------------------
     def setAllLEDsExtern(self, colors):
         """
@@ -155,6 +161,7 @@ class RobotControl_Board:
             input_type=bilbo_all_external_leds_struct,
             data=payload,
         )
+
     # ------------------------------------------------------------------------------------------------------------------
     def beep(self, frequency: Union[str, float, None] = None, time_ms: int = 500, repeats: int = 1):
         if frequency is None:

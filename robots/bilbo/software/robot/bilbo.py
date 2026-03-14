@@ -37,10 +37,12 @@ from robot.logging.bilbo_logging import BILBO_Logging
 from robot.logging.bilbo_sample import BILBO_Sample_General
 from robot.sensors.bilbo_sensors import BILBO_Sensors
 from core.utils.logging_utils import Logger, setLoggerLevel
+from core.utils import colors
 from robot.supervisor.bilbo_supervisor import BILBO_Supervisor
 from robot.error_handler import report_error, ErrorSeverity
-from core.utils.revisions import get_versions, is_ll_version_compatible
+from core.hardware.revisions import get_versions, is_ll_version_compatible
 import robot.lowlevel.stm32_addresses as stm32_addresses
+from robot.lowlevel.stm32_general import BILBO_BoardRevision, BILBO_ModelType, BILBO_DriveInterface
 from core.utils.exit import register_exit_callback
 from core.utils.dataclass_utils import from_dict_auto
 from robot.paths import init_paths
@@ -62,6 +64,12 @@ class BILBO_JoystickSettings:
 
 
 @dataclasses.dataclass
+class BILBO_SoundSettings:
+    volume: float = 0.5
+    voice: str = 'female'  # female, male, or robot
+
+
+@dataclasses.dataclass
 class BILBO_MiscSettings:
     warn_on_sample_batching: bool = True
 
@@ -72,11 +80,18 @@ class STM32_Settings:
 
 
 @dataclasses.dataclass
+class BILBO_TestbedSettings:
+    id: str = 'default'
+
+
+@dataclasses.dataclass
 class BILBO_Settings:
     stm32: STM32_Settings = field(default_factory=STM32_Settings)
+    testbed: BILBO_TestbedSettings = field(default_factory=BILBO_TestbedSettings)
     paths: BILBO_PathSettings = field(default_factory=BILBO_PathSettings)
     tracker: BILBO_TrackerSettings = field(default_factory=BILBO_TrackerSettings)
     joystick: BILBO_JoystickSettings = field(default_factory=BILBO_JoystickSettings)
+    sound: BILBO_SoundSettings = field(default_factory=BILBO_SoundSettings)
     misc: BILBO_MiscSettings = field(default_factory=BILBO_MiscSettings)
 
 
@@ -134,6 +149,7 @@ class BILBO(MainProvider):
 
     # === INIT =========================================================================================================
     def __init__(self, simulation: bool = False, settings_path: str | None = None):
+
         self.settings = _load_settings(settings_path)
         init_paths(self.settings.paths.main)
 
@@ -159,6 +175,8 @@ class BILBO(MainProvider):
 
         # Read the ID from the ID file
         self.id = self.common.id
+
+        Logger.banner([f"BILBO Startup \u2014 {self.id}"])
 
         self.loop_time = 0
         self.update_time = 0
@@ -189,12 +207,16 @@ class BILBO(MainProvider):
                                            joystick_enabled=self.settings.joystick.enabled,
                                            drive=self.drive)
 
-        self.utilities = BILBO_Utilities(core=self.common, communication=self.communication, board=self.board)
+        self.utilities = BILBO_Utilities(core=self.common,
+                                         communication=self.communication,
+                                         board=self.board,
+                                         sound_settings=self.settings.sound)
 
         self.supervisor = BILBO_Supervisor(comm=self.communication, control=self.control, utilities=self.utilities)
 
         self.testbed_manager = BILBO_TestbedManager(common=self.common, communication=self.communication,
-                                                    control=self.control)
+                                                    control=self.control, estimation=self.estimation,
+                                                    testbed_id=self.settings.testbed.id)
         self.control.position_control.set_testbed_manager(self.testbed_manager)
 
         self.experiment_handler = BILBO_ExperimentHandler(common=self.common,
@@ -214,7 +236,6 @@ class BILBO(MainProvider):
                                      experiment_handler=self.experiment_handler,
                                      )
 
-
         self.events = BILBO_Events()
         self.callbacks = BILBO_Callbacks()
 
@@ -230,50 +251,69 @@ class BILBO(MainProvider):
 
     # === METHODS ======================================================================================================
     def init(self):
-
+        Logger.section("Hardware")
         self.board.init()
         self.board.start()
+
+        Logger.section("Communication")
         self.communication.init()
         self.communication.start()
 
+        Logger.section("Estimation")
         self.estimation.init()
+
+        Logger.section("Supervisor")
         self.supervisor.init()
+
+        Logger.section("Interfaces")
         self.interfaces.init()
 
+        Logger.section("Control")
         result = self.control.init()
         if not result:
             report_error(ErrorSeverity.CRITICAL, "BILBO", "Control init failed")
 
+        Logger.section("Sensors")
         self.sensors.init()
+
+        Logger.section("Logging")
         self.logging.init()
+
+        Logger.section("Experiments")
         self.experiment_handler.init()
 
     # ------------------------------------------------------------------------------------------------------------------
     def start(self):
-        self.logger.important(f"Start {self.id}")
-        # self.communication.start()
+        Logger.section("Starting Services")
+        self.common.start()
         self.utilities.start()
-
         self.control.start()
-
         self.supervisor.start()
         self.sensors.start()
-        self.estimation.start()
         self.logging.start()
 
+        Logger.section("OptiTrack")
+        self.estimation.start()
+        # Wait for OptiTrack to finish connecting (async NatNet logs)
+        if self.estimation.tracker is not None and self.estimation.tracker_settings.enabled:
+            tracker_optitrack = self.estimation.tracker.optitrack
+            deadline = time.perf_counter() + 3.0
+            while not tracker_optitrack.first_data_frame_received and time.perf_counter() < deadline:
+                time.sleep(0.05)
+
+        Logger.section("Firmware Reset")
         self._last_update_time = time.perf_counter()
-        time.sleep(0.05)
+        time.sleep(0.5)
         if not self._resetLowLevel():
             self.logger.error("Failed to reset lowlevel firmware")
             raise Exception("Failed to reset lowlevel firmware")
 
-        self.utilities.playTone('notification')
-        self.utilities.speak(f'Start {self.id}')
-
+        Logger.section("Sample Listener")
         self.communication.startSampleListener()
         self._eventListener = self.communication.events.rx_stm32_sample.on(self.update, spawn_new_threads=False)
         self.interfaces.start()
 
+        self.utilities.playTone('notification')
         delayed_execution(lambda: setattr(self, '_startup_phase', False), 1)
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -319,9 +359,7 @@ class BILBO(MainProvider):
 
     # === PRIVATE METHODS ==============================================================================================
     def _resetLowLevel(self):
-        # self.board.beep()
-
-        return self.communication.serial.executeFunction(
+        result = self.communication.serial.executeFunction(
             module=stm32_addresses.BILBO_AddressTables.REGISTER_TABLE_GENERAL,
             address=stm32_addresses.BILBO_SystemAddresses.FIRMWARE_RESET,
             input_type=None,
@@ -329,9 +367,29 @@ class BILBO(MainProvider):
             timeout=1
         )
 
+        if result:
+            self._readFirmwareInfo()
+
+        return result
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _readFirmwareInfo(self):
+        info = self.communication.serial.readFirmwareInfo()
+        if info is None:
+            self.logger.warning("Could not read firmware info from STM32")
+            return
+
+        try:
+            board_rev = BILBO_BoardRevision(info['board_revision'])
+            model = BILBO_ModelType(info['model'])
+            drive = BILBO_DriveInterface(info['drive_interface'])
+            self.logger.info(f"Firmware info: board={board_rev.name}, model={model.name}, drive={drive.name}")
+        except (ValueError, KeyError) as e:
+            self.logger.warning(f"Unknown firmware info values: {info} ({e})")
+
     # ------------------------------------------------------------------------------------------------------------------
     def _shutdownInit(self):
-        self.logger.important(f"Shutdown {self.id}")
+        Logger.banner([f"Shutting down {self.id}"], color=colors.MEDIUM_ORANGE)
         self.control.set_mode(BILBO_Control_Mode.OFF)
         self._eventListener.stop()
         self.utilities.playTone('warning')
@@ -371,11 +429,11 @@ class BILBO(MainProvider):
 
     # ------------------------------------------------------------------------------------------------------------------
     def _sendFirstSampleMessage(self):
-        self.logger.info(f"BILBO is running!")
-        self.logger.info(f"Battery Voltage: {self.logging.sample.sensors.power.bat_voltage:.2f} V")
+        Logger.banner([
+            f"BILBO is running! ({self.id})",
+            f"Battery: {self.logging.sample.sensors.power.bat_voltage:.2f} V",
+        ])
         self._first_sample_user_message_sent = True
-
-
 
     # ------------------------------------------------------------------------------------------------------------------
     def __del__(self):

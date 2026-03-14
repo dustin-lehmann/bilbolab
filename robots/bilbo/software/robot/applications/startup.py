@@ -14,9 +14,9 @@ top_level_module = os.path.expanduser("~/robot/software")
 if top_level_module not in sys.path:
     sys.path.insert(0, top_level_module)
 
-from core.utils.button import Button
-from core.utils.network import get_current_user, get_own_hostname, getLocalIP_RPi, check_internet, get_wifi_ssid
-from core.utils.bluetooth.joystick_utils import scan_and_connect, find_connected_device_with_pattern
+from core.hardware.button import Button
+from core.hardware.network import get_current_user, get_own_hostname, getLocalIP_RPi, check_internet, get_wifi_ssid
+from core.hardware.bluetooth.joystick_utils import scan_and_connect, find_connected_device_with_pattern
 from hardware.board_config import getBoardConfig
 from robot.utilities.display.display import Display
 from robot.utilities.display.pages import StatusPage

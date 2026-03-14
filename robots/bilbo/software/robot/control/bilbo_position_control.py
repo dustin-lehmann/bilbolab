@@ -18,6 +18,7 @@ import dataclasses
 import enum
 import math
 import struct
+import threading
 import time
 import zlib
 from typing import Any
@@ -48,7 +49,7 @@ from robot.lowlevel.stm32_control import (
     bilbo_position_control_config_t,
 )
 from robot.lowlevel.stm32_sample import BILBO_LL_Sample
-from core.utils.control.lib_control.motion_planning import (
+from core.utils.control_lib.lib_control.motion_planning import (
     plan_path as _plan_path,
     plan_path_mp as _plan_path_mp,
     Waypoint as PlannerWaypoint,
@@ -150,6 +151,19 @@ class TurnToHeadingCommand:
     active: bool = False
 
 
+@dataclasses.dataclass
+class MoveToPoseCommand:
+    """Tracking data for active move_to_pose command"""
+    x: float = 0.0
+    y: float = 0.0
+    heading: float = 0.0
+    max_speed: float = 0.0
+    max_angular_speed: float = 0.0
+    timeout: float = 0.0
+    active: bool = False
+    phase: str = ''  # 'move' or 'turn'
+
+
 # =============================================================================
 # EVENTS AND CALLBACKS
 # =============================================================================
@@ -177,6 +191,11 @@ class PositionControlEvents:
     turn_to_heading_started: Event
     turn_to_heading_completed: Event
     turn_to_heading_timeout: Event
+
+    # Compound pose command events
+    move_to_pose_started: Event
+    move_to_pose_completed: Event
+    move_to_pose_timeout: Event
 
     # Mode change
     mode_changed: Event = Event(flags=EventFlag('mode', PositionControlMode))
@@ -237,6 +256,11 @@ class PositionControlWifiEvents(WifiEventContainer):
     turn_to_heading_completed: WifiEvent = _PC_WIFI_EVENT
     turn_to_heading_timeout: WifiEvent = _PC_WIFI_EVENT
 
+    # Compound pose command events
+    move_to_pose_started: WifiEvent = _PC_WIFI_EVENT
+    move_to_pose_completed: WifiEvent = _PC_WIFI_EVENT
+    move_to_pose_timeout: WifiEvent = _PC_WIFI_EVENT
+
     # Planning
     path_planning_started: WifiEvent = _PC_WIFI_EVENT
     path_planned: WifiEvent = _PC_WIFI_EVENT
@@ -293,6 +317,7 @@ class BILBO_PositionControl:
         # Track active single-point commands for logging
         self._current_move_to_point = MoveToPointCommand()
         self._current_turn_to_heading = TurnToHeadingCommand()
+        self._current_move_to_pose = MoveToPoseCommand()
 
         # Track current path data for visualization
         self._current_path_points: list[tuple[float, float]] = []
@@ -382,6 +407,11 @@ class BILBO_PositionControl:
     def current_turn_to_heading_command(self) -> TurnToHeadingCommand | None:
         """Active turn_to_heading command, or None if not active"""
         return self._current_turn_to_heading if self._current_turn_to_heading.active else None
+
+    @property
+    def current_move_to_pose_command(self) -> MoveToPoseCommand | None:
+        """Active move_to_pose command, or None if not active"""
+        return self._current_move_to_pose if self._current_move_to_pose.active else None
 
     # =========================================================================
     # CONFIGURATION
@@ -857,16 +887,18 @@ class BILBO_PositionControl:
     # =========================================================================
 
     def _run_planner(self, start, target, waypoints, obstacles, bounds, seed,
-                     target_heading=None):
+                     target_heading=None, heading_strength=1.0):
         """Dispatch to RRT or PRM based on config.method."""
         if self._planning_config.method == 'prm':
             return self._plan_prm(start, target, waypoints, bounds,
-                                  target_heading=target_heading)
+                                  target_heading=target_heading,
+                                  heading_strength=heading_strength)
         return self._plan_rrt(start, target, waypoints, obstacles, bounds, seed,
-                              target_heading=target_heading)
+                              target_heading=target_heading,
+                              heading_strength=heading_strength)
 
     def _plan_rrt(self, start, target, waypoints, obstacles, bounds, seed,
-                  target_heading=None):
+                  target_heading=None, heading_strength=1.0):
         """Plan using RRT/RRT* (existing behavior, extracted)."""
         cfg = self._planning_config
         return _plan_path_mp(
@@ -886,9 +918,11 @@ class BILBO_PositionControl:
             goal_bias=cfg.rrt.goal_bias,
             rewire_radius=cfg.rrt.rewire_radius,
             target_heading=target_heading,
+            heading_strength=heading_strength,
         )
 
-    def _plan_prm(self, start, target, waypoints, bounds, target_heading=None):
+    def _plan_prm(self, start, target, waypoints, bounds, target_heading=None,
+                  heading_strength=1.0):
         """Plan using PRM. Roadmap must be built beforehand via build_prm_map()."""
         if self._prm_roadmap is None or not self._prm_roadmap.is_built():
             self.logger.error("PRM roadmap not built. Call build_prm_map() first.")
@@ -900,6 +934,7 @@ class BILBO_PositionControl:
             waypoints=waypoints or None,
             smoothing=cfg.smoothing,
             target_heading=target_heading,
+            heading_strength=heading_strength,
         )
 
     def plan_and_follow(self,
@@ -915,7 +950,8 @@ class BILBO_PositionControl:
                         seed: int | None = None,
                         start: tuple[float, float] | None = None,
                         blocking: bool = False,
-                        target_heading: float | None = None) -> bool:
+                        target_heading: float | None = None,
+                        heading_strength: float = 1.0) -> bool:
         """
         Plan a collision-free path from the current position to target,
         load it onto the STM32, and start following it.
@@ -939,6 +975,8 @@ class BILBO_PositionControl:
             allow_reverse: Allow reverse driving
             seed: RNG seed for motion planner reproducibility
             target_heading: Desired heading [rad] at the target (None = unconstrained)
+            heading_strength: Magnitude of the clamped end tangent (default 1.0).
+                Larger values create a longer approach corridor aligned with target_heading.
             start: Override start position (default: current estimation state)
             blocking: If True, block until path finished or timeout
 
@@ -988,7 +1026,7 @@ class BILBO_PositionControl:
             self._log_planner_inputs(start, target, planner_waypoints, planner_obstacles, planner_bounds)
             dense_points = self._run_planner(
                 start, target, planner_waypoints, planner_obstacles, planner_bounds, seed,
-                target_heading=target_heading)
+                target_heading=target_heading, heading_strength=heading_strength)
         except (ValueError, RuntimeError, TimeoutError) as e:
             self.logger.error(f"Motion planning failed: {e}")
             return False
@@ -1058,7 +1096,8 @@ class BILBO_PositionControl:
                   bounds: dict | tuple | None = None,
                   seed: int | None = None,
                   start: tuple[float, float] | None = None,
-                  target_heading: float | None = None) -> list[tuple[float, float]] | None:
+                  target_heading: float | None = None,
+                  heading_strength: float = 1.0) -> list[tuple[float, float]] | None:
         """
         Plan a path without loading or starting it. Useful for preview/visualization.
         Uses stored obstacles merged with any extra obstacles passed here.
@@ -1089,7 +1128,7 @@ class BILBO_PositionControl:
         try:
             return self._run_planner(
                 start, target, planner_waypoints, planner_obstacles, planner_bounds, seed,
-                target_heading=target_heading)
+                target_heading=target_heading, heading_strength=heading_strength)
         except (ValueError, RuntimeError, TimeoutError) as e:
             self.logger.error(f"Motion planning failed: {e}")
             return None
@@ -1389,6 +1428,154 @@ class BILBO_PositionControl:
         self.logger.info(f"Turn to heading completed ({math.degrees(heading):.1f} deg)")
         return True
 
+    # ------------------------------------------------------------------------------------------------------------------
+    def move_to_pose(self, x: float, y: float, heading: float,
+                     max_speed: float = 0.0,
+                     max_angular_speed: float = 1.0,
+                     position_tolerance: float = 0.0,
+                     max_corrections: int = 3,
+                     timeout: float = 0.0,
+                     blocking: bool = False) -> bool:
+        """
+        Drive to a pose (position + heading).
+        First moves to the target point, then rotates to the target heading.
+        If turning causes the robot to drift away from the target position,
+        it repeats the move+turn cycle up to max_corrections times.
+
+        Args:
+            x, y: Target position in world coordinates [m]
+            heading: Target heading [rad]
+            max_speed: Maximum speed for move phase (0 = use config default)
+            max_angular_speed: Maximum turn rate for turn phase [rad/s]
+            position_tolerance: Max drift before re-correcting [m] (0 = use arrival_tolerance from config)
+            max_corrections: Maximum number of move+turn correction cycles
+            timeout: Total command timeout (0 = no timeout)
+            blocking: If True, block until pose reached or timeout
+        """
+        if self._top_level_control_mode != BILBO_Control_Mode.POSITION:
+            self.logger.warning(
+                f"Cannot move to pose: not in POSITION mode (current: "
+                f"{self._top_level_control_mode.name if self._top_level_control_mode else 'None'})"
+            )
+            return False
+
+        if self.is_busy:
+            self.logger.warning(f"Cannot move to pose: already busy (mode: {self._mode.name})")
+            return False
+
+        self._current_move_to_pose = MoveToPoseCommand(
+            x=x, y=y, heading=heading, max_speed=max_speed,
+            max_angular_speed=max_angular_speed, timeout=timeout,
+            active=True, phase='move',
+        )
+
+        self.events.move_to_pose_started.set()
+        self.wifi_events.move_to_pose_started.send(
+            data=self._common_event_data(
+                target={'x': x, 'y': y},
+                heading=heading, heading_deg=math.degrees(heading),
+                max_speed=max_speed, max_angular_speed=max_angular_speed,
+                timeout=timeout,
+            ),
+            flags=self._WIFI_FLAGS,
+        )
+        self.logger.info(f"Moving to pose ({x:.2f}, {y:.2f}, {math.degrees(heading):.1f} deg)")
+
+        # Resolve position tolerance
+        tol = position_tolerance if position_tolerance > 0 else self._config.arrival_tolerance
+
+        def _remaining(start_time):
+            if timeout <= 0:
+                return 0.0
+            r = timeout - (time.time() - start_time)
+            return r if r > 0.1 else -1.0  # -1 signals expired
+
+        def _emit_timeout(phase):
+            self._current_move_to_pose.active = False
+            self.logger.warning(f"Move to pose failed during {phase} phase")
+            self.events.move_to_pose_timeout.set()
+            self.wifi_events.move_to_pose_timeout.send(
+                data=self._common_event_data(
+                    target={'x': x, 'y': y},
+                    heading=heading, heading_deg=math.degrees(heading),
+                    phase=phase,
+                ),
+                flags=self._WIFI_FLAGS,
+            )
+
+        def _execute():
+            start_time = time.time()
+
+            for attempt in range(1 + max_corrections):
+                # ── Move to point ────────────────────────────────────────
+                self._current_move_to_pose.phase = 'move'
+                move_timeout = _remaining(start_time)
+                if move_timeout < 0:
+                    _emit_timeout('move')
+                    return False
+
+                move_success = self.move_to_point(
+                    x=x, y=y, max_speed=max_speed, timeout=move_timeout, blocking=True,
+                )
+                if not move_success:
+                    _emit_timeout('move')
+                    return False
+
+                # ── Turn to heading ──────────────────────────────────────
+                self._current_move_to_pose.phase = 'turn'
+                turn_timeout = _remaining(start_time)
+                if turn_timeout < 0:
+                    _emit_timeout('turn')
+                    return False
+
+                turn_success = self.turn_to_heading(
+                    heading=heading, max_angular_speed=max_angular_speed,
+                    timeout=turn_timeout, blocking=True,
+                )
+                if not turn_success:
+                    _emit_timeout('turn')
+                    return False
+
+                # ── Check position drift ─────────────────────────────────
+                pos = self._get_current_position()
+                if pos is not None:
+                    dx = pos[0] - x
+                    dy = pos[1] - y
+                    dist = math.sqrt(dx * dx + dy * dy)
+                    if dist <= tol:
+                        break  # close enough
+                    if attempt < max_corrections:
+                        self.logger.info(
+                            f"Position drifted {dist:.3f}m during turn, "
+                            f"correcting (attempt {attempt + 1}/{max_corrections})"
+                        )
+                    else:
+                        self.logger.warning(
+                            f"Position still {dist:.3f}m off after {max_corrections} corrections"
+                        )
+                else:
+                    break  # can't check, accept result
+
+            self._current_move_to_pose.active = False
+            self.logger.info(
+                f"Reached pose ({x:.2f}, {y:.2f}, {math.degrees(heading):.1f} deg)"
+            )
+            self.events.move_to_pose_completed.set()
+            self.wifi_events.move_to_pose_completed.send(
+                data=self._common_event_data(
+                    target={'x': x, 'y': y},
+                    heading=heading, heading_deg=math.degrees(heading),
+                ),
+                flags=self._WIFI_FLAGS,
+            )
+            return True
+
+        if blocking:
+            return _execute()
+
+        threading.Thread(target=_execute, daemon=True).start()
+        return True
+
     # =========================================================================
     # RESET
     # =========================================================================
@@ -1410,6 +1597,7 @@ class BILBO_PositionControl:
             # Clear command tracking
             self._current_move_to_point = MoveToPointCommand()
             self._current_turn_to_heading = TurnToHeadingCommand()
+            self._current_move_to_pose = MoveToPoseCommand()
             self.logger.info("Position control reset")
         else:
             self.logger.error("Failed to reset position control")
@@ -1693,6 +1881,7 @@ class BILBO_PositionControl:
             # Clear command tracking
             self._current_move_to_point = MoveToPointCommand()
             self._current_turn_to_heading = TurnToHeadingCommand()
+            self._current_move_to_pose = MoveToPoseCommand()
             # Notify host that path was cleared by firmware
             if had_path:
                 self.wifi_events.path_cleared.send(data=self._common_event_data(), flags=self._WIFI_FLAGS)
@@ -1740,6 +1929,7 @@ class BILBO_PositionControl:
             self._current_index = 0
             self._current_move_to_point = MoveToPointCommand()
             self._current_turn_to_heading = TurnToHeadingCommand()
+            self._current_move_to_pose = MoveToPoseCommand()
 
     # =========================================================================
     # UTILITY METHODS
@@ -1858,6 +2048,7 @@ class BILBO_PositionControl:
                 CommandArgument(name='allow_reverse', type=bool, optional=True, default=False),
                 CommandArgument(name='seed', type=int, optional=True, default=None),
                 CommandArgument(name='target_heading', type=float, optional=True, default=None),
+                CommandArgument(name='heading_strength', type=float, optional=True, default=1.0),
             ],
             description='Plan path from current position to target and follow it',
             execute_in_thread=True
@@ -1873,6 +2064,7 @@ class BILBO_PositionControl:
                 CommandArgument(name='bounds', type=dict, optional=True, default=None),
                 CommandArgument(name='seed', type=int, optional=True, default=None),
                 CommandArgument(name='target_heading', type=float, optional=True, default=None),
+                CommandArgument(name='heading_strength', type=float, optional=True, default=1.0),
             ],
             description='Plan path from current position to target (preview only, no load/start)',
             execute_in_thread=True
@@ -1907,6 +2099,21 @@ class BILBO_PositionControl:
                 CommandArgument(name='timeout', type=float, optional=True, default=0.0)
             ],
             description='Turn to a heading (radians)'
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='position_control_move_to_pose',
+            function=self._wifi_move_to_pose,
+            arguments=[
+                'x', 'y', 'heading',
+                CommandArgument(name='max_speed', type=float, optional=True, default=0.0),
+                CommandArgument(name='max_angular_speed', type=float, optional=True, default=1.0),
+                CommandArgument(name='position_tolerance', type=float, optional=True, default=0.0),
+                CommandArgument(name='max_corrections', type=int, optional=True, default=3),
+                CommandArgument(name='timeout', type=float, optional=True, default=0.0),
+            ],
+            description='Move to a pose (position + heading)',
+            execute_in_thread=True
         )
 
         # Status
@@ -1950,7 +2157,7 @@ class BILBO_PositionControl:
     def _wifi_plan_and_follow(self, target, waypoints=None, obstacles=None, bounds=None,
                                stop_indices=None, max_speed=0.0, max_spacing=0.0,
                                timeout=0.0, allow_reverse=False, seed=None,
-                               target_heading=None) -> bool:
+                               target_heading=None, heading_strength=1.0) -> bool:
         """Plan and follow path from WiFi command"""
         # Parse target from dict or list
         if isinstance(target, dict):
@@ -1969,10 +2176,11 @@ class BILBO_PositionControl:
             allow_reverse=bool(allow_reverse),
             seed=int(seed) if seed is not None else None,
             target_heading=float(target_heading) if target_heading is not None else None,
+            heading_strength=float(heading_strength),
         )
 
     def _wifi_plan_path(self, target, waypoints=None, obstacles=None, bounds=None, seed=None,
-                         target_heading=None) -> bool:
+                         target_heading=None, heading_strength=1.0) -> bool:
         """Plan path from WiFi command. Plans, emits preview event, and loads onto STM32 (without starting)."""
         if self._top_level_control_mode != BILBO_Control_Mode.POSITION:
             self.logger.warning(
@@ -1993,6 +2201,7 @@ class BILBO_PositionControl:
             bounds=bounds,
             seed=int(seed) if seed is not None else None,
             target_heading=float(target_heading) if target_heading is not None else None,
+            heading_strength=float(heading_strength),
         )
 
         if dense_points is None or len(dense_points) < 2:
@@ -2040,6 +2249,18 @@ class BILBO_PositionControl:
     def _wifi_turn_to(self, heading: float, max_angular_speed: float = 0.0, timeout: float = 0.0) -> bool:
         """Turn to heading from WiFi command"""
         return self.turn_to_heading(heading=heading, max_angular_speed=max_angular_speed, timeout=timeout)
+
+    def _wifi_move_to_pose(self, x: float, y: float, heading: float,
+                           max_speed: float = 0.0, max_angular_speed: float = 1.0,
+                           position_tolerance: float = 0.0, max_corrections: int = 3,
+                           timeout: float = 0.0) -> bool:
+        """Move to pose from WiFi command (runs in thread via execute_in_thread)"""
+        return self.move_to_pose(
+            x=x, y=y, heading=heading,
+            max_speed=max_speed, max_angular_speed=max_angular_speed,
+            position_tolerance=position_tolerance, max_corrections=max_corrections,
+            timeout=timeout, blocking=True,
+        )
 
     def _wifi_build_prm(self) -> bool:
         """Build PRM roadmap from WiFi command."""

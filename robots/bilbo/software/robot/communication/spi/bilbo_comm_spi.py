@@ -9,8 +9,9 @@ from core.utils.dataclass_utils import from_dict
 # from utils.exit import ExitHandler
 from robot.lowlevel.stm32_sample import bilbo_ll_sample_struct, BILBO_LL_Sample
 from core.utils.ctypes_utils import bytes_to_value
-from robot.lowlevel.stm32_sample import SAMPLE_BUFFER_LL_SIZE
+from robot.lowlevel.stm32_sample import SAMPLE_BUFFER_LL_SIZE, MAX_PENDING_BATCHES
 from hardware.hardware.gpio import GPIO_Input, InterruptFlank, PullupPulldown
+from core.utils.logging_utils import Logger
 from core.utils.time import precise_sleep
 from core.utils.bytes_utils import intToByteList
 
@@ -47,6 +48,7 @@ class BILBO_SPI_Interface:
 
         self.gpio_input = None
 
+        self.logger = Logger('SPI')
         self.lock = threading.Lock()
 
         self._startSampleListening = False
@@ -110,33 +112,65 @@ class BILBO_SPI_Interface:
         if not self._startSampleListening:
             return
 
-        samples, latest_sample = self._readSamples()
-        samples = copy.deepcopy(samples)
-        for callback in self.callbacks.rx_samples:
-            callback(samples)
+        batches, latest_sample = self._readSamples()
 
-        for callback in self.callbacks.rx_latest_sample:
-            callback(latest_sample)
+        if len(batches) > 3:
+            self.logger.warning(f"SPI read returned {len(batches)} pending batches")
+
+        # Each batch is a list of sample dicts; deliver them individually
+        for batch in batches:
+            batch = copy.deepcopy(batch)
+            for callback in self.callbacks.rx_samples:
+                callback(batch)
+
+        if latest_sample is not None:
+            for callback in self.callbacks.rx_latest_sample:
+                callback(latest_sample)
 
     # ------------------------------------------------------------------------------------------------------------------
+    def _readSamples(self) -> tuple[list[list[dict]], BILBO_LL_Sample | None]:
+        """Read the multi-batch response from the firmware ring buffer.
 
-    # ------------------------------------------------------------------------------------------------------------------
-    def _readSamples(self) -> tuple[list[dict], BILBO_LL_Sample]:
-        data_rx_bytes = bytearray(SAMPLE_BUFFER_LL_SIZE * sizeof(bilbo_ll_sample_struct))
+        Wire format: [uint32_t count][batch_0][batch_1]...[batch_{count-1}]
+        The SPI transfer is always the maximum size; 'count' tells us how many
+        batches actually contain valid data.
+
+        Returns:
+            (batches, latest_sample) where batches is a list of sample-lists
+            and latest_sample is the last sample of the last batch.
+        """
+        batch_byte_size = SAMPLE_BUFFER_LL_SIZE * sizeof(bilbo_ll_sample_struct)
+        header_size = 4  # uint32_t count
+        response_size = header_size + MAX_PENDING_BATCHES * batch_byte_size
+
+        data_rx_bytes = bytearray(response_size)
         with self.lock:
             self._sendCommand(BILBO_SPI_Command_Type.READ_SAMPLE, 0)
             precise_sleep(0.005)
             self.interface.readinto(data_rx_bytes,
                                     start=0,
-                                    end=SAMPLE_BUFFER_LL_SIZE * sizeof(bilbo_ll_sample_struct),
+                                    end=response_size,
                                     write_value=0x05)
 
-        samples = []
-        for i in range(0, SAMPLE_BUFFER_LL_SIZE):
-            sample = bytes_to_value(
-                byte_data=data_rx_bytes[i * sizeof(bilbo_ll_sample_struct):(i + 1) * sizeof(bilbo_ll_sample_struct)],
-                ctype_type=bilbo_ll_sample_struct)
-            samples.append(sample)
+        # Parse count from header (little-endian uint32)
+        count = int.from_bytes(data_rx_bytes[0:4], byteorder='little', signed=False)
+        if count > MAX_PENDING_BATCHES:
+            count = MAX_PENDING_BATCHES
+        if count == 0:
+            return [], None
 
-        latest_sample = from_dict(BILBO_LL_Sample, samples[-1])
-        return samples, latest_sample
+        batches = []
+        latest_sample = None
+        for b in range(count):
+            batch_offset = header_size + b * batch_byte_size
+            samples = []
+            for i in range(SAMPLE_BUFFER_LL_SIZE):
+                sample_offset = batch_offset + i * sizeof(bilbo_ll_sample_struct)
+                sample = bytes_to_value(
+                    byte_data=data_rx_bytes[sample_offset:sample_offset + sizeof(bilbo_ll_sample_struct)],
+                    ctype_type=bilbo_ll_sample_struct)
+                samples.append(sample)
+            batches.append(samples)
+
+        latest_sample = from_dict(BILBO_LL_Sample, batches[-1][-1])
+        return batches, latest_sample

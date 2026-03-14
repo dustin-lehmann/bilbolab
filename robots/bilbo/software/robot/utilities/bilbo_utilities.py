@@ -6,7 +6,7 @@ from hardware.control_board import RobotControl_Board
 from robot.bilbo_common import BILBO_Common
 from robot.communication.bilbo_communication import BILBO_Communication
 from core.utils.events import event_definition, Event
-from core.utils.sound.sound import SoundSystem
+from core.utils.sound.sound import SoundSystem, EdgeTTSVoiceEngine, VOICE_PRESETS
 
 
 @event_definition
@@ -21,7 +21,10 @@ class BILBO_Utilities:
 
     board: RobotControl_Board
 
-    def __init__(self, core: BILBO_Common, board: RobotControl_Board, communication: BILBO_Communication):
+    def __init__(self, core: BILBO_Common,
+                 board: RobotControl_Board,
+                 communication: BILBO_Communication,
+                 sound_settings=None):
 
         self.core = core
         self.board = board
@@ -29,7 +32,13 @@ class BILBO_Utilities:
         config = self.core.config
 
         if config.electronics.sound.active:
-            self.sound_system = SoundSystem(config.electronics.sound.gain*0.25, add_robot_filter=False)
+            volume = sound_settings.volume if sound_settings else 0.5
+            voice = sound_settings.voice if sound_settings else 'female'
+            preset = VOICE_PRESETS.get(voice, VOICE_PRESETS['female'])
+            engine = EdgeTTSVoiceEngine(voice=preset['voice'])
+            self.sound_system = SoundSystem(volume=volume,
+                                            primary_engine=engine,
+                                            add_robot_filter=preset['robot_filter'])
         else:
             self.sound_system = None
 

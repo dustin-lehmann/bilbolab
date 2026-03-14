@@ -194,6 +194,8 @@ class BILBO_Control:
 
     # ------------------------------------------------------------------------------------------------------------------
     def set_mode(self, mode: BILBO_Control_Mode | int, *, wait_for_change: bool = True) -> bool:
+
+        self.logger.debug(f"Setting control mode to {mode} at tick {self.common.tick}")
         if isinstance(mode, int):
             mode_int = mode
             try:

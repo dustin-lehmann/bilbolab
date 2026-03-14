@@ -10,16 +10,16 @@ import yaml
 from core.utils.dataclass_utils import from_dict_auto
 # ======================================================================================================================
 from core.utils.exit import register_exit_callback
-from core.utils.network import getSignalStrength, check_internet
+from core.hardware.network import getSignalStrength, check_internet
 from core.utils.timecode.timecode import Timecode
 from core.utils.timecode.timecode_client import TimecodeClient
 from hardware.control_board import RobotControl_Board
-from .bilbo_definitions import BILBO_TestbedConfig
 from .config import BILBO_Config, get_bilbo_config
 from .core import get_logging_provider
 from core.utils.callbacks import callback_definition, CallbackContainer
 from core.utils.events import event_definition, Event
 from core.utils.files import file_exists
+from core.utils.experiments.experiment_wrapper import _collect_git_info
 from core.utils.json_utils import readJSON
 from core.utils.logging_utils import Logger
 from robot.paths import CONFIG_PATH, ROBOT_PATH
@@ -28,7 +28,7 @@ from robot.paths import CONFIG_PATH, ROBOT_PATH
 # ======================================================================================================================
 @event_definition
 class BILBO_Common_Interaction_Events:
-    resume: Event
+    resume: Event = Event(id='resume')
     repeat: Event
     abort: Event
 
@@ -70,7 +70,6 @@ class BILBO_Common:
 
     id: str
     config: BILBO_Config
-    testbed_config: BILBO_TestbedConfig
 
     tracker_connected: bool = False
 
@@ -85,23 +84,21 @@ class BILBO_Common:
 
         self.id = self._get_id()
         self.config = self._get_config()
-        self.testbed_config = self._get_testbed_config()
+        # self.testbed_config = self._get_testbed_config()
 
         self.connection_strength = 0
         self.internet_connected = False
         self.rpi_temperature = 0.0
         self.rpi_throttle = 0x0
 
+        self.git_info = _collect_git_info()
+
         self.logger = Logger("CORE", "INFO")
         self.timecode_listener = TimecodeClient()
         self.timecode_listener.callbacks.sync.register(self._on_timecode_sync)
-        self.timecode_listener.start()
 
-        self._thread = threading.Thread(target=self._connection_check_task)
-        self._thread.start()
-
-        self._throttle_thread = threading.Thread(target=self._throttle_check_task)
-        self._throttle_thread.start()
+        self._thread = threading.Thread(target=self._connection_check_task, daemon=True)
+        self._throttle_thread = threading.Thread(target=self._throttle_check_task, daemon=True)
 
         register_exit_callback(self.stop)
 
@@ -111,6 +108,13 @@ class BILBO_Common:
         return get_logging_provider().get_tick()
 
     # === METHODS ======================================================================================================
+    def start(self):
+        """Start background services (timecode, connection checks)."""
+        self.timecode_listener.start()
+        self._thread.start()
+        self._throttle_thread.start()
+
+    # ------------------------------------------------------------------------------------------------------------------
     def get_timecode(self) -> Timecode | None:
         return self.timecode_listener.get_timecode()
 
@@ -132,8 +136,9 @@ class BILBO_Common:
                  start: int | None = None,
                  end: int | None = None,
                  signals: list[str] | None = None,
-                 add_intermediate_samples: bool = False) -> list | None:
-        return get_logging_provider().get_data(index, start, end, signals, add_intermediate_samples)
+                 add_intermediate_samples: bool = False,
+                 callback=None):
+        return get_logging_provider().get_data(index, start, end, signals, add_intermediate_samples, callback=callback)
 
     # ------------------------------------------------------------------------------------------------------------------
     def get_lowlevel_data(self,
@@ -321,17 +326,17 @@ class BILBO_Common:
             time.sleep(1)
 
     # ------------------------------------------------------------------------------------------------------------------
-    def _get_testbed_config(self) -> BILBO_TestbedConfig:
-        testbed_file = f"{CONFIG_PATH}/testbed.yaml"
-
-        if not file_exists(testbed_file):
-            raise FileNotFoundError("Testbed file not found. Run Bilbo Setup first")
-
-        with open(testbed_file, 'r') as file:
-            config = yaml.safe_load(file)
-
-        config = from_dict_auto(BILBO_TestbedConfig, config)
-        return config
+    # def _get_testbed_config(self) -> BILBO_TestbedConfig:
+    #     testbed_file = f"{CONFIG_PATH}/testbed.yaml"
+    #
+    #     if not file_exists(testbed_file):
+    #         raise FileNotFoundError("Testbed file not found. Run Bilbo Setup first")
+    #
+    #     with open(testbed_file, 'r') as file:
+    #         config = yaml.safe_load(file)
+    #
+    #     config = from_dict_auto(BILBO_TestbedConfig, config)
+    #     return config
 
     # ------------------------------------------------------------------------------------------------------------------
     @staticmethod

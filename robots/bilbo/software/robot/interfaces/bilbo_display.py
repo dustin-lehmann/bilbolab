@@ -1,5 +1,5 @@
 from core.utils.exit import register_exit_callback
-from core.utils.network import get_wifi_ssid, check_internet, getSignalStrength
+from core.hardware.network import get_wifi_ssid, check_internet, getSignalStrength
 from robot.bilbo_common import BILBO_Common
 from robot.logging.bilbo_sample import BILBO_Sample
 from robot.utilities.display.display import Display

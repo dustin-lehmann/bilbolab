@@ -4,7 +4,7 @@ import time
 
 from core.communication.wifi.data_link import CommandArgument
 # === CUSTOM PACKAGES ==================================================================================================
-from core.utils.joystick.joystick_manager import JoystickManager, Joystick
+from core.hardware.joystick.joystick_manager import JoystickManager, Joystick
 from core.utils.logging_utils import Logger
 from core.utils.sound.sound import playSound
 from robot.bilbo_common import BILBO_Common
@@ -300,8 +300,11 @@ class BILBO_Interfaces:
     def _set_external_joystick_input(self, forward, turn):
         self._external_joystick_input = (forward, turn)
 
+        if not self.external_input_enabled:
+            return
+
         if self.control.mode == BILBO_Control_Mode.BALANCING:
-            if self.input_source == InputSource.WIFI_JOYSTICK and self.external_input_enabled:
+            if self.input_source == InputSource.WIFI_JOYSTICK:
                 self.control.set_external_input_forward_turn(forward, turn, normalized=True)
         elif self.control.mode == BILBO_Control_Mode.VELOCITY:
             self.control.set_velocity(forward, turn, normalized=True)

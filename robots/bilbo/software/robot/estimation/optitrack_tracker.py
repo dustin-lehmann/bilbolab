@@ -226,6 +226,7 @@ class TrackedBILBO:
                 self.origin.state.z
             ])
 
+
             # 2. Transform this difference vector into the local frame of the origin
             position = vector_from_global_to_local(
                 vector_in_global_frame=diff_vector,
@@ -273,7 +274,7 @@ class BILBO_OptiTrackListener:
         self.callbacks = BILBO_OptitrackListener_Callbacks()
         self.events = BILBO_OptitrackListener_Events()
         self.common = common
-        self.logger = Logger("OptiTrack Listener", "DEBUG")
+        self.logger = Logger("OptiTrack Listener", "INFO")
 
         self.tracked_origin: TrackedOrigin | None = None
         self.tracked_object: TrackedBILBO | None = None
@@ -309,16 +310,14 @@ class BILBO_OptiTrackListener:
 
     # === PRIVATE METHODS ==============================================================================================
     def _description_received_callback(self, rigid_bodies: dict):
-        self.logger.info(f"Description received: {rigid_bodies}")
+        names = list(rigid_bodies.keys())
+        self.logger.info(f"Description received: {len(names)} rigid bodies: {names}")
+        self.logger.debug(f"Full rigid body descriptions: {rigid_bodies}")
 
-        # Get the tracked origin, if available
-        testbed_config = self.common.testbed_config
-        if testbed_config.origin is not None:
-            if testbed_config.origin.id in rigid_bodies:
-                self.tracked_origin = TrackedOrigin(id=testbed_config.origin.id, definition=testbed_config.origin)
-            else:
-                self.logger.warning(f"ID {testbed_config.origin.id} not found in OptiTrack Rigid Bodies")
-                self.tracked_origin = None
+        # Validate tracked origin against available rigid bodies
+        if self.tracked_origin is not None:
+            if self.tracked_origin.id not in rigid_bodies:
+                self.logger.warning(f"Origin ID {self.tracked_origin.id} not found in OptiTrack Rigid Bodies")
 
         # Get the tracked object for the robot
         if self.common.id in rigid_bodies:
