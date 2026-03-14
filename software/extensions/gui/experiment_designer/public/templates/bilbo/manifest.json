@@ -1,0 +1,18 @@
+{
+  "bilbo": {
+    "label": "BILBO",
+    "folders": {
+      "test": {
+        "label": "Test",
+        "templates": [
+          {
+            "id": "testtest",
+            "label": "Experiment 2",
+            "file": "bilbo/test/testtest.yaml",
+            "description": "New experiment"
+          }
+        ]
+      }
+    }
+  }
+}

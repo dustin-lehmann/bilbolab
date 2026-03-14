@@ -33,6 +33,7 @@ import {JoystickAssignmentWidget} from "./js/joystick_assignment.js";
 import {BilboModeWidget} from "./js/bilbo_mode.js";
 import {CameraWidget} from "./js/camera.js";
 import {BilboLimboWidget} from "./js/bilbo_limbo.js";
+import {ExperimentDesignerWidget} from "./js/experiment_designer_widget.js";
 
 export let OBJECT_MAPPING = {
     'ButtonWidget': ButtonWidget,
@@ -78,5 +79,6 @@ export let OBJECT_MAPPING = {
     'joystick_assignment': JoystickAssignmentWidget,
     'bilbo_mode': BilboModeWidget,
     'camera': CameraWidget,
-    'bilbo_limbo': BilboLimboWidget
+    'bilbo_limbo': BilboLimboWidget,
+    'experiment_designer': ExperimentDesignerWidget
 }

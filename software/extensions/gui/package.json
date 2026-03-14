@@ -12,20 +12,21 @@
     "babel-plugin-transform-define": "^2.1.4"
   },
   "dependencies": {
+    "@babylonjs/core": "^6.0.0",
+    "@babylonjs/gui": "^6.0.0",
     "@cubejs-client/core": "^0.31.0",
     "@vitejs/plugin-vue": "^5.2.4",
     "chart.js": "^3.9.1",
     "chartjs-adapter-moment": "^1.0.1",
     "chartjs-plugin-streaming": "^2.0.0",
     "events": "^3.3.0",
+    "mathjax-full": "^3.2.2",
+    "socket.io-client": "^4.7.5",
+    "uplot": "^1.6.32",
     "vite": "^6.3.5",
     "vue": "^3.5.14",
-    "socket.io-client": "^4.7.5",
     "xterm": "^5.3.0",
-    "xterm-addon-fit": "^0.7.0-beta.2",
-    "mathjax-full": "^3.2.2",
-    "@babylonjs/core": "^6.0.0",
-    "@babylonjs/gui": "^6.0.0"
+    "xterm-addon-fit": "^0.7.0-beta.2"
   },
   "type": "module",
   "alias": {

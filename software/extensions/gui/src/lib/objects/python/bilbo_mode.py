@@ -1,7 +1,7 @@
 from typing import Any, Callable
 
 from core.utils.callbacks import callback_definition, CallbackContainer, Callback
-from core.utils.dict import update_dict
+from core.utils.dict_utils import update_dict
 from core.utils.logging_utils import Logger
 from extensions.gui.src.lib.objects.objects import Widget, Widget_Callbacks
 

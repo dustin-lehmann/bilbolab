@@ -326,6 +326,16 @@ export class GUI {
         this.bottom_container.className = 'bottom-container';
         this.bottombar.appendChild(this.bottom_container);
 
+        // Category-specific bottom group (left side, hidden by default)
+        this.bottom_category_container = document.createElement('div');
+        this.bottom_category_container.className = 'bottom-category-container hidden';
+        this.bottom_container.appendChild(this.bottom_category_container);
+
+        // Global bottom group (right side)
+        this.bottom_global_container = document.createElement('div');
+        this.bottom_global_container.className = 'bottom-global-container';
+        this.bottom_container.appendChild(this.bottom_global_container);
+
         // Emergency stop container (conditionally shown later via _initialize)
         this.emergency_container = document.createElement('div');
         this.emergency_container.className = 'emergency-container';
@@ -780,6 +790,12 @@ export class GUI {
 
         this.category.buildCategory(this.page_bar, this.category_head_bar, this.content);
 
+        // Swap category-specific bottom group (container stays visible, just empty if no group)
+        this.bottom_category_container.innerHTML = '';
+        if (category.bottom_group) {
+            category.bottom_group.attach(this.bottom_category_container);
+        }
+
         this.renderCategoryTree();
     }
 
@@ -1100,6 +1116,13 @@ export class GUI {
                 this.bottombar.classList.remove('no-terminal');
             }
 
+            // Handle category bottom group option
+            if (config.options && config.options.category_bottom_group_size) {
+                this.bottom_category_container.classList.remove('hidden');
+                const w = config.options.category_bottom_width || 0.4;
+                this.bottom_category_container.style.flex = `0 0 ${w * 100}%`;
+            }
+
             // Handle message rate display option
             this._showMessageRate = !(config.options && config.options.show_message_rate === false);
             this._messageRateWarning = (config.options && config.options.message_rate_warning) || 200;
@@ -1114,7 +1137,8 @@ export class GUI {
                         config.categories[id].config,
                         config.categories[id].pages,
                         config.categories[id].categories,
-                        config.categories[id].headbar || {},);
+                        config.categories[id].headbar || {},
+                        config.categories[id].bottom_group || null,);
 
                     this.addCategory(category);
                 }
@@ -1155,7 +1179,7 @@ export class GUI {
 
     _addBottomGroup(config) {
         this.bottom_group = new WidgetGroup(config.id, config);
-        this.bottom_group.attach(this.bottom_container);
+        this.bottom_group.attach(this.bottom_global_container);
         this.bottom_group.callbacks.get('event').register(this._onEvent.bind(this));
     }
 

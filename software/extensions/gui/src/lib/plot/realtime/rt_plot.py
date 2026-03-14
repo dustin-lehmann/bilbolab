@@ -6,7 +6,7 @@ from typing import List, Optional, Any, Union
 
 from core.utils.callbacks import callback_definition, CallbackContainer
 from core.utils.dataclass_utils import update_dataclass_from_dict
-from core.utils.dict import update_dict
+from core.utils.dict_utils import update_dict
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger
 from core.utils.network.network import getHostIP

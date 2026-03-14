@@ -1,7 +1,7 @@
 import dataclasses
 from typing import Any
 
-from core.utils.dict import ObservableDict, update_dict
+from core.utils.dict_utils import ObservableDict, update_dict
 from extensions.gui.src.lib.objects.objects import Widget
 
 

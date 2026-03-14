@@ -13,7 +13,7 @@ from core.utils.files import get_absolute_path
 from core.utils.js.vite import run_vite_app
 from core.utils.logging_utils import Logger
 from core.utils.network.network import getHostIP
-from core.utils.aiohttp_websocket_server import AioHttpWebsocketServer, AioHttpWebsocketClient
+from core.utils.websockets.aiohttp_websocket_server import AioHttpWebsocketServer, AioHttpWebsocketClient
 from extensions.gui.settings import WS_PORT_MOBILE, PORT_JS_APP
 from extensions.gui.src.gui import GUI_UpdateMessage, InitMessage
 from extensions.gui.src.lib.messages import AddMessage, AddMessageData, RemoveMessage, RemoveMessageData
@@ -23,7 +23,7 @@ from extensions.gui.src.lib.objects.python.buttons import Button
 from extensions.gui.src.lib.objects.python.checkbox import CheckboxWidget
 from extensions.gui.src.lib.objects.python.popup import Popup
 from extensions.gui.src.lib.objects.python.sliders import SliderWidget
-from core.utils.dict import update_dict
+from core.utils.dict_utils import update_dict
 
 from extensions.gui.src.lib.utilities import split_path
 

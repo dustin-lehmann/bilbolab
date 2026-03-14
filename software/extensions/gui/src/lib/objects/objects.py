@@ -8,7 +8,7 @@ import re
 
 # === CUSTOM MODULES ===================================================================================================
 from core.utils.callbacks import callback_definition, CallbackContainer
-from core.utils.dict import replaceField, update_dict, ObservableDict, replaceStringInDict
+from core.utils.dict_utils import replaceField, update_dict, ObservableDict, replaceStringInDict
 from core.utils.logging_utils import Logger
 from core.utils.uuid_utils import generate_uuid
 from extensions.gui.src.lib.messages import AddMessage, AddMessageData, RemoveMessage, RemoveMessageData

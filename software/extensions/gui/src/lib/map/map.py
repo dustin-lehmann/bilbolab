@@ -4,7 +4,7 @@ import copy
 import threading
 import time
 
-from core.utils.dict import update_dict
+from core.utils.dict_utils import update_dict
 from core.utils.events import event_definition, Event
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger

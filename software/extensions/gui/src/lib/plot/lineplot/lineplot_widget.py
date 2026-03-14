@@ -463,7 +463,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Optional, Any, Iterable
 import copy
 
-from core.utils.dict import update_dict
+from core.utils.dict_utils import update_dict
 from core.utils.time import delayed_execution
 from extensions.gui.src.lib.objects.objects import Widget
 

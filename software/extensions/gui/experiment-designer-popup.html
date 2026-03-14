@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Experiment Designer</title>
+    <link rel="icon" href="./src/lib/assets/bilbo_icon.png" type="image/x-icon"/>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #0a0a0f;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        #designer-root {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+<body>
+<div id="designer-root"></div>
+<script type="module" src="./src/experiment-designer-popup.js"></script>
+</body>
+</html>

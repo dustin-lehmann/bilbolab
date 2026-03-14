@@ -2,7 +2,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-from core.utils.dict import update_dict
+from core.utils.dict_utils import update_dict
 from extensions.gui.src.lib.objects.objects import Widget
 
 
@@ -54,8 +54,6 @@ class DigitalNumberWidget(Widget):
         if not isinstance(new_value, (int, float)):
             raise ValueError("Value must be an integer or float.")
 
-        if (new_value < self.min_value or new_value > self.max_value) and self.warn_on_out_of_bounds:
-            self.logger.warning(f"Value {new_value} is out of bounds ({self.min_value}, {self.max_value})")
         self._value = new_value
         self._sendValueToFrontend(new_value)
 

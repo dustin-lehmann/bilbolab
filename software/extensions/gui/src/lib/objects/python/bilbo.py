@@ -1,4 +1,4 @@
-from core.utils.dict import update_dict
+from core.utils.dict_utils import update_dict
 from extensions.gui.src.lib.objects.objects import Widget
 
 

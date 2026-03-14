@@ -13,7 +13,7 @@ from dataclasses import is_dataclass
 # === CUSTOM IMPORTS ===================================================================================================
 from core.utils.callbacks import callback_definition, CallbackContainer
 from core.utils.colors import rgb_to_hex
-from core.utils.dict import update_dict
+from core.utils.dict_utils import update_dict
 from core.utils.events import Event, EventFlag, pred_flag_equals, TIMEOUT
 from core.utils.exit import register_exit_callback
 from core.utils.files import get_absolute_path
@@ -91,6 +91,7 @@ class Category_Payload:
     headbar: dict
     pages: dict[str, PagePayload]
     categories: dict[str, Category_Payload]
+    bottom_group: dict | None = None
     type: str = 'category'
 
 
@@ -133,6 +134,16 @@ class Category:
         self.callbacks = Category_Callbacks()
         self.headbar = CategoryHeadbar('headbar', self, **kwargs)
         self.headbar.parent = self
+
+        # Optional per-category bottom group
+        bottom_group_size = self.configuration.pop('bottom_group_size', None)
+        if bottom_group_size:
+            self.bottom_group = Widget_Group(
+                'bottom_group', rows=bottom_group_size[0], columns=bottom_group_size[1],
+                border=False, border_width=0, title='')
+            self.bottom_group.parent = self
+        else:
+            self.bottom_group = None
 
         self.logger = Logger(f"Category {self.id}", 'DEBUG')
 
@@ -177,6 +188,13 @@ class Category:
             if not remainder:
                 return self.headbar
             return self.headbar.getObjectByPath(remainder)
+
+        if first_segment == 'bottom_group':
+            if self.bottom_group is None:
+                return None
+            if not remainder:
+                return self.bottom_group
+            return self.bottom_group.getObjectByPath(remainder)
 
         if first_segment in self.pages:
             page = self.pages[first_segment]
@@ -305,6 +323,7 @@ class Category:
             headbar=self.headbar.getPayload(),
             pages={k: v.getPayload() for k, v in self.pages.items()},
             categories={k: v.getPayload() for k, v in self.categories.items()},
+            bottom_group=self.bottom_group.getPayload() if self.bottom_group else None,
         )
         return payload
 
@@ -1005,6 +1024,8 @@ class GUISettings:
     allow_multiple_instances: bool = False
     show_message_rate: bool = True
     message_rate_warning: int = 200
+    category_bottom_group_size: list | None = None
+    category_bottom_width: float = 0.4
 
 
 @dataclasses.dataclass

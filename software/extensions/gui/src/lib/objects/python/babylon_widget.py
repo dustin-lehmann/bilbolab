@@ -1,5 +1,5 @@
-from core.utils.dict import update_dict
-from extensions.babylon.src.babylon import BabylonVisualization
+from core.utils.dict_utils import update_dict
+from extensions.libs.babylon.src.babylon import BabylonVisualization
 from extensions.gui.src.lib.objects.objects import Widget
 
 

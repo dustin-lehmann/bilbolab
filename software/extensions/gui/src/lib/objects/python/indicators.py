@@ -2,7 +2,7 @@ from typing import Any
 
 from core.utils.callbacks import CallbackContainer, callback_definition
 from extensions.gui.src.lib.objects.objects import Widget
-from core.utils.dict import update_dict, ObservableDict
+from core.utils.dict_utils import update_dict, ObservableDict
 
 
 # === CIRCLE INDICATOR =================================================================================================

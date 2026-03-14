@@ -174,8 +174,9 @@ export class Category {
      * @param {Object} [pages={}]         – map of page-definitions
      * @param {Object} [categories={}]    – map of subcategory-definitions
      * @param headbar_payload
+     * @param bottom_group_payload
      */
-    constructor(id, configuration = {}, pages = {}, categories = {}, headbar_payload = {}) {
+    constructor(id, configuration = {}, pages = {}, categories = {}, headbar_payload = {}, bottom_group_payload = null) {
         this.id = id;
 
         const default_configuration = {
@@ -213,6 +214,14 @@ export class Category {
         this.headbar = new CategoryHeadbar(headbar_payload.id, headbar_payload);
         this.headbar.callbacks.get('event').register(this.onEvent.bind(this))
 
+        // Optional per-category bottom group
+        if (bottom_group_payload) {
+            this.bottom_group = new WidgetGroup(bottom_group_payload.id, bottom_group_payload);
+            this.bottom_group.callbacks.get('event').register(this.onEvent.bind(this));
+        } else {
+            this.bottom_group = null;
+        }
+
         // build out any initially defined pages & categories
         if (Object.keys(pages).length > 0) {
             this.buildPagesFromDefinition(pages);
@@ -249,6 +258,10 @@ export class Category {
         } else if (firstSegment === 'headbar') {
             if (!remainder) return this.headbar;
             return this.headbar.getObjectByPath(remainder);
+        } else if (firstSegment === 'bottom_group') {
+            if (!this.bottom_group) return null;
+            if (!remainder) return this.bottom_group;
+            return this.bottom_group.getObjectByPath(remainder);
         }
 
         // otherwise fall back to legacy behavior
@@ -300,6 +313,11 @@ export class Category {
                 const gui = this.getGUI();
                 if (gui) {
                     gui.renderCategoryTree();
+                }
+                break;
+            case 'bottom_group_widget':
+                if (this.bottom_group) {
+                    this.bottom_group.handleAddMessage(data);
                 }
                 break;
         }
@@ -398,7 +416,8 @@ export class Category {
             cat_definition.config,
             cat_definition.pages || {},
             cat_definition.categories || {},
-            cat_definition.headbar || {}
+            cat_definition.headbar || {},
+            cat_definition.bottom_group || null
         );
         this.addCategory(new_category, cat_definition.position);
     }

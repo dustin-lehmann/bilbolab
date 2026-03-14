@@ -374,15 +374,32 @@ html, body {
 /* === BOTTOM GROUP  ================================================================================================ */
 .bottom-container {
     grid-area: bottom;
-    /*display: flex;*/
-    align-items: center;
-    justify-content: center;
+    display: flex;
+    gap: 5px;
     width: 100%;
     height: 100%;
     max-height: var(--bottom-height);
     padding: 3px;
+}
+
+.bottom-category-container {
     border-radius: 10px;
     border: 1px solid #333;
+    min-width: 0;
+    height: 100%;
+    /* flex-basis set by JS from category_bottom_width */
+}
+
+.bottom-global-container {
+    flex: 1;
+    border-radius: 10px;
+    border: 1px solid #333;
+    min-width: 0;
+    height: 100%;
+}
+
+.bottom-category-container.hidden {
+    display: none;
 }
 
 /* === FAVORITES (in category bar sidebar)  ========================================================================= */

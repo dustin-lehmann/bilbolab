@@ -8,7 +8,7 @@ import pty
 import select
 import threading
 
-from core.utils.dict import update_dict
+from core.utils.dict_utils import update_dict
 from core.utils.exit import register_exit_callback
 from extensions.gui.src.lib.objects.objects import Widget
 

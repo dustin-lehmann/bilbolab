@@ -1,6 +1,6 @@
-from core.utils.dict import update_dict
+from core.utils.dict_utils import update_dict
 from core.utils.logging_utils import Logger
-from extensions.cli.cli import CLI, CommandSet, Command, CommandArgument
+from extensions.tools.cli.cli import CLI, CommandSet, Command, CommandArgument
 from extensions.gui.src.lib.objects.objects import ObjectMessage, FunctionMessage
 
 

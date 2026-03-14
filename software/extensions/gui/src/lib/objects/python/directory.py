@@ -1,7 +1,7 @@
 import os, re
 
 from core.utils.callbacks import callback_definition, CallbackContainer
-from core.utils.dict import update_dict
+from core.utils.dict_utils import update_dict
 from core.utils.events import event_definition, Event
 from core.utils.files import get_absolute_path
 from core.utils.time import delayed_execution, Timer
