@@ -9,10 +9,10 @@ from core.utils.logging_utils import Logger
 from core.utils.network.network import getHostIP
 from core.utils.sound.sound import SoundSystem
 from core.utils.time import setInterval
-from extensions.babylon.src.babylon import BabylonVisualization, BabylonObject
-from extensions.babylon.src.lib.objects.box.box import Box
-from extensions.babylon.src.lib.objects.floor.floor import SimpleFloor
-from extensions.cli.cli import CLI, CommandSet
+from extensions.libs.babylon.src.babylon import BabylonVisualization, BabylonObject
+from extensions.libs.babylon.src.lib.objects.box.box import Box
+from extensions.libs.babylon.src.lib.objects.floor.floor import SimpleFloor
+from extensions.tools.cli.cli import CLI, CommandSet
 from extensions.gui.src.gui import GUI, Category, Page
 from extensions.gui.src.lib.objects.python.babylon_widget import BabylonWidget
 

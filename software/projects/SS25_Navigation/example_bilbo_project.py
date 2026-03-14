@@ -9,20 +9,20 @@ import numpy as np
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger, addLogRedirection, LOGGING_COLORS
 from core.utils.sound.sound import SoundSystem
-from extensions.babylon.src.babylon import BabylonVisualization
-from extensions.babylon.src.lib.objects.bilbo.bilbo import BabylonBilbo
-from extensions.babylon.src.lib.objects.box.box import WallFancy, Wall
-from extensions.babylon.src.lib.objects.floor.floor import SimpleFloor
-from extensions.cli.cli import CommandSet, CLI, Command, CommandArgument
+from extensions.libs.babylon.src.babylon import BabylonVisualization
+from extensions.libs.babylon.src.lib.objects.bilbo.bilbo import BabylonBilbo
+from extensions.libs.babylon.src.lib.objects.box.box import WallFancy, Wall
+from extensions.libs.babylon.src.lib.objects.floor.floor import SimpleFloor
+from extensions.tools.cli.cli import CommandSet, CLI, Command, CommandArgument
 from extensions.gui.src.gui import GUI, Category, Page
 from extensions.gui.src.lib.objects.python.babylon_widget import BabylonWidget
 from extensions.gui.src.lib.plot.realtime.rt_plot import RT_Plot_Widget, TimeSeries
 from simulation.core.environment import BASE_ENVIRONMENT_ACTIONS
 from simulation.objects.base_environment import BaseEnvironment
-from robots.bilbo.simulation.bilbo_model import BILBO_DynamicAgent, BILBO_Control_Mode, DEFAULT_BILBO_MODEL, \
+from robots.bilbo.simulation.model import BILBO_DynamicAgent, BILBO_Control_Mode, DEFAULT_BILBO_MODEL, \
     BILBO_EIGENSTRUCTURE_ASSIGNMENT_DEFAULT_POLES, BILBO_EIGENSTRUCTURE_ASSIGNMENT_EIGEN_VECTORS, BILBO_3D_Input, \
     BILBO_3D_State
-from extensions.joystick.joystick_manager import JoystickManager, Joystick
+from extensions.hardware.joystick.joystick_manager import JoystickManager, Joystick
 
 BILBO_MAPPINGS = {
     'bilbo1': {

@@ -4,7 +4,7 @@ import enum
 from core.utils.callbacks import callback_definition, CallbackContainer
 from core.utils.events import event_definition, Event
 from core.utils.logging_utils import Logger
-from extensions.optitrack import OptiTrack, RigidBodySample
+from extensions.hardware.optitrack import OptiTrack, RigidBodySample
 from robots.bilbo.robot.bilbo_definitions import BILBO_Config
 from robots.bilbo.testbed.tracker.tracked_objects import TrackedBILBO, TrackedOrigin, TrackedLimboBar, TrackedBox, \
     TrackedWall, Origin_OptiTrack_Config, BoxObstacle_OptiTrack_Config, WallObstacle_OptiTrack_Config, \

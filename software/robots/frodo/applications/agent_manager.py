@@ -24,7 +24,7 @@ from core.utils.exit import register_exit_callback
 from core.utils.files import file_exists
 from core.utils.logging_utils import Logger
 from core.utils.states import State
-from extensions.cli.cli import CommandSet, Command, CommandArgument
+from extensions.tools.cli.cli import CommandSet, Command, CommandArgument
 
 """
 The agent manager manages real and simulated agents and statics as well as their interactions and prepares the measurements

@@ -1,6 +1,6 @@
 from extensions.gui.src.app import App, Folder
 from extensions.gui.src.lib.objects.python.buttons import MultiStateButton, Button
-from extensions.joystick.joystick_manager import Joystick
+from extensions.hardware.joystick.joystick_manager import Joystick
 from robots.bilbo.manager.bilbo_joystick_control import BILBO_JoystickControl
 from robots.bilbo.robot.bilbo import BILBO
 from robots.bilbo.robot.bilbo_definitions import BILBO_Control_Mode

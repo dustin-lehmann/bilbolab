@@ -34,6 +34,7 @@ actions:
 **Optional fields:**
 - `timeout` - Maximum experiment duration in seconds
 - `external_input_enabled` - If true, external inputs (joystick, etc.) remain active during the experiment. Default: false (inputs are disabled during experiments)
+- `requirements` - Optional preconditions checked before the experiment starts (see below)
 
 ```yaml
 id: my_experiment
@@ -43,6 +44,158 @@ external_input_enabled: false  # Allow joystick/external control during experime
 actions:
   - # action 1
   - # action 2
+```
+
+---
+
+## Requirements
+
+The optional `requirements` field lets you define preconditions that are checked before an experiment starts. If any requirement fails, the experiment is rejected with error messages and never begins execution. Omitting a field means "don't check".
+
+When running from the host, requirements are pre-checked via a WiFi command to the robot *before* sending the full experiment, so failures are reported immediately without starting.
+
+### YAML Format
+
+```yaml
+id: navigation_experiment
+description: Navigate to waypoints
+timeout: 60.0
+
+requirements:
+  optitrack: true                    # OptiTrack must be connected
+  robot_id: "bilbo.*"               # Regex pattern, or list: ["bilbo1", "bilbo2"]
+  control_mode: "OFF"               # Required control mode before start
+  control_config: "default"         # Required control config name
+  state_ranges:                      # Dynamic state must be within bounds
+    - state: theta
+      min: -0.1
+      max: 0.1
+    - state: v
+      min: -0.05
+      max: 0.05
+
+actions:
+  - type: set_mode
+    mode: POSITION
+  # ...
+```
+
+All fields under `requirements` are optional. You can use any combination:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `optitrack` | bool | `true` = must be connected, `false` = must not be active |
+| `robot_id` | string or list | Regex pattern(s) matched against the robot's ID |
+| `control_mode` | string | Required control mode (e.g. `"OFF"`, `"BALANCING"`) |
+| `control_config` | string | Required control configuration name |
+| `state_ranges` | list | List of state field bounds to check |
+
+### State Range Entries
+
+Each entry in `state_ranges` checks a field of the robot's dynamic state:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `state` | string | State field name: `x`, `y`, `v`, `theta`, `theta_dot`, `psi`, `psi_dot` |
+| `min` | float | Minimum allowed value (optional) |
+| `max` | float | Maximum allowed value (optional) |
+
+### Python API (ExperimentBuilder)
+
+The `ExperimentBuilder` provides fluent methods for setting requirements:
+
+```python
+from robots.bilbo.robot.experiment import ExperimentBuilder
+
+exp = (ExperimentBuilder("nav_test", "Navigation test", timeout=60.0)
+       .require_optitrack()                        # OptiTrack must be connected
+       .require_robot_id("bilbo.*")                # Regex match on robot ID
+       .require_control_mode("OFF")                # Must be in OFF mode
+       .require_control_config("default")          # Must have "default" config loaded
+       .require_state_range("theta", min=-0.1, max=0.1)  # Pitch within bounds
+       .require_state_range("v", max=0.05)         # Nearly stationary
+       .set_mode("POSITION")
+       .move_to(x=1.0, y=0.0)
+       .set_mode("OFF")
+       .build())
+```
+
+### Examples
+
+**Require OptiTrack and robot to be nearly upright:**
+```yaml
+requirements:
+  optitrack: true
+  state_ranges:
+    - state: theta
+      min: -0.05
+      max: 0.05
+```
+
+**Restrict to specific robots:**
+```yaml
+requirements:
+  robot_id: ["bilbo1", "bilbo3"]
+```
+
+**Require robot to be stationary and in OFF mode:**
+```yaml
+requirements:
+  control_mode: "OFF"
+  state_ranges:
+    - state: v
+      max: 0.01
+    - state: theta_dot
+      min: -0.05
+      max: 0.05
+```
+
+---
+
+## Setup and Cleanup Actions
+
+The optional `setup_actions` and `cleanup_actions` fields define actions that run **outside** the main experiment timer:
+
+- **`setup_actions`** run sequentially during initialization, after guards are set up but before the experiment timer starts. Use for expensive preparation (e.g., building a PRM roadmap, loading a testbed).
+- **`cleanup_actions`** run sequentially after the experiment finishes (or fails), before guards are torn down. Use for resetting state (e.g., setting mode to OFF).
+
+If a setup action fails, the main experiment does **not** start. Cleanup actions and guard teardown still run.
+
+### YAML Format
+
+```yaml
+id: navigation_experiment
+description: Navigate using PRM planner
+
+setup_actions:
+  - type: load_testbed
+    file: maze.yaml
+  - type: build_roadmap
+
+cleanup_actions:
+  - type: set_mode
+    mode: "OFF"
+
+actions:
+  - type: set_mode
+    mode: POSITION
+  - type: move_to
+    x: 2.0
+    y: 1.5
+```
+
+Setup and cleanup actions support variable expressions (`$var_name`), resolved from experiment `variables`.
+
+### Execution Order
+
+```
+1. Check requirements
+2. Set up guards
+3. Run setup_actions (sequential, blocking)
+4. Start experiment timer → run main actions
+5. Main actions complete (or timeout/error)
+6. Run cleanup_actions (sequential, blocking)
+7. Tear down guards (reverse order)
 ```
 
 ---
@@ -59,7 +212,7 @@ actions:
     mode: BALANCING
   - type: beep           # Runs after mode change completes
   - type: wait_time      # Runs after beep completes
-    time_ms: 2000
+    time: 2.0
 ```
 
 ### Explicit Scheduling Options
@@ -149,7 +302,7 @@ actions:
         forward: 0.3
         turn: 0.0
       - type: wait_time
-        time_ms: 3000
+        time: 3.0
 ```
 
 Notes:
@@ -217,12 +370,12 @@ Waits for a specified duration.
 
 ```yaml
 - type: wait_time
-  time_ms: 2000
+  time: 2.0
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `time_ms` | int | 0 | Wait duration in milliseconds |
+| `time` | float | 0 | Wait duration in seconds |
 
 ---
 
@@ -451,7 +604,7 @@ Executes multiple actions sequentially as a named group. Groups are useful for o
     - type: set_velocity
       forward: 0.5
     - type: wait_time
-      time_ms: 3000
+      time: 3.0
 ```
 
 | Parameter | Type | Default | Description |
@@ -492,7 +645,7 @@ Supports three iteration modes:
   actions:
     - type: beep
     - type: wait_time
-      time_ms: 500
+      time: 0.5
 ```
 
 **2. Iterate over explicit values:**
@@ -504,7 +657,7 @@ Supports three iteration modes:
     - type: set_velocity
       forward: "${speed}"
     - type: wait_time
-      time_ms: 3000
+      time: 3.0
 ```
 
 **3. Range-based iteration:**
@@ -520,7 +673,7 @@ Supports three iteration modes:
         - type: set_velocity
           forward: 0.5
         - type: wait_time
-          time_ms: 2000
+          time: 2.0
 ```
 
 | Parameter | Type | Default | Description |
@@ -559,7 +712,7 @@ Loops can be nested. Inner loop variables are substituted correctly alongside ou
           forward: "${speed}"
           turn: "${direction}"
         - type: wait_time
-          time_ms: 2000
+          time: 2.0
 ```
 
 ---
@@ -927,9 +1080,9 @@ exp = (ExperimentBuilder("sweep_test", "Velocity sweep", timeout=60.0)
        .loop(
            actions=[
                {"type": "set_velocity", "forward": "${speed}"},
-               {"type": "wait_time", "time_ms": 3000},
+               {"type": "wait_time", "time": 3.0},
                {"type": "set_velocity", "forward": 0.0, "turn": 0.0},
-               {"type": "wait_time", "time_ms": 1000},
+               {"type": "wait_time", "time": 1.0},
            ],
            variable="speed",
            values=[0.1, 0.2, 0.3, 0.4, 0.5],
@@ -941,7 +1094,7 @@ exp = (ExperimentBuilder("sweep_test", "Velocity sweep", timeout=60.0)
 # Simple repeat
 exp2 = (ExperimentBuilder("repeat_test", "Repeat 3 times")
         .loop(
-            actions=[{"type": "beep"}, {"type": "wait_time", "time_ms": 500}],
+            actions=[{"type": "beep"}, {"type": "wait_time", "time": 0.5}],
             count=3,
         )
         .build())
@@ -1054,12 +1207,12 @@ actions:
   - type: speak
     text: "Starting balance test"
   - type: wait_time
-    time_ms: 1000
+    time: 1.0
   - type: set_mode
     mode: BALANCING
   - type: beep
   - type: wait_time
-    time_ms: 10000
+    time: 10.0
   - type: set_mode
     mode: OFF
   - type: speak
@@ -1114,7 +1267,7 @@ actions:
   - type: set_mode
     mode: BALANCING
   - type: wait_time
-    time_ms: 1000
+    time: 1.0
   - type: parallel
     actions:
       - type: speak
@@ -1125,7 +1278,7 @@ actions:
     forward: 0.3
     turn: 0.0
   - type: wait_time
-    time_ms: 3000
+    time: 3.0
   - type: parallel
     actions:
       - type: speak
@@ -1157,7 +1310,7 @@ actions:
   - type: set_mode
     mode: BALANCING
   - type: wait_time
-    time_ms: 2000
+    time: 2.0
 
   # Phase 2: Test
   - type: set_marker
@@ -1174,12 +1327,12 @@ actions:
     forward: 0.5
     turn: 0.0
   - type: wait_time
-    time_ms: 5000
+    time: 5.0
   - type: set_velocity
     forward: 0.0
     turn: 0.3
   - type: wait_time
-    time_ms: 3000
+    time: 3.0
   - type: set_velocity
     forward: 0.0
     turn: 0.0
@@ -1207,7 +1360,7 @@ actions:
   - type: set_mode
     mode: POSITION
   - type: wait_time
-    time_ms: 1000
+    time: 1.0
 
   # Set waypoints for a rectangle
   - type: set_waypoints
@@ -1313,7 +1466,7 @@ actions:
   - type: set_mode
     mode: POSITION
   - type: wait_time
-    time_ms: 1000
+    time: 1.0
 
   # Load and start path with options
   - type: load_path
@@ -1339,7 +1492,7 @@ actions:
   - type: set_mode
     mode: BALANCING
   - type: wait_time
-    time_ms: 2000
+    time: 2.0
 
   # Group 1: Forward velocity test
   - type: group
@@ -1351,13 +1504,13 @@ actions:
         forward: 0.3
         turn: 0.0
       - type: wait_time
-        time_ms: 3000
+        time: 3.0
       - type: set_velocity
         forward: 0.0
         turn: 0.0
 
   - type: wait_time
-    time_ms: 1000
+    time: 1.0
 
   # Group 2: Turn test
   - type: group
@@ -1367,13 +1520,13 @@ actions:
         forward: 0.0
         turn: 0.5
       - type: wait_time
-        time_ms: 2000
+        time: 2.0
       - type: set_velocity
         forward: 0.0
         turn: 0.0
 
   - type: wait_time
-    time_ms: 1000
+    time: 1.0
 
   # Group 3: Combined motion
   - type: group
@@ -1383,7 +1536,7 @@ actions:
         forward: 0.2
         turn: 0.3
       - type: wait_time
-        time_ms: 3000
+        time: 3.0
       - type: set_velocity
         forward: 0.0
         turn: 0.0
@@ -1424,7 +1577,7 @@ actions:
   - type: set_mode
     mode: BALANCING
   - type: wait_time
-    time_ms: 2000
+    time: 2.0
   - type: set_mode
     mode: VELOCITY
 
@@ -1440,12 +1593,12 @@ actions:
           - type: set_velocity
             forward: "${speed}"
           - type: wait_time
-            time_ms: 3000
+            time: 3.0
           - type: set_velocity
             forward: 0.0
             turn: 0.0
           - type: wait_time
-            time_ms: 1000
+            time: 1.0
 
   - type: set_mode
     mode: OFF
@@ -1463,7 +1616,7 @@ actions:
   - type: set_mode
     mode: BALANCING
   - type: wait_time
-    time_ms: 2000
+    time: 2.0
 
   # Simple count-based loop
   - type: loop
@@ -1479,14 +1632,14 @@ actions:
             forward: 0.3
             turn: 0.0
           - type: wait_time
-            time_ms: 3000
+            time: 3.0
           - type: set_velocity
             forward: 0.0
             turn: 0.0
           - type: set_mode
             mode: BALANCING
           - type: wait_time
-            time_ms: 2000
+            time: 2.0
 
   - type: set_mode
     mode: OFF
@@ -1514,7 +1667,7 @@ To get colored phase bars on your plots, add `label` to your group or long-runni
       forward: 0.5
       turn: 0.0
     - type: wait_time
-      time_ms: 3000
+      time: 3.0
 ```
 
 ---

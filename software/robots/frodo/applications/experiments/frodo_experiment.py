@@ -25,7 +25,7 @@ from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger
 from core.utils.sound.sound import speak, beep
 from core.utils.time import IntervalTimer
-from extensions.cli.cli import CommandSet, Command
+from extensions.tools.cli.cli import CommandSet, Command
 
 
 # ======================================================================================================================

@@ -12,7 +12,7 @@ from applications.FRODO.testbed.testbed_manager import FRODO_TestbedManager
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger
 from core.utils.sound.sound import SoundSystem, speak
-from extensions.cli.cli import CLI, CommandSet
+from extensions.tools.cli.cli import CLI, CommandSet
 
 
 # ======================================================================================================================

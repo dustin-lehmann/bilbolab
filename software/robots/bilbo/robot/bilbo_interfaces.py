@@ -5,9 +5,9 @@ from enum import Enum
 
 # === CUSTOM PACKAGES ==================================================================================================
 from core.utils.sound.sound import speak
-from extensions.cli.cli import CommandSet, Command, CommandArgument
+from extensions.tools.cli.cli import CommandSet, Command, CommandArgument
 from extensions.gui.src.lib.objects.python.joystick import JoystickWidget
-from extensions.joystick.joystick_manager import Joystick
+from extensions.hardware.joystick.joystick_manager import Joystick
 from core.utils.curve_utils import shape_joystick, JoystickCurve
 from robots.bilbo.robot.bilbo_control import BILBO_Control
 from robots.bilbo.robot.bilbo_core import BILBO_Core
@@ -15,9 +15,9 @@ from robots.bilbo.robot.bilbo_definitions import BILBO_Control_Mode
 from robots.bilbo.robot.bilbo_position_control import BILBO_PositionControl
 from robots.bilbo.robot.bilbo_data import bilboSampleFromDict
 from core.utils.callbacks import CallbackContainer, callback_definition, Callback
-from core.utils.events import event_definition, Event, pred_flag_contains, SubscriberListener
+from core.utils.events import event_definition, Event
 from core.utils.exit import register_exit_callback
-from robots.bilbo.robot.experiment.bilbo_experiment import BILBO_ExperimentHandler
+from robots.bilbo.robot.experiment.bilbo_experiment_handler import BILBO_ExperimentHandler
 from robots.bilbo.robot.bilbo_utilities import BILBO_Utilities
 
 # ======================================================================================================================
@@ -49,7 +49,6 @@ class BILBO_Interfaces:
     _joystick_stop_event: threading.Event
     _joystick_lock: threading.Lock
 
-    _joystick_event_listeners: list[SubscriberListener]
     joystick_enabled: bool = True
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -77,7 +76,6 @@ class BILBO_Interfaces:
         self._joystick_thread = None
         self._joystick_stop_event = threading.Event()
         self._joystick_lock = threading.Lock()
-        self._joystick_event_listeners = []
 
         register_exit_callback(self.close)
 
@@ -97,46 +95,47 @@ class BILBO_Interfaces:
 
         self.joystick = joystick
 
-        listener = self.joystick.events.button.on(self.core.setResumeEvent,
-                                                  predicate=pred_flag_contains('button', 'DPAD_RIGHT'),
-                                                  discard_data=True)
-        self._joystick_event_listeners.append(listener)
+        # Button mappings (matching on-robot bilbo_interfaces):
+        # A press      → BALANCING mode
+        # A long press → VELOCITY mode
+        # B press      → OFF mode
+        # X press      → beep
+        # Y press      → POSITION mode
+        # DPAD_UP      → enable TIC
+        # DPAD_DOWN    → disable TIC
+        # DPAD_RIGHT   → resume
+        # DPAD_LEFT    → revert
+        # L1           → reset drive
 
-        listener = self.joystick.events.button.on(self.core.setRevertEvent,
-                                                  predicate=pred_flag_contains('button', 'DPAD_LEFT'),
-                                                  discard_data=True)
-        self._joystick_event_listeners.append(listener)
+        self.joystick.buttons['A'].callbacks.pressed.register(
+            self.control.setControlMode, mode=BILBO_Control_Mode.BALANCING)
+        self.joystick.buttons['A'].callbacks.long_pressed.register(
+            self.control.setControlMode, mode=BILBO_Control_Mode.VELOCITY)
 
-        listener = self.joystick.events.button.on(Callback(self.control.enableTIC,
-                                                           inputs={'state': True},
-                                                           discard_inputs=True),
-                                                  predicate=pred_flag_contains('button', 'DPAD_UP'),
-                                                  discard_data=True)
-        self._joystick_event_listeners.append(listener)
-        listener = self.joystick.events.button.on(Callback(self.control.enableTIC,
-                                                           inputs={'state': False},
-                                                           discard_inputs=True),
-                                                  predicate=pred_flag_contains('button', 'DPAD_DOWN'),
-                                                  discard_data=True)
-        self._joystick_event_listeners.append(listener)
-        listener = self.joystick.events.button.on(Callback(self.control.setControlMode,
-                                                           inputs={'mode': BILBO_Control_Mode.BALANCING},
-                                                           discard_inputs=True),
-                                                  predicate=pred_flag_contains('button', 'A'),
-                                                  discard_data=True,
-                                                  )
-        self._joystick_event_listeners.append(listener)
-        listener = self.joystick.events.button.on(Callback(self.control.setControlMode,
-                                                           inputs={'mode': BILBO_Control_Mode.OFF},
-                                                           discard_inputs=True),
-                                                  predicate=pred_flag_contains('button', 'B'),
-                                                  )
-        self._joystick_event_listeners.append(listener)
-        listener = self.joystick.events.button.on(callback=self.core.beep,
-                                                  predicate=pred_flag_contains('button', 'X'),
-                                                  discard_data=True,
-                                                  )
-        self._joystick_event_listeners.append(listener)
+        self.joystick.buttons['B'].callbacks.pressed.register(
+            self.control.setControlMode, mode=BILBO_Control_Mode.OFF)
+
+        self.joystick.buttons['X'].callbacks.pressed.register(self.core.beep)
+
+        self.joystick.buttons['Y'].callbacks.pressed.register(
+            self.control.setControlMode, mode=BILBO_Control_Mode.POSITION)
+
+        self.joystick.buttons['L1'].callbacks.pressed.register(self.core.reset_drive)
+
+        # DPAD: on macOS these are buttons, on Linux they are hat events.
+        # Register on both so it works regardless of platform.
+        if 'DPAD_UP' in self.joystick.buttons:
+            self.joystick.buttons['DPAD_UP'].callbacks.pressed.register(
+                self.control.enableTIC, state=True)
+            self.joystick.buttons['DPAD_DOWN'].callbacks.pressed.register(
+                self.control.enableTIC, state=False)
+            self.joystick.buttons['DPAD_RIGHT'].callbacks.pressed.register(self.core.set_resume_event_robot)
+            self.joystick.buttons['DPAD_LEFT'].callbacks.pressed.register(self.core.set_revert_event_robot)
+
+        self.joystick.hat['up'].callbacks.pressed.register(self.control.enableTIC, state=True)
+        self.joystick.hat['down'].callbacks.pressed.register(self.control.enableTIC, state=False)
+        self.joystick.hat['right'].callbacks.pressed.register(self.core.set_resume_event_robot)
+        self.joystick.hat['left'].callbacks.pressed.register(self.core.set_revert_event_robot)
 
         self.set_input_source('WIFI_JOYSTICK')
         self._start_joystick_thread()
@@ -207,12 +206,6 @@ class BILBO_Interfaces:
         speak(f"Joystick {self.joystick.id} removed from {self.core.id}")
 
         self.joystick.clearAllButtonCallbacks()
-        for listener in self._joystick_event_listeners:
-            try:
-                listener.stop()
-            except Exception as e:
-                self.core.logger.error(f"Error stopping joystick event listener: {e}")
-        self._joystick_event_listeners = []
         self.joystick = None
 
         # Stop joystick thread if no input source remains
@@ -301,6 +294,9 @@ class BILBO_CLI_CommandSet(CommandSet):
         self.experiments = experiments
         self.utilities = utilities
         self.interfaces = interfaces
+
+        # Set lazily by TestbedManager when the robot connects
+        self.testbed = None
 
         beep_command = Command(name='beep',
                                function=self.core.beep,
@@ -533,11 +529,6 @@ class BILBO_CLI_CommandSet(CommandSet):
                                 default=None)
             ])
 
-        test_trajectory_experiment_command = Command(name='tte',
-                                                     function=self.experiments.test_trajectory_experiment,
-                                                     execute_in_thread=True,
-                                                     )
-
         dilc_command = Command(
             name='dilc',
             function=self._run_dilc,
@@ -572,7 +563,6 @@ class BILBO_CLI_CommandSet(CommandSet):
         experiment_command_set = CommandSet(name='experiment',
                                             commands=[test_trajectory_command,
                                                       plot_last_experiment_command,
-                                                      test_trajectory_experiment_command,
                                                       dilc_command,
                                                       test_experiment_command,
                                                       stop_experiment_command])
@@ -615,6 +605,40 @@ class BILBO_CLI_CommandSet(CommandSet):
                 CommandArgument(name='heading', short_name='h', type=float, description='Heading [rad]'),
                 CommandArgument(name='max_angular_speed', short_name='s', type=float, optional=True, default=0.0,
                                 description='Max angular speed [rad/s] (0=default)'),
+                CommandArgument(name='timeout', short_name='t', type=float, optional=True, default=0.0,
+                                description='Timeout [s] (0=none)'),
+            ]
+        )
+
+        move_to_pose_command = Command(
+            name='moveToPose',
+            function=self.position_control.move_to_pose,
+            description='Move to a pose (position + heading). Drives to the point, then turns to the heading.',
+            allow_positionals=True,
+            arguments=[
+                CommandArgument(name='x', type=float, description='X coordinate [m]'),
+                CommandArgument(name='y', type=float, description='Y coordinate [m]'),
+                CommandArgument(name='heading', short_name='h', type=float, description='Heading [rad]'),
+                CommandArgument(name='max_speed', short_name='s', type=float, optional=True, default=0.0,
+                                description='Max speed [m/s] (0=default)'),
+                CommandArgument(name='max_angular_speed', short_name='a', type=float, optional=True, default=1.0,
+                                description='Max angular speed [rad/s]'),
+                CommandArgument(name='timeout', short_name='t', type=float, optional=True, default=0.0,
+                                description='Timeout [s] (0=none)'),
+            ]
+        )
+
+        go_to_pose_command = Command(
+            name='goToPose',
+            function=self._go_to_pose,
+            description='Move to a named pose from the testbed definition',
+            allow_positionals=True,
+            arguments=[
+                CommandArgument(name='pose_id', type=str, description='Pose ID from testbed'),
+                CommandArgument(name='max_speed', short_name='s', type=float, optional=True, default=0.0,
+                                description='Max speed [m/s] (0=default)'),
+                CommandArgument(name='max_angular_speed', short_name='a', type=float, optional=True, default=1.0,
+                                description='Max angular speed [rad/s]'),
                 CommandArgument(name='timeout', short_name='t', type=float, optional=True, default=0.0,
                                 description='Timeout [s] (0=none)'),
             ]
@@ -711,6 +735,8 @@ class BILBO_CLI_CommandSet(CommandSet):
         navigation_command_set.addCommand(position_mode_command)
         navigation_command_set.addCommand(move_to_command)
         navigation_command_set.addCommand(turn_to_command)
+        navigation_command_set.addCommand(move_to_pose_command)
+        navigation_command_set.addCommand(go_to_pose_command)
         navigation_command_set.addCommand(go_to_command)
         navigation_command_set.addCommand(plan_path_command)
         navigation_command_set.addCommand(build_prm_command)
@@ -856,6 +882,29 @@ class BILBO_CLI_CommandSet(CommandSet):
             self.core.logger.info(f"Planned path to ({x:.2f}, {y:.2f}){wp_str}")
         else:
             self.core.logger.error(f"Failed to plan path to ({x:.2f}, {y:.2f})")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _go_to_pose(self, pose_id: str, max_speed: float = 0.0,
+                    max_angular_speed: float = 0.0, timeout: float = 0.0):
+        """Look up a named pose from the testbed and move to it"""
+        if self.testbed is None:
+            self.core.logger.error("No testbed available")
+            return
+
+        pose = self.testbed.poses.get(pose_id)
+        if pose is None:
+            available = ', '.join(self.testbed.poses.keys()) if self.testbed.poses else '(none)'
+            self.core.logger.error(f"Pose '{pose_id}' not found. Available: {available}")
+            return
+
+        self.core.logger.info(
+            f"Going to pose '{pose_id}' ({pose.x:.2f}, {pose.y:.2f}, psi={pose.psi:.2f} rad)"
+        )
+        self.position_control.move_to_pose(
+            x=pose.x, y=pose.y, heading=pose.psi,
+            max_speed=max_speed, max_angular_speed=max_angular_speed,
+            timeout=timeout,
+        )
 
     # ------------------------------------------------------------------------------------------------------------------
     def _build_prm(self):

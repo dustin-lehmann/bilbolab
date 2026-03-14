@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 25px 30px;
+        }
+
+        header {
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #2c3e50;
+            font-size: 1.5em;
+            margin-bottom: 6px;
+        }
+
+        .experiment-id {
+            color: #7f8c8d;
+            font-size: 0.8em;
+            font-family: monospace;
+            background: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-bottom: 6px;
+        }
+
+        .description {
+            color: #555;
+            font-size: 0.95em;
+        }
+
+        .meta-info {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            font-size: 0.8em;
+            color: #7f8c8d;
+        }
+
+        .meta-info span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Status Badge */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-badge.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-badge.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-badge.unknown {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+
+        .error-box {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            padding: 12px 16px;
+            margin-top: 12px;
+        }
+
+        .error-box-title {
+            color: #721c24;
+            font-weight: 600;
+            font-size: 0.9em;
+            margin-bottom: 6px;
+        }
+
+        .error-box-message {
+            color: #721c24;
+            font-size: 0.85em;
+        }
+
+        .error-box-action {
+            color: #856404;
+            font-size: 0.8em;
+            margin-top: 6px;
+            font-family: monospace;
+        }
+
+        section {
+            margin-bottom: 25px;
+        }
+
+        h2 {
+            color: #2c3e50;
+            font-size: 1.1em;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #eee;
+        }
+
+        /* Action List - Compact */
+        .action-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .action-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 3px solid #bdc3c7;
+            font-size: 0.85em;
+        }
+
+        .action-item:hover {
+            background: #ecf0f1;
+        }
+
+        .action-item.has-phase {
+            border-left-width: 3px;
+        }
+
+        .action-index {
+            font-family: monospace;
+            font-size: 0.75em;
+            color: #95a5a6;
+            min-width: 40px;
+            flex-shrink: 0;
+            margin-right: 8px;
+        }
+
+        .action-id {
+            font-weight: 600;
+            color: #2c3e50;
+            min-width: 180px;
+            max-width: 220px;
+            font-family: monospace;
+            font-size: 0.9em;
+            margin-right: 12px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .action-type {
+            color: #7f8c8d;
+            min-width: 110px;
+            font-family: monospace;
+            font-size: 0.85em;
+            margin-right: 12px;
+        }
+
+        .action-label {
+            color: #2980b9;
+            font-style: italic;
+            font-size: 0.85em;
+            margin-right: 12px;
+        }
+
+        .action-params {
+            color: #555;
+            font-size: 0.85em;
+            flex-grow: 1;
+            margin-right: 8px;
+        }
+
+        .action-timing {
+            font-size: 0.75em;
+            color: #95a5a6;
+            text-align: right;
+            min-width: 120px;
+        }
+
+        .action-status {
+            font-size: 0.7em;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 8px;
+            font-weight: 500;
+        }
+
+        .action-status.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .action-status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .action-status.pending {
+            background: #e2e3e5;
+            color: #6c757d;
+        }
+
+        .action-item.error-action {
+            background: #fff5f5;
+            border-left-color: #e74c3c !important;
+        }
+
+        .action-item.nested {
+            background: #f8fafc;
+            border-left-color: #bdc3c7;
+            border-left-style: dashed;
+        }
+
+        .action-item.nested .action-index {
+            color: #b0b8c0;
+            font-size: 0.7em;
+        }
+
+        .action-item.nested .action-id {
+            color: #5a6c7d;
+            font-weight: 500;
+        }
+
+        .action-item.nested .action-timing {
+            color: #b0b8c0;
+            font-style: italic;
+        }
+
+        .action-item.group-parent {
+            background: #e8f4f8;
+            font-weight: 500;
+            border-left-width: 4px;
+        }
+
+        .action-waypoints {
+            margin-top: 2px;
+            margin-bottom: 2px;
+            padding: 6px 10px;
+            background: #f0f4f8;
+            border-left: 2px solid #95a5a6;
+            border-radius: 0 4px 4px 0;
+            font-size: 0.8em;
+            font-family: monospace;
+            display: grid;
+            grid-template-columns: auto auto auto auto;
+            column-gap: 16px;
+            row-gap: 2px;
+            width: fit-content;
+        }
+
+        .action-waypoints .wp-header {
+            font-weight: 600;
+            color: #7f8c8d;
+            padding-bottom: 2px;
+            border-bottom: 1px solid #dce1e5;
+        }
+
+        .action-waypoints .wp-index {
+            color: #95a5a6;
+        }
+
+        .action-waypoints .wp-coord {
+            color: #2c3e50;
+        }
+
+        .action-waypoints .wp-type {
+            font-weight: 500;
+        }
+
+        .action-waypoints .wp-type.stop {
+            color: #e74c3c;
+        }
+
+        .action-waypoints .wp-type.pass {
+            color: #27ae60;
+        }
+
+        .action-waypoints .wp-weight {
+            color: #7f8c8d;
+        }
+
+        .action-error-msg {
+            font-size: 0.75em;
+            color: #721c24;
+            padding: 4px 8px;
+            background: #f8d7da;
+            border-radius: 3px;
+            margin-top: 4px;
+        }
+
+        .color-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            margin-right: 8px;
+            flex-shrink: 0;
+            background-color: transparent;
+        }
+
+        /* Plots - Compact */
+        .plots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 10px;
+        }
+
+        .plot-container {
+            background: #f8f9fa;
+            border-radius: 4px;
+            padding: 6px;
+        }
+
+        .plot-container h3 {
+            color: #7f8c8d;
+            font-size: 0.7em;
+            margin-bottom: 4px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .plot-container img {
+            width: 100%;
+            border-radius: 3px;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 20px;
+            padding-top: 12px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            color: #95a5a6;
+            font-size: 0.75em;
+        }
+
+        /* Phase Legend - Compact */
+        .phase-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 12px;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            align-items: center;
+        }
+
+        .phase-legend strong {
+            font-size: 0.8em;
+            color: #7f8c8d;
+        }
+
+        .phase-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.75em;
+        }
+
+        .phase-legend-color {
+            width: 14px;
+            height: 8px;
+            border-radius: 2px;
+        }
+
+        /* Logs Section */
+        .logs-container {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #1e1e1e;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.75em;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            display: flex;
+            gap: 8px;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        .log-entry:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .log-tick {
+            color: #6a9955;
+            min-width: 50px;
+            text-align: right;
+        }
+
+        .log-level {
+            min-width: 55px;
+            font-weight: 600;
+        }
+
+        .log-level.debug { color: #808080; }
+        .log-level.info { color: #4fc1ff; }
+        .log-level.warning { color: #dcdcaa; }
+        .log-level.error { color: #f14c4c; }
+        .log-level.critical { color: #ff0000; font-weight: bold; }
+
+        .log-logger {
+            color: #c586c0;
+            min-width: 120px;
+        }
+
+        .log-message {
+            color: #d4d4d4;
+            word-break: break-word;
+        }
+
+        .logs-empty {
+            color: #7f8c8d;
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .logs-count {
+            font-size: 0.8em;
+            color: #7f8c8d;
+            margin-bottom: 8px;
+        }
+
+        /* Control Config */
+        .control-config-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .config-section {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 12px 14px;
+            border: 1px solid #e9ecef;
+        }
+
+        .config-section.config-section-wide {
+            grid-column: 1 / -1;
+        }
+
+        .config-section-title {
+            color: #2c3e50;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .config-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8em;
+        }
+
+        .config-table tr:hover {
+            background: rgba(0, 0, 0, 0.03);
+        }
+
+        .config-param-name {
+            color: #555;
+            padding: 2px 8px 2px 0;
+            white-space: nowrap;
+            width: 55%;
+        }
+
+        .config-param-value {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            color: #2c3e50;
+            font-weight: 500;
+            padding: 2px 6px;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .config-param-unit {
+            color: #95a5a6;
+            font-size: 0.9em;
+            padding: 2px 0 2px 4px;
+            white-space: nowrap;
+            width: 1%;
+        }
+
+        /* K-matrix display */
+        .config-k-matrix {
+            margin-bottom: 10px;
+        }
+
+        .config-k-label {
+            font-size: 0.8em;
+            color: #555;
+            margin-bottom: 4px;
+        }
+
+        .config-k-values {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.75em;
+            color: #2c3e50;
+            background: #eef1f4;
+            border-radius: 4px;
+            padding: 6px 10px;
+            line-height: 1.6;
+        }
+
+        .config-k-row {
+            display: flex;
+            gap: 4px;
+        }
+
+        .config-k-cell {
+            min-width: 56px;
+            text-align: right;
+        }
+
+        .config-subsection {
+            font-size: 0.75em;
+            font-weight: 600;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            padding: 6px 0 3px 0;
+            border-top: 1px solid #e9ecef;
+            margin-top: 4px;
+        }
+
+        .config-subsection:first-child {
+            border-top: none;
+            margin-top: 0;
+            padding-top: 0;
+        }
+
+        /* YAML Code Block */
+        .yaml-container {
+            background: #1e1e1e;
+            border-radius: 4px;
+            padding: 16px;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            font-size: 0.8em;
+            line-height: 1.5;
+        }
+
+        .yaml-container pre {
+            margin: 0;
+            white-space: pre;
+            color: #d4d4d4;
+        }
+
+        /* YAML Syntax Highlighting */
+        .yaml-key { color: #9cdcfe; }
+        .yaml-string { color: #ce9178; }
+        .yaml-number { color: #b5cea8; }
+        .yaml-boolean { color: #569cd6; }
+        .yaml-null { color: #569cd6; }
+        .yaml-comment { color: #6a9955; font-style: italic; }
+        .yaml-list-marker { color: #d4d4d4; }
+
+        .yaml-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .yaml-header .copy-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .yaml-header .copy-btn:hover {
+            background: #2980b9;
+        }
+
+        .yaml-header .copy-btn:active {
+            background: #1f6da3;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .container {
+                box-shadow: none;
+            }
+            .plots-grid {
+                grid-template-columns: 1fr;
+            }
+            .logs-container {
+                max-height: none;
+                background: #f8f9fa;
+            }
+            .log-message {
+                color: #333;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="experiment-id">{{ experiment_id }}</div>
+            <h1>{{ title }}</h1>
+            <p class="description">{{ description }}</p>
+            <div class="meta-info">
+                {% if status %}
+                <span class="status-badge {{ status.status_class }}">{{ status.status_label }}</span>
+                {% endif %}
+                {% if date %}
+                <span>Date: {{ date }}</span>
+                {% endif %}
+                {% if num_samples %}
+                <span>Samples: {{ num_samples }}</span>
+                {% endif %}
+                {% if duration %}
+                <span>Duration: {{ duration | format_number(2) }}s</span>
+                {% endif %}
+            </div>
+            {% if status and status.is_error %}
+            <div class="error-box">
+                <div class="error-box-title">Experiment Failed</div>
+                {% if status.error_message %}
+                <div class="error-box-message">{{ status.error_message }}</div>
+                {% endif %}
+                {% if status.error_action_id %}
+                <div class="error-box-action">Failed at action: {{ status.error_action_id }}</div>
+                {% endif %}
+            </div>
+            {% elif status and status.is_timeout %}
+            <div class="error-box" style="background: #fff3cd; border-color: #ffc107;">
+                <div class="error-box-title" style="color: #856404;">Experiment Timed Out</div>
+                {% if status.error_message %}
+                <div class="error-box-message" style="color: #856404;">{{ status.error_message }}</div>
+                {% endif %}
+            </div>
+            {% elif status and status.is_aborted %}
+            <div class="error-box" style="background: #fff3cd; border-color: #ffc107;">
+                <div class="error-box-title" style="color: #856404;">Experiment Aborted</div>
+                {% if status.error_message %}
+                <div class="error-box-message" style="color: #856404;">{{ status.error_message }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </header>
+
+        <section>
+            <h2>Actions</h2>
+            <div class="action-list">
+                {% for action in actions %}
+                <div class="action-item{% if action.has_phase %} has-phase{% endif %}{% if action.is_error_action %} error-action{% endif %}{% if action.is_nested %} nested{% endif %}{% if action.is_group %} group-parent{% endif %}"
+                     style="{% if action.depth > 0 %}margin-left: {{ action.depth * 28 }}px;{% endif %}{% if action.color %}border-left-color: {{ action.color }};{% endif %}">
+                    <div class="color-indicator"{% if action.color %} style="background-color: {{ action.color }};"{% endif %}></div>
+                    <span class="action-index">{{ action.index }}</span>
+                    <span class="action-id">{{ action.id }}</span>
+                    <span class="action-type">{{ action.type }}</span>
+                    {% if action.label %}<span class="action-label">"{{ action.label }}"</span>{% endif %}
+                    <span class="action-params">{{ action.params_str }}</span>
+                    <span class="action-timing">
+                        {% if action.start_time is not none and action.end_time is not none %}
+                        {{ action.start_time | format_number(2) }}s - {{ action.end_time | format_number(2) }}s
+                        {% elif action.is_nested %}
+                        (no timing data)
+                        {% endif %}
+                    </span>
+                    {% if action.is_error %}
+                    <span class="action-status error">ERROR</span>
+                    {% elif action.is_success %}
+                    <span class="action-status completed">OK</span>
+                    {% elif action.is_pending and not action.is_nested %}
+                    <span class="action-status pending">PENDING</span>
+                    {% endif %}
+                </div>
+                {% if action.is_error and action.error_message %}
+                <div class="action-error-msg" style="margin-left: {{ action.depth * 28 + 24 }}px;">{{ action.error_message }}</div>
+                {% endif %}
+                {% if action.waypoints %}
+                <div class="action-waypoints" style="margin-left: {{ action.depth * 28 + 28 }}px;">
+                    <span class="wp-header">#</span>
+                    <span class="wp-header">Position</span>
+                    <span class="wp-header">Type</span>
+                    <span class="wp-header">Weight</span>
+                    {% for wp in action.waypoints %}
+                    <span class="wp-index">{{ loop.index }}</span>
+                    <span class="wp-coord">({{ wp.x | format_number(2) }}, {{ wp.y | format_number(2) }})</span>
+                    <span class="wp-type {% if wp.type == 'STOP' %}stop{% else %}pass{% endif %}">{{ wp.type }}</span>
+                    <span class="wp-weight">{{ wp.weight }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            {% if phase_actions %}
+            <div class="phase-legend">
+                <strong>Phase Legend:</strong>
+                {% for action in phase_actions %}
+                <div class="phase-legend-item">
+                    <div class="phase-legend-color" style="background-color: {{ action.color }};"></div>
+                    <span>{{ action.label }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </section>
+
+        <section>
+            <h2>State Plots</h2>
+            <div class="plots-grid">
+                {% for plot in plots %}
+                <div class="plot-container">
+                    <h3>{{ plot.title }}</h3>
+                    {{ plot.image }}
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        {% if trajectory_map %}
+        <section>
+            <h2>Trajectory Map</h2>
+            <div class="plot-container" style="max-width: 600px;">
+                {{ trajectory_map }}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if control_plots %}
+        <section>
+            <h2>Control Plots</h2>
+            <div class="plots-grid">
+                {% for plot in control_plots %}
+                <div class="plot-container">
+                    <h3>{{ plot.title }}</h3>
+                    {{ plot.image }}
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if control_config %}
+        <section>
+            <h2>Control Configuration</h2>
+            {% if control_config.name %}
+            <div style="font-size: 0.85em; color: #7f8c8d; margin-bottom: 12px;">
+                <strong>{{ control_config.name }}</strong>{% if control_config.description %} — {{ control_config.description }}{% endif %}
+            </div>
+            {% endif %}
+            <div class="control-config-grid">
+                {% for section in control_config.sections %}
+                <div class="config-section{% if section.wide %} config-section-wide{% endif %}">
+                    <h3 class="config-section-title">{{ section.title }}</h3>
+                    {% if section.k_matrix %}
+                    <div class="config-k-matrix">
+                        <div class="config-k-label">K (state feedback gain)</div>
+                        <div class="config-k-values">
+                            {% for row in section.k_matrix %}
+                            <div class="config-k-row">
+                                {% for val in row %}
+                                <span class="config-k-cell">{{ val }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    <table class="config-table">
+                        {% for row in section.rows %}
+                        {% if row.subsection %}
+                        <tr><td colspan="3" class="config-subsection">{{ row.subsection }}</td></tr>
+                        {% else %}
+                        <tr>
+                            <td class="config-param-name">{{ row.name }}</td>
+                            <td class="config-param-value">{{ row.value }}</td>
+                            <td class="config-param-unit">{{ row.unit }}</td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </table>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if logs %}
+        <section>
+            <h2>Logs</h2>
+            <div class="logs-count">{{ logs | length }} log entries</div>
+            <div class="logs-container">
+                {% for log in logs %}
+                <div class="log-entry">
+                    <span class="log-tick">{{ log.tick }}</span>
+                    <span class="log-level {{ log.level_name | lower }}">{{ log.level_name }}</span>
+                    <span class="log-logger">{{ log.logger }}</span>
+                    <span class="log-message">{{ log.message }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if experiment_yaml %}
+        <section>
+            <h2>Experiment Definition (YAML)</h2>
+            <p style="font-size: 0.85em; color: #7f8c8d; margin-bottom: 12px;">
+                Save this YAML file to re-run the same experiment.
+            </p>
+            <div class="yaml-header">
+                <span style="font-size: 0.8em; color: #7f8c8d;">{{ experiment_id }}.yaml</span>
+                <button class="copy-btn" onclick="copyYaml()">Copy to Clipboard</button>
+            </div>
+            <div class="yaml-container">
+                <pre id="yaml-content">{{ experiment_yaml_highlighted | safe }}</pre>
+            </div>
+            <textarea id="yaml-raw" style="position: absolute; left: -9999px;">{{ experiment_yaml_raw }}</textarea>
+        </section>
+        <script>
+            function copyYaml() {
+                const yamlRaw = document.getElementById('yaml-raw');
+                yamlRaw.style.position = 'static';
+                yamlRaw.select();
+                document.execCommand('copy');
+                yamlRaw.style.position = 'absolute';
+                yamlRaw.style.left = '-9999px';
+                const btn = document.querySelector('.copy-btn');
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = originalText; }, 2000);
+            }
+        </script>
+        {% endif %}
+
+        <footer>
+            Generated: {{ generated_at | format_date('%Y-%m-%d %H:%M:%S') }}
+        </footer>
+    </div>
+</body>
+</html>

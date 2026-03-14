@@ -7,8 +7,8 @@ import qmt
 
 from applications.FRODO.algorithm.algorithm import AlgorithmAgent, AlgorithmAgentState, INDEX_PSI, \
     AlgorithmAgentMeasurement, get_rotation_matrix, dR_dpsi_times_vec, LocalizationAlgorithm
-from core.utils.control.lib_control.estimation.data_fusion import covariance_intersection
-from core.utils.control.lib_control.orientation import align_angle
+from core.utils.control_lib.lib_control.estimation.data_fusion import covariance_intersection
+from core.utils.control_lib.lib_control.orientation import align_angle
 from core.utils.logging_utils import Logger
 
 

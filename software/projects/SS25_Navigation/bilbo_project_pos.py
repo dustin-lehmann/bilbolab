@@ -9,11 +9,11 @@ import numpy as np
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger, addLogRedirection, LOGGING_COLORS
 from core.utils.sound.sound import SoundSystem
-from extensions.babylon.src.babylon import BabylonVisualization
-from extensions.babylon.src.lib.objects.bilbo.bilbo import BabylonBilbo
-from extensions.babylon.src.lib.objects.box.box import WallFancy
-from extensions.babylon.src.lib.objects.floor.floor import SimpleFloor
-from extensions.cli.cli import CommandSet, CLI, Command, CommandArgument
+from extensions.libs.babylon.src.babylon import BabylonVisualization
+from extensions.libs.babylon.src.lib.objects.bilbo.bilbo import BabylonBilbo
+from extensions.libs.babylon.src.lib.objects.box.box import WallFancy
+from extensions.libs.babylon.src.lib.objects.floor.floor import SimpleFloor
+from extensions.tools.cli.cli import CommandSet, CLI, Command, CommandArgument
 from extensions.gui.src.gui import GUI, Category, Page
 from extensions.gui.src.lib.objects.python.babylon_widget import BabylonWidget
 from extensions.gui.src.lib.plot.realtime.rt_plot import RT_Plot_Widget, TimeSeries
@@ -28,7 +28,7 @@ from extensions.simulation.src.objects.bilbo import (
     BILBO_3D_Input,
     BILBO_3D_State,
 )
-from extensions.joystick.joystick_manager import JoystickManager, Joystick
+from extensions.hardware.joystick.joystick_manager import JoystickManager, Joystick
 
 # ======================================================================================================================
 # MAPPINGS

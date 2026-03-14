@@ -5,25 +5,28 @@ import threading
 import time
 from typing import Dict
 
-import yaml
+import yaml as yaml_module
 
 import numpy as np
 
 from core.utils.uuid_utils import generate_uuid
 from core.utils.colors import get_palette
 from core.utils.lipo import lipo_soc
+from core.utils.callbacks import Callback
 from core.utils.logging_utils import Logger
 from core.utils.time import set_timeout
 from extensions.gui.src.app import App, Folder, FolderPage
 from extensions.gui.src.gui import GUI, Category, Page
 from extensions.gui.src.lib.map.map import MapWidget
 from extensions.gui.src.lib.map.map_objects import Agent, Point, Line, Rectangle, MapObject
-from extensions.gui.src.lib.objects.objects import Widget_Group
+from extensions.gui.src.lib.objects.objects import Widget_Group, ContextMenuItem, ContextMenuGroup
 from extensions.gui.src.lib.objects.python.bilbo_mode import BilboModeWidget
 from extensions.gui.src.lib.objects.python.buttons import MultiStateButton, Button
+from extensions.gui.src.lib.objects.python.checkbox import CheckboxWidget
+from extensions.gui.src.lib.objects.python.popup import Popup
+from extensions.gui.src.lib.objects.python.experiment_designer import ExperimentDesignerWidget, ActionLibrary
 from extensions.gui.src.lib.objects.python.indicators import (
     BatteryIndicatorWidget, ConnectionIndicator, InternetIndicator, JoystickIndicator,
-    ProgressIndicator,
 )
 from extensions.gui.src.lib.objects.python.joystick import JoystickWidget
 from extensions.gui.src.lib.objects.python.number import DigitalNumberWidget
@@ -52,12 +55,14 @@ class RobotUI:
     _additional_map_objects: list[MapObject] = []
 
     # === INIT =========================================================================================================
-    def __init__(self, robot: BILBO, manager: TestbedManager, gui: GUI, app: App, application_settings):
+    def __init__(self, robot: BILBO, manager: TestbedManager, gui: GUI, app: App, application_settings,
+                 joystick_control=None):
         self.robot = robot
         self.gui = gui
         self.app = app
         self.manager = manager
         self.application_settings = application_settings
+        self.joystick_control = joystick_control
 
         self.pages: Dict[str, Page] = {}
         self.category = Category(id=robot.id, icon='🤖')
@@ -80,6 +85,14 @@ class RobotUI:
         # Register LimboBar DILC experiment events
         self.robot.experiment_handler.events.limbobar_dilc_experiment_initialized.on(
             self.on_limbobar_dilc_experiment_initialized, spawn_new_threads=True)
+
+        # Register experiment progress events
+        self.robot.experiment_handler.events.experiment_started.on(self._on_experiment_started)
+        self.robot.experiment_handler.events.experiment_finished.on(self._on_experiment_finished)
+        self.robot.experiment_handler.events.experiment_error.on(self._on_experiment_finished)
+        self.robot.experiment_handler.events.experiment_timeout.on(self._on_experiment_finished)
+        self.robot.experiment_handler.events.action_started.on(self._on_action_started)
+        self.robot.experiment_handler.events.action_finished.on(self._on_action_finished)
 
         self.robot.device.callbacks.disconnected.register(self.close)
         # Handle Mode changes
@@ -107,6 +120,10 @@ class RobotUI:
         page_debug = Page(id='debug', name='🔧 Debug', icon='🔧')
         self.build_debug_page(page_debug)
         self.category.addPage(page_debug)
+
+        page_exp = Page(id='experiment', name='🚀 Experiment', icon='🚀')
+        self.build_experiment_page(page_exp)
+        self.category.addPage(page_exp)
 
         self._built = True
 
@@ -178,78 +195,90 @@ class RobotUI:
 
         general_group.addWidget(self.pi_status_widget, width=11, height=2)
 
-        # # Context menu group
-        # joystick_group = ContextMenuGroup(id='joystick_group', name='Joysticks')
-        # self.joystick_indicator.context_menu.addItem(joystick_group)
-        #
-        # # Guard: if joystick control is not provided, stop here
-        # if js_control is None:
-        #     return
-        #
-        # self.joystick_contextmenu_items: Dict[str, dict] = {}
-        #
-        # def _register_item(joystick):
-        #     joystick_id = str(joystick.id)
-        #     item = ContextMenuItem(id=joystick_id, name=f"{joystick.name} (ID: {joystick_id})")
-        #     joystick_group.addItem(item)
-        #
-        #     # Clicking assigns the joystick to this robot
-        #     item.callbacks.click.register(
-        #         Callback(function=js_control.assignJoystick, inputs={'joystick': joystick, 'bilbo': self.robot})
-        #     )
-        #
-        #     self.joystick_contextmenu_items[joystick_id] = {
-        #         'item': item,
-        #         'joystick': joystick,
-        #         'assignment': None,
-        #     }
-        #
-        # # Initial population
-        # for joystick_id, joystick_data in js_control.getJoysticksWithAssignments().items():
-        #     _register_item(joystick_data['joystick'])
-        #
-        # # Live updates
-        # def add_joystick_menu_item(joystick, *args, **kwargs):
-        #     _register_item(joystick)
-        #
-        # def remove_joystick_menu_item(joystick, *args, **kwargs):
-        #     jid = str(joystick.id)
-        #     if jid in self.joystick_contextmenu_items:
-        #         joystick_group.removeItem(self.joystick_contextmenu_items[jid]['item'])
-        #         del self.joystick_contextmenu_items[jid]
-        #
-        # def new_assignment(joystick, robot: BILBO, *args, **kwargs):
-        #     self.logger.info(f'New assignment: {joystick.id} -> {robot.id}')
-        #     jid = str(joystick.id)
-        #     if jid in self.joystick_contextmenu_items:
-        #         item = self.joystick_contextmenu_items[jid]
-        #         if robot == self.robot:
-        #             item['item'].name = f"{item['joystick'].name} (ID: {jid}) ✅"
-        #         else:
-        #             item['item'].name = f"{item['joystick'].name} (ID: {jid}) (-> {robot.id})"
-        #
-        # def assignment_removed(joystick, robot: BILBO, *args, **kwargs):
-        #     self.logger.info(f'Assignment removed: {joystick.id} -> {robot.id}')
-        #     jid = str(joystick.id)
-        #     if jid in self.joystick_contextmenu_items:
-        #         item = self.joystick_contextmenu_items[jid]
-        #         item['item'].name = f"{item['joystick'].name} (ID: {jid})"
-        #
-        # js_control.callbacks.new_joystick.register(add_joystick_menu_item)
-        # js_control.callbacks.joystick_disconnected.register(remove_joystick_menu_item)
-        # js_control.callbacks.new_assignment.register(new_assignment)
-        # js_control.callbacks.assigment_removed.register(assignment_removed)
-        #
-        # # Click callback on the joystick indicator
-        # def joystick_indicator_click_callback(*args, **kwargs):
-        #     # Check if our robot has a joystick assigned
-        #     if js_control is not None:
-        #         joystick = js_control.robotIsAssigned(self.robot)
-        #         if joystick is not None:
-        #             # If so, open the context menu
-        #             joystick.rumble(strength=1, duration=1000)
-        #
-        # self.joystick_indicator.callbacks.click.register(joystick_indicator_click_callback)
+        # Joystick context menu
+        js_control = self.joystick_control
+
+        joystick_group = ContextMenuGroup(id='joystick_group', name='Joysticks')
+        self.joystick_indicator.context_menu.addItem(joystick_group)
+
+        if js_control is not None:
+            self.joystick_contextmenu_items: Dict[str, dict] = {}
+            no_joystick_item = ContextMenuItem(id='no_joysticks', name='No joysticks connected')
+            self._joystick_placeholder_visible = False
+
+            def _show_placeholder():
+                if not self._joystick_placeholder_visible:
+                    joystick_group.addItem(no_joystick_item)
+                    self._joystick_placeholder_visible = True
+
+            def _hide_placeholder():
+                if self._joystick_placeholder_visible:
+                    joystick_group.removeItem(no_joystick_item)
+                    self._joystick_placeholder_visible = False
+
+            def _register_item(joystick):
+                joystick_id = str(joystick.id)
+                _hide_placeholder()
+                item = ContextMenuItem(id=joystick_id, name=f"{joystick.name} (ID: {joystick_id})")
+                joystick_group.addItem(item)
+
+                item.callbacks.click.register(
+                    Callback(function=js_control.assignJoystick, inputs={'joystick': joystick, 'bilbo': self.robot})
+                )
+
+                self.joystick_contextmenu_items[joystick_id] = {
+                    'item': item,
+                    'joystick': joystick,
+                    'assignment': None,
+                }
+
+            # Initial population
+            for joystick_id, joystick_data in js_control.getJoysticksWithAssignments().items():
+                _register_item(joystick_data['joystick'])
+
+            # Show placeholder if no joysticks were found
+            if len(self.joystick_contextmenu_items) == 0:
+                _show_placeholder()
+
+            # Live updates
+            def add_joystick_menu_item(joystick, *args, **kwargs):
+                _register_item(joystick)
+
+            def remove_joystick_menu_item(joystick, *args, **kwargs):
+                jid = str(joystick.id)
+                if jid in self.joystick_contextmenu_items:
+                    joystick_group.removeItem(self.joystick_contextmenu_items[jid]['item'])
+                    del self.joystick_contextmenu_items[jid]
+                if len(self.joystick_contextmenu_items) == 0:
+                    _show_placeholder()
+
+            def new_assignment(joystick, robot: BILBO, *args, **kwargs):
+                jid = str(joystick.id)
+                if jid in self.joystick_contextmenu_items:
+                    item = self.joystick_contextmenu_items[jid]
+                    if robot == self.robot:
+                        item['item'].name = f"{item['joystick'].name} (ID: {jid}) ✅"
+                    else:
+                        item['item'].name = f"{item['joystick'].name} (ID: {jid}) (-> {robot.id})"
+
+            def assignment_removed(joystick, robot: BILBO, *args, **kwargs):
+                jid = str(joystick.id)
+                if jid in self.joystick_contextmenu_items:
+                    item = self.joystick_contextmenu_items[jid]
+                    item['item'].name = f"{item['joystick'].name} (ID: {jid})"
+
+            js_control.callbacks.new_joystick.register(add_joystick_menu_item)
+            js_control.callbacks.joystick_disconnected.register(remove_joystick_menu_item)
+            js_control.callbacks.new_assignment.register(new_assignment)
+            js_control.callbacks.assignment_removed.register(assignment_removed)
+
+            # Click on joystick indicator rumbles the assigned joystick
+            def joystick_indicator_click_callback(*args, **kwargs):
+                joystick = js_control.robotIsAssigned(self.robot)
+                if joystick is not None:
+                    joystick.rumble(strength=1, duration=1000)
+
+            self.joystick_indicator.callbacks.click.register(joystick_indicator_click_callback)
 
         # Control Group
         control_group = Widget_Group(title='Control', rows=8, columns=10, show_title=True)
@@ -379,16 +408,16 @@ class RobotUI:
         page.addWidget(states_group, column=12, width=10, height=8)
         self.x_digital_number = DigitalNumberWidget(widget_id='x_digital_number',
                                                     title='X',
-                                                    min_value=-9,
-                                                    max_value=9,
+                                                    min_value=-99,
+                                                    max_value=99,
                                                     increment=0.01,
                                                     )
         states_group.addWidget(self.x_digital_number, row=1, column=1, width=7, height=1)
 
         self.y_digital_number = DigitalNumberWidget(widget_id='y_digital_number',
                                                     title='Y',
-                                                    min_value=-9,
-                                                    max_value=9,
+                                                    min_value=-99,
+                                                    max_value=99,
                                                     increment=0.01,
                                                     )
         states_group.addWidget(self.y_digital_number, row=2, column=1, width=7, height=1)
@@ -838,17 +867,17 @@ class RobotUI:
         self.plots.append(psi_dot_plot)
         self.plots.append(position_plot)
 
-        testbed_size = self.manager.settings.testbed.size
+        testbed_size = self.manager.testbed_definition.size
         self.map_widget = MapWidget(widget_id='map_widget',
                                     title='Testbed',
-                                    limits={"x": [self.manager.settings.testbed.size['x'][0],
-                                                  self.manager.settings.testbed.size['x'][1]],
-                                            "y": [self.manager.settings.testbed.size['y'][0],
-                                                  self.manager.settings.testbed.size['y'][1]]},
-                                    initial_display_center=[(self.manager.settings.testbed.size['x'][0] +
-                                                             self.manager.settings.testbed.size['x'][1]) / 2,
-                                                            (self.manager.settings.testbed.size['y'][0] +
-                                                             self.manager.settings.testbed.size['y'][1]) / 2],
+                                    limits={"x": [self.manager.testbed_definition.size['x'][0],
+                                                  self.manager.testbed_definition.size['x'][1]],
+                                            "y": [self.manager.testbed_definition.size['y'][0],
+                                                  self.manager.testbed_definition.size['y'][1]]},
+                                    initial_display_center=[(self.manager.testbed_definition.size['x'][0] +
+                                                             self.manager.testbed_definition.size['x'][1]) / 2,
+                                                            (self.manager.testbed_definition.size['y'][0] +
+                                                             self.manager.testbed_definition.size['y'][1]) / 2],
                                     tiles=True,
                                     tile_size=0.5,
                                     show_grid=False,
@@ -1364,7 +1393,6 @@ class RobotUI:
         navigation_group.addWidget(x_input_field, row=4, column=1, width=3, height=1)
         navigation_group.addWidget(y_input_field, row=4, column=4, width=3, height=1)
 
-
         move_to_button = Button(widget_id='move_to_button', text='Move To', color=[0.4, 0.4, 0.4])
 
         navigation_group.addWidget(move_to_button, row=4, column=7, width=3, height=1)
@@ -1391,8 +1419,6 @@ class RobotUI:
 
         move_to_button.callbacks.click.register(move_to_button_clicked)
         turn_to_button.callbacks.click.register(turn_to_button_clicked)
-
-
 
         page.addWidget(self.map_widget, row=9, width=10, height=10)
 
@@ -1424,22 +1450,9 @@ class RobotUI:
         self.exp_status_text = TextWidget(widget_id='exp_status', text='Idle', font_size=11)
         experiment_group.addWidget(self.exp_status_text, row=1, column=7, width=3, height=2)
 
-        # --- Experiment progress text ---
-        self.exp_progress_text = TextWidget(widget_id='exp_progress', text='', font_size=12)
-        experiment_group.addWidget(self.exp_progress_text, row=3, column=1, width=9, height=2)
-
-        # --- Experiment progress bar ---
-        self.exp_progress_bar = ProgressIndicator(
-            widget_id='exp_progress_bar',
-            value=0.0,
-            thickness=8,
-            thickness_mode='absolute',
-            track_fill_color=[0.2, 0.5, 0.7, 1],
-            title='',
-            label='',
-        )
-        experiment_group.addWidget(self.exp_progress_bar, row=5, column=1, width=9, height=2)
-        self._exp_max_action_idx = 0
+        # --- Current action text ---
+        self.exp_action_text = TextWidget(widget_id='exp_action', text='', font_size=11)
+        experiment_group.addWidget(self.exp_action_text, row=3, column=1, width=9, height=4)
 
     # ------------------------------------------------------------------------------------------------------------------
     def build_control_page(self, page):
@@ -1527,6 +1540,8 @@ class RobotUI:
             ('position', 'Position Control', [0.4, 0.2, 0.5, 0.9], [
                 ('position_control.kp_angular', 'Kp Angular', 'rad/s per rad', 'position'),
                 ('position_control.ki_angular', 'Ki Angular', 'rad/s per rad*s', 'position'),
+                ('position_control.kp_angular_heading', 'Kp Angular Heading', 'rad/s per rad', 'position'),
+                ('position_control.ki_angular_heading', 'Ki Angular Heading', 'rad/s per rad*s', 'position'),
                 ('position_control.kp_linear', 'Kp Linear', '1/s', 'position'),
                 ('position_control.ki_linear', 'Ki Linear', '1/s^2', 'position'),
                 ('position_control.kd_linear', 'Kd Linear', '-', 'position'),
@@ -1720,6 +1735,39 @@ class RobotUI:
         set_timeout(init_estimation_debug_state, 1.0)
 
     # ------------------------------------------------------------------------------------------------------------------
+    def build_experiment_page(self, page):
+        """Build the Experiment page for running experiments."""
+        self.experiment_designer = ExperimentDesignerWidget(
+            widget_id='experiment_designer',
+            on_play=self.on_experiment_play,
+            on_stop=self.on_experiment_stop,
+            transparent=True,
+            action_library=ActionLibrary.BILBO
+        )
+
+        page.addWidget(self.experiment_designer, row=1, column=1, width=50, height=18)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def on_experiment_play(self, yaml: str = None, *args, **kwargs):
+        yaml_string = yaml
+        try:
+            definition = yaml_module.safe_load(yaml_string)
+        except Exception as e:
+            self.logger.error(f"Failed to parse experiment YAML: {e}")
+            return
+        # Use the designer's tracked file path if available
+        designer_file = self.experiment_designer.current_file_path
+        if designer_file:
+            self._show_experiment_popup(definition, source='file', file_path=designer_file,
+                                        yaml_string=yaml_string)
+        else:
+            self._show_experiment_popup(definition, source='yaml_string', yaml_string=yaml_string)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def on_experiment_stop(self, *args, **kwargs):
+        self.robot.experiment_handler.stop_experiment()
+
+    # ------------------------------------------------------------------------------------------------------------------
     def build_folder(self):
         self.app_folder = Folder(folder_id=self.robot.id, rows=3, columns=8)
         self.app_folder.addPage(FolderPage(
@@ -1852,44 +1900,7 @@ class RobotUI:
                 self.estimation_status_widget.elements['tracking'].color = [0.2, 0.6, 0.2]  # Green
             self.estimation_status_widget.updateConfig()
 
-            # Update experiment status and progress
-            exp_status = sample.experiment.status
-            exp_def = self.robot.experiment_handler.current_experiment_definition
-            if exp_status and exp_status.lower() != 'idle' and exp_status != '':
-                exp_id = sample.experiment.experiment_id or sample.experiment.experiment.id
-                total = len(exp_def.actions) if exp_def else 0
-                self.exp_status_text.text = f"Running: {exp_id}"
-
-                # Build action ID -> index and type maps from the host-side definition
-                action_type_map = {}
-                action_index_map = {}
-                if exp_def:
-                    for i, a in enumerate(exp_def.actions):
-                        action_type_map[a.id] = a.type
-                        action_index_map[a.id] = i
-
-                # 'actions' contains the currently active action IDs
-                exp_sample = sample.experiment.experiment
-                active_actions = [a for a in (exp_sample.actions or []) if a]
-                if active_actions and total > 0:
-                    # Find highest action index among active actions
-                    max_idx = max(action_index_map.get(a, 0) for a in active_actions)
-                    self._exp_max_action_idx = max(self._exp_max_action_idx, max_idx)
-                    labels = [action_type_map.get(a, a) for a in active_actions]
-                    self.exp_progress_text.text = f"({self._exp_max_action_idx + 1}/{total}) {', '.join(labels)}"
-                    self.exp_progress_bar.value = (self._exp_max_action_idx + 1) / total
-                elif active_actions:
-                    self.exp_progress_text.text = ', '.join(active_actions)
-                else:
-                    self.exp_progress_text.text = ''
-            else:
-                self.exp_status_text.text = 'Idle'
-                self.exp_progress_text.text = ''
-                if self._exp_max_action_idx > 0:
-                    self.exp_progress_bar.value = 0.0
-                    self._exp_max_action_idx = 0
-            self.exp_status_text.updateConfig()
-            self.exp_progress_text.updateConfig()
+            # Experiment progress is updated via event callbacks (_on_experiment_started, etc.)
 
         if self.robot.core.tick % 200 == 0:
             # Update the overview widgets
@@ -1933,10 +1944,10 @@ class RobotUI:
             self.pi_status_widget.updateConfig()
 
             # Joystick assigned?
-            # if js_control is not None:
-            #     self.joystick_indicator.setValue(js_control.robotIsAssigned(self.robot) is not None)
-            # else:
-            #     self.joystick_indicator.setValue(False)
+            if self.joystick_control is not None:
+                self.joystick_indicator.setValue(self.joystick_control.robotIsAssigned(self.robot) is not None)
+            else:
+                self.joystick_indicator.setValue(False)
 
         # Update the states digital numbers
         self.x_digital_number.value = sample.estimation.state.x
@@ -2032,8 +2043,88 @@ class RobotUI:
         self.control_status_widget.updateConfig()
 
     # ------------------------------------------------------------------------------------------------------------------
+    def _on_experiment_started(self, data, *args, **kwargs):
+        """Event callback: experiment has started."""
+        exp_def = self.robot.experiment_handler.current_experiment_definition
+        exp_id = ''
+        if exp_def and isinstance(exp_def, dict):
+            exp_id = exp_def.get('id', '') or exp_def.get('name', '')
+
+        self.exp_status_text.text = f"Running: {exp_id}"
+        self.exp_action_text.text = ''
+        self.exp_status_text.updateConfig()
+        self.exp_action_text.updateConfig()
+
+        # Enter playback mode in the designer and dim all actions
+        if hasattr(self, 'experiment_designer'):
+            actions = self.robot.experiment_handler.experiment_actions
+            action_ids = [a.get('id') for a in actions if a.get('id')]
+            self.experiment_designer.set_mode('playback')
+            self.experiment_designer.set_action_states({aid: 'dimmed' for aid in action_ids})
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _on_experiment_finished(self, data, *args, **kwargs):
+        """Event callback: experiment finished, errored, or timed out."""
+        self.exp_status_text.text = 'Idle'
+        self.exp_action_text.text = ''
+        self.exp_status_text.updateConfig()
+        self.exp_action_text.updateConfig()
+
+        # Exit playback mode in the designer
+        if hasattr(self, 'experiment_designer'):
+            self.experiment_designer.clear_action_states()
+            self.experiment_designer.set_mode('edit')
+
+    # ------------------------------------------------------------------------------------------------------------------
+    @staticmethod
+    def _short_params(params: dict) -> str:
+        """Return a compact one-line summary of action params for the progress bar."""
+        if not params:
+            return ''
+        parts = []
+        for k, v in params.items():
+            if isinstance(v, (dict, list)):
+                continue  # skip bulky nested values
+            parts.append(f"{k}={v}")
+        return ', '.join(parts)
+
+    def _on_action_started(self, data, *args, **kwargs):
+        """Event callback: an experiment action has started."""
+        if not isinstance(data, dict):
+            return
+        action_id = data.get('action_id', '')
+        action_type = data.get('action_type', action_id)
+
+        # Look up params from the action summary
+        params_str = ''
+        for a in self.robot.experiment_handler.experiment_actions:
+            if a.get('id') == action_id:
+                params_str = self._short_params(a.get('params', {}))
+                break
+
+        label = f"{action_type}  {params_str}" if params_str else action_type
+        self.exp_action_text.text = f"{action_id}: {label}"
+        self.exp_action_text.updateConfig()
+
+        # Highlight active action in the designer
+        if hasattr(self, 'experiment_designer'):
+            self.experiment_designer.set_action_state(action_id, 'active')
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _on_action_finished(self, data, *args, **kwargs):
+        """Event callback: an experiment action has finished."""
+        if not isinstance(data, dict):
+            return
+        action_id = data.get('action_id', '')
+        action_status = data.get('action_status', '')
+
+        if hasattr(self, 'experiment_designer'):
+            state = 'error' if action_status == 'error' else 'completed'
+            self.experiment_designer.set_action_state(action_id, state)
+
+    # ------------------------------------------------------------------------------------------------------------------
     def _run_experiment_from_picker(self):
-        """Open a native file picker and run the selected experiment (called in a background thread)."""
+        """Open a native file picker and show experiment confirmation popup."""
         from core.utils.filepicker import pick_file
         file_path = pick_file(
             title="Select experiment file",
@@ -2041,8 +2132,203 @@ class RobotUI:
         )
         if file_path is None:
             return
-        self.logger.info(f"Running experiment from file: {file_path}")
-        self.robot.experiment_handler.run_experiment_from_file(file_path, blocking=True)
+
+        try:
+            with open(file_path, 'r') as f:
+                if file_path.lower().endswith(('.yml', '.yaml')):
+                    definition = yaml_module.safe_load(f)
+                else:
+                    import json
+                    definition = json.load(f)
+        except Exception as e:
+            self.logger.error(f"Failed to load experiment file: {e}")
+            return
+
+        self._show_experiment_popup(definition, source='file', file_path=file_path)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _count_actions(self, actions: list) -> int:
+        """Count total actions recursively (including nested groups/loops)."""
+        count = 0
+        for action in actions:
+            count += 1
+            sub_actions = action.get('actions', [])
+            if isinstance(sub_actions, list):
+                count += self._count_actions(sub_actions)
+        return count
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _show_experiment_popup(self, definition: dict, source: str, file_path: str = None,
+                               yaml_string: str = None):
+        """Show a confirmation popup before starting an experiment.
+
+        Args:
+            definition: Parsed experiment definition dict.
+            source: 'file' or 'yaml_string'.
+            file_path: Path to experiment file (if source='file').
+            yaml_string: Raw YAML string (if source='yaml_string').
+        """
+        import os
+
+        # Ensure yaml_string is available for bundle export
+        if yaml_string is None:
+            yaml_string = yaml_module.dump(definition, default_flow_style=False, sort_keys=False)
+
+        exp_id = definition.get('id', 'unknown')
+        exp_description = definition.get('description', '')
+        exp_label = definition.get('label', exp_id)
+        actions = definition.get('actions', [])
+        num_actions = self._count_actions(actions)
+        exp_timeout = definition.get('timeout')
+
+        # Determine default output path
+        if file_path:
+            default_output = os.path.dirname(os.path.abspath(file_path))
+        elif self.application_settings.paths.experiments:
+            default_output = os.path.abspath(self.application_settings.paths.experiments)
+        else:
+            default_output = ''
+
+        # Build info lines
+        info_parts = [f"Actions: {num_actions}"]
+        if exp_timeout:
+            info_parts.append(f"Timeout: {exp_timeout}s")
+        action_types = [a.get('type', '?') for a in actions]
+        summary = ', '.join(action_types[:8])
+        if len(action_types) > 8:
+            summary += f', ... (+{len(action_types) - 8})'
+
+        # --- Build popup (8 rows x 8 cols) ---
+        popup = Popup(
+            popup_id=f'exp_confirm_{id(definition)}',
+            type='dialog',
+            title='Start Experiment',
+            closeable=True,
+            minimizable=False,
+            size=[520, 340],
+            grid=[8, 8],
+            disable_gui=True,
+        )
+
+        # Row 1: experiment name
+        id_label = TextWidget(widget_id='exp_info_id', text=exp_label,
+                              font_size=14, font_weight='bold',
+                              horizontal_alignment='left')
+        popup.group.addWidget(id_label, row=1, column=1, width=8, height=1)
+
+        # Row 2: description (or actions info if no description)
+        if exp_description:
+            desc_label = TextWidget(widget_id='exp_info_desc', text=exp_description,
+                                    font_size=11, horizontal_alignment='left',
+                                    text_color=[0.7, 0.7, 0.7])
+            popup.group.addWidget(desc_label, row=2, column=1, width=8, height=1)
+            info_row = 3
+        else:
+            info_row = 2
+
+        # Actions info + summary
+        info_label = TextWidget(widget_id='exp_info_actions',
+                                text='  |  '.join(info_parts),
+                                font_size=11, horizontal_alignment='left')
+        popup.group.addWidget(info_label, row=info_row, column=1, width=8, height=1)
+
+        summary_label = TextWidget(widget_id='exp_info_summary', text=summary,
+                                   font_size=10, horizontal_alignment='left',
+                                   text_color=[0.5, 0.5, 0.5])
+        popup.group.addWidget(summary_label, row=info_row + 1, column=1, width=8, height=1)
+
+        # Row 5: save checkbox + bundle checkbox
+        save_checkbox = CheckboxWidget(widget_id='exp_save_checkbox', value=False,
+                                       title='Save experiment data')
+        popup.group.addWidget(save_checkbox, row=5, column=1, width=4, height=1)
+
+        bundle_checkbox = CheckboxWidget(widget_id='exp_bundle_checkbox', value=False,
+                                          title='Save as bundle (.zip)')
+        popup.group.addWidget(bundle_checkbox, row=5, column=5, width=4, height=1)
+        bundle_checkbox.disable()
+
+        # Row 6: output path input + browse button
+        output_input = InputWidget(
+            widget_id='exp_output_path',
+            value=default_output,
+            title='Output folder:',
+            title_position='left',
+            inputFieldAlign='left',
+            inputFieldFontSize=10,
+            commit_on_blur=True,
+        )
+        popup.group.addWidget(output_input, row=6, column=1, width=7, height=1)
+        output_input.disable()
+
+        browse_button = Button(widget_id='exp_browse_btn', text='...', color=[0.3, 0.3, 0.4])
+        popup.group.addWidget(browse_button, row=6, column=8, width=1, height=1)
+        browse_button.disable()
+
+        def on_browse(*args, **kwargs):
+            def do_pick():
+                from core.utils.filepicker import pick_directory
+                current = output_input.value.strip() if output_input.value else None
+                folder = pick_directory(title='Select output folder', initial_dir=current or None)
+                if folder:
+                    output_input.value = folder
+            threading.Thread(target=do_pick, daemon=True).start()
+
+        browse_button.callbacks.click.register(on_browse)
+
+        # Wire checkbox to enable/disable output controls
+        def on_save_changed(value, *args, **kwargs):
+            output_input.enable(bool(value))
+            browse_button.enable(bool(value))
+            bundle_checkbox.enable(bool(value))
+
+        save_checkbox.callbacks.changed.register(on_save_changed)
+
+        # Row 8: buttons
+        start_button = Button(widget_id='exp_start_btn', text='Start', color=[0.2, 0.5, 0.2])
+        cancel_button = Button(widget_id='exp_cancel_btn', text='Cancel', color=[0.4, 0.2, 0.2])
+        popup.group.addWidget(start_button, row=8, column=6, width=1, height=1)
+        popup.group.addWidget(cancel_button, row=8, column=7, width=1, height=1)
+
+        def on_start(*args, **kwargs):
+            popup.close()
+            save = save_checkbox.value
+            bundle = bundle_checkbox.value if save else False
+            output = output_input.value.strip() if save else None
+            if output == '':
+                output = None
+
+            def run():
+                exp_source_dir = None
+                if source == 'file':
+                    exp_source_dir = os.path.dirname(os.path.abspath(file_path))
+                    result = self.robot.experiment_handler.run_experiment(
+                        definition,
+                        experiment_file_folder=output,
+                        source_dir=exp_source_dir,
+                        blocking=True,
+                    )
+                else:
+                    result = self.robot.experiment_handler.run_experiment_from_yaml_string(
+                        yaml_string, output=output, blocking=True
+                    )
+
+                if bundle and output and result is not None:
+                    self.robot.experiment_handler.create_experiment_bundle(
+                        output_dir=output,
+                        experiment_data=result,
+                        yaml_string=yaml_string,
+                        source_dir=exp_source_dir,
+                    )
+
+            threading.Thread(target=run, daemon=True).start()
+
+        def on_cancel(*args, **kwargs):
+            popup.close()
+
+        start_button.callbacks.click.register(on_start)
+        cancel_button.callbacks.click.register(on_cancel)
+
+        self.gui.openPopup(popup)
 
     # ------------------------------------------------------------------------------------------------------------------
     def on_dilc_experiment_initialized(self, data, *args, **kwargs):
@@ -2283,7 +2569,7 @@ class RobotUI:
             config_dict = dataclasses.asdict(config)
 
             # Block style for dicts, flow style for lists of scalars (like K matrix)
-            class BlockDumper(yaml.SafeDumper):
+            class BlockDumper(yaml_module.SafeDumper):
                 pass
 
             def represent_dict(dumper, data):
@@ -2296,7 +2582,7 @@ class RobotUI:
             BlockDumper.add_representer(dict, represent_dict)
             BlockDumper.add_representer(list, represent_list)
 
-            yaml_str = yaml.dump(config_dict, Dumper=BlockDumper, sort_keys=False)
+            yaml_str = yaml_module.dump(config_dict, Dumper=BlockDumper, sort_keys=False)
             self.gui.function(function_name='copyToClipboard', args={'text': yaml_str}, spread_args=False)
             self.logger.info("Control config YAML copied to clipboard")
         except Exception as e:
@@ -2309,10 +2595,10 @@ class RobotUI:
         except Exception:
             pass
 
-        # try:
-        #     self.app.removeFolder(self.folder)
-        # except Exception:
-        #     pass
+        try:
+            self.app.removeFolder(self.app_folder)
+        except Exception:
+            pass
 
         for plot in self.plots:
             # plot.

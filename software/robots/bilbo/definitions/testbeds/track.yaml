@@ -1,0 +1,29 @@
+id: track
+
+origin: origin-track
+
+size:
+  x: [ 0, 3 ]
+  y: [ 0, 1 ]
+
+poses:
+  - id: middle
+    x: 1.5
+    y: 0.5
+    psi: 0
+  - id: ilc_start
+    x: 0.48
+    y: 0.5
+    psi: 0
+
+obstacles:
+  - id: limbo-bar
+    type: limbo_bar
+    tracking:
+      id: "limbo-marker"
+      points: [ 1, 2, 3, 4 ]
+      x_start: 3
+      x_end: 1
+      y_start: 2
+      y_end: 4
+      limbo_direction: -1.57

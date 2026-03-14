@@ -190,7 +190,7 @@ class BILBO_Core:
 
         if self._last_stream_time is not None:
             time_between_streams = current_time - self._last_stream_time
-            if time_between_streams > 0.3:
+            if time_between_streams > 1.0:
                 self.logger.warning(
                     f"Time between two streams: {time_between_streams:.2f} seconds. "
                     f"Last tick: {self.tick}, current tick: {tick}.")

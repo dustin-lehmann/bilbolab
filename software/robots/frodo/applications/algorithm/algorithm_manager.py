@@ -12,7 +12,7 @@ from applications.FRODO.algorithm.algorithm_centralized import CentralizedAlgori
 from applications.FRODO.algorithm.algorithm_distributed import DistributedAlgorithm, DistributedAlgorithm_Sample, \
     DistributedAgent
 from core.utils.logging_utils import Logger
-from extensions.cli.cli import CommandSet, Command
+from extensions.tools.cli.cli import CommandSet, Command
 
 """
 The algorithm manager manages the running algorithms, sets them up with parameters and updates them based on 

@@ -5,14 +5,15 @@ import qmt
 from core.utils.logging_utils import Logger
 from core.utils.timecode.timecode import Timecode
 from core.utils.timecode.timecode_server import TimecodeServerStatus
-from extensions.babylon.src.babylon import BabylonVisualization
-from extensions.babylon.src.lib.objects.bilbo.bilbo import BabylonBilbo
-from extensions.babylon.src.lib.objects.box.box import Box
-from extensions.babylon.src.lib.objects.drawings.path import PathDrawing
-from extensions.babylon.src.lib.objects.drawings.points import PointsDrawing
+from extensions.libs.babylon.src.babylon import BabylonVisualization
+from extensions.libs.babylon.src.lib.objects.bilbo.bilbo import BabylonBilbo
+from extensions.libs.babylon.src.lib.objects.box.box import Box
+from extensions.libs.babylon.src.lib.objects.drawings.path import PathDrawing
+from extensions.libs.babylon.src.lib.objects.drawings.points import PointsDrawing
 from robots.bilbo.robot.bilbo_position_control import PathData
-from robots.bilbo.utilities.babylon.scenarios.arena import ArenaScenario
-from robots.bilbo.utilities.babylon.scenarios.lab import LabScenario
+from robots.bilbo.tools.babylon.scenarios.arena import ArenaScenario
+from robots.bilbo.tools.babylon.scenarios.lab import LabScenario
+from robots.bilbo.tools.babylon.scenarios.track import TrackScenario
 from extensions.gui.src.gui import Page
 from extensions.gui.src.lib.objects.objects import Widget_Group
 from extensions.gui.src.lib.objects.python.babylon_widget import BabylonWidget
@@ -289,6 +290,9 @@ class BILBO_GUI_OverviewPage:
             tracker_status.updateConfig(color=[0.8, 0, 0])
 
         def on_new_tracked_object(tracked_object):
+            existing_row = tracker_table.get_row_by_id(row_id=tracked_object.id)
+            if existing_row:
+                return
             tracker_table.make_row(id=tracked_object.id,
                                    object_id=tracked_object.id,
                                    x=tracked_object.state.x,
@@ -355,7 +359,7 @@ class BILBO_GUI_OverviewPage:
 
         self.manager.tracker.events.initialized.on(initialize_tracker)
         self.manager.tracker.events.error.on(tracker_error)
-        self.manager.tracker.events.new_sample.on(tracker_new_sample, max_rate=10)
+        self.manager.tracker.events.new_sample.on(tracker_new_sample, max_rate=2)
         self.manager.tracker.events.new_tracked_object.on(on_new_tracked_object)
         self.manager.tracker.events.tracked_object_removed.on(on_tracked_object_removed)
 
@@ -470,6 +474,7 @@ class BILBO_GUI_OverviewPage:
         )
         group.addWidget(status_widget, row=1, column=1, height=1, width=1)
 
+        mode = BILBO_Control_Mode.OFF
         # Mode widget
         mode_widget = BilboModeWidget(
             widget_id=f'mode_{robot.id}',
@@ -544,19 +549,34 @@ class BILBO_GUI_OverviewPage:
 
         # Subscribe to the robot's own stream so the 3D model updates
         # from estimation state (works even without OptiTrack tracker)
+
+        def _on_stream(sample, _b=container.babylon, _s=container.status_widget, **kwargs):
+            _b.set_state(
+                x=sample.estimation.state.x,
+                y=sample.estimation.state.y,
+                theta=sample.estimation.state.theta,
+                psi=sample.estimation.state.psi,
+            ) if self._data_source == 'Robots' else None
+
         if isinstance(robot, RealTestbedBILBO):
-            babylon_ref = container.babylon
             robot.robot.core.events.stream.on(
-                lambda sample, _b=babylon_ref: (
-                    _b.set_state(
-                        x=sample.estimation.state.x,
-                        y=sample.estimation.state.y,
-                        theta=sample.estimation.state.theta,
-                        psi=sample.estimation.state.psi,
-                    ) if self._data_source == 'Robots' else None
-                ),
+                _on_stream,
                 max_rate=20,
             )
+
+            # if isinstance(robot, RealTestbedBILBO):
+            #     babylon_ref = container.babylon
+            #     robot.robot.core.events.stream.on(
+            #         lambda sample, _b=babylon_ref: (
+            #             _b.set_state(
+            #                 x=sample.estimation.state.x,
+            #                 y=sample.estimation.state.y,
+            #                 theta=sample.estimation.state.theta,
+            #                 psi=sample.estimation.state.psi,
+            #             ) if self._data_source == 'Robots' else None
+            #         ),
+            #         max_rate=20,
+            #     )
 
             # Subscribe to planner events for path visualization
             rid = robot.id
@@ -582,8 +602,7 @@ class BILBO_GUI_OverviewPage:
         del self.robots[robot_id]
         self._update_babylon_dropdown()
 
-        # ------------------------------------------------------------------------------------------------------------------
-
+    # ------------------------------------------------------------------------------------------------------------------
     def _on_new_tracker_sample(self, *args, **kwargs):
         if self._data_source == 'OptiTrack':
             for robot in self.robots.values():
@@ -641,8 +660,8 @@ class BILBO_GUI_OverviewPage:
 
     # ------------------------------------------------------------------------------------------------------------------
     def _on_testbed_initialized(self, *args, **kwargs):
-        self._testbed_size = self.manager.settings.testbed.size
-        testbed_id = self.manager.settings.testbed.id
+        self._testbed_size = self.manager.testbed_definition.size
+        testbed_id = self.manager.testbed_definition.id
 
         size_x = self._testbed_size['x'][1] - self._testbed_size['x'][0]
         size_y = self._testbed_size['y'][1] - self._testbed_size['y'][0]
@@ -651,6 +670,11 @@ class BILBO_GUI_OverviewPage:
         # Choose scenario based on testbed ID
         if testbed_id == 'lab':
             scenario = LabScenario(size=size)
+        elif testbed_id == 'track':
+            scenario = TrackScenario(
+                x_range=[self._testbed_size['x'][0], self._testbed_size['x'][1]],
+                y_range=[self._testbed_size['y'][0], self._testbed_size['y'][1]],
+            )
         else:
             scenario = ArenaScenario(size=size)
 

@@ -8,7 +8,7 @@ from core.utils.callbacks import callback_definition, CallbackContainer
 from core.utils.events import event_definition, Event
 from core.utils.orientation.orientation_3d import vector_from_local_to_global, vector_from_global_to_local, \
     calculate_intersection
-from extensions.optitrack import RigidBodySample
+from extensions.hardware.optitrack import RigidBodySample
 from robots.bilbo.robot.bilbo_definitions import BILBO_Config
 
 

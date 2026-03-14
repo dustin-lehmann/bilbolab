@@ -3,12 +3,14 @@ import os
 import threading
 import time
 
+import yaml
+
 from core.utils.dataclass_utils import from_dict_auto
 from core.utils.events import Event, event_definition, EventFlag
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger
 from core.utils.sound.sound import speak
-from extensions.cli.cli import CommandSet, Command, CommandArgument
+from extensions.tools.cli.cli import CommandSet, Command, CommandArgument
 from core.utils.timecode.timecode_server import TimecodeServer
 from core.utils.yaml_utils import load_yaml
 from robots.bilbo.definitions import BoxObstacle_Config, BoxObstacle_State, Line_Config, Point_Config, Pose_Config
@@ -26,9 +28,11 @@ from robots.bilbo.testbed.tracker.tracked_objects import OptiTrackOutlierFilterC
 from robots.bilbo.testbed.tracker.tracker import BILBO_Tracker, BILBO_Tracker_Config, BILBO_Tracker_Status
 
 # Config directories
-_CONFIGS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'configs'))
+_CONFIGS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'definitions'))
 _TRACKED_OBJECTS_DIR = os.path.join(_CONFIGS_DIR, 'tracked_objects')
 _ROBOTS_DIR = os.path.join(_CONFIGS_DIR, 'robots')
+_TESTBEDS_DIR = os.path.join(_CONFIGS_DIR, 'testbeds')
+_ENVIRONMENTS_DIR = os.path.join(_TESTBEDS_DIR, 'environments')
 
 
 def _resolve_config_from_file(name: str, directory: str, data_class):
@@ -42,13 +46,39 @@ def _resolve_config_from_file(name: str, directory: str, data_class):
 
 # ----------------------------------------------------------------------------------------------------------------------
 @dataclasses.dataclass
-class TestbedSettings:
-    id: str | None = None  # ID of the testbed. Is used by the robots to set specific control configs
+class TestbedDefinition:
+    """A complete testbed definition loaded from a YAML file.
+
+    This is the single source of truth for a testbed's configuration.
+    Origin can be specified inline or as a string reference to a file in
+    definitions/tracked_objects/. Obstacles can include type: limbo_bar
+    with an optional 'tracking' sub-key for OptiTrack config.
+    """
+    id: str | None = None
+    origin: Origin_OptiTrack_Config | str | None = None
     size: dict[str, list[float]] | None = None
-    obstacles: list[BoxObstacle_Config] | None = None
+    obstacles: list | None = None
     lines: list[Line_Config] | None = None
     points: list[Point_Config] | None = None
     poses: list[Pose_Config] | None = None
+
+    def __post_init__(self):
+        # Resolve origin string reference to config file
+        if isinstance(self.origin, str):
+            self.origin = _resolve_config_from_file(self.origin, _TRACKED_OBJECTS_DIR, Origin_OptiTrack_Config)
+
+
+def load_testbed_definition(testbed_id: str) -> TestbedDefinition:
+    """Load a testbed definition YAML by ID from definitions/testbeds/."""
+    path = os.path.join(_TESTBEDS_DIR, f'{testbed_id}.yaml')
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Testbed definition '{testbed_id}' not found: {path}")
+    yaml_data = load_yaml(path)
+    return from_dict_auto(TestbedDefinition, yaml_data)
+
+
+# Keep TestbedSettings as an alias for backwards compatibility with environment load/save
+TestbedSettings = TestbedDefinition
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -58,38 +88,7 @@ class TrackerSettings:
     server: str = 'palantir.lan'
     sample_rate: int = 50
     outlier_filter: OptiTrackOutlierFilterConfig = dataclasses.field(default_factory=OptiTrackOutlierFilterConfig)
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-@dataclasses.dataclass
-class TrackedObjects:
-    origin: Origin_OptiTrack_Config | None | str = None
-    limbo_bar: LimboMarker_OptiTrack_Config | None | str = None
-    boxes: list[BoxObstacle_OptiTrack_Config | str] | None = dataclasses.field(default_factory=list)
-    walls: list[WallObstacle_OptiTrack_Config | str] | None = dataclasses.field(default_factory=list)
-    robots: list[BILBO_Config | str] | None = dataclasses.field(default_factory=list)
-
-    def __post_init__(self):
-        if isinstance(self.origin, str):
-            self.origin = _resolve_config_from_file(self.origin, _TRACKED_OBJECTS_DIR, Origin_OptiTrack_Config)
-
-        if isinstance(self.limbo_bar, str):
-            self.limbo_bar = _resolve_config_from_file(self.limbo_bar, _TRACKED_OBJECTS_DIR, LimboMarker_OptiTrack_Config)
-
-        self.boxes = [
-            _resolve_config_from_file(box, _TRACKED_OBJECTS_DIR, BoxObstacle_OptiTrack_Config) if isinstance(box, str) else box
-            for box in self.boxes
-        ]
-
-        self.walls = [
-            _resolve_config_from_file(wall, _TRACKED_OBJECTS_DIR, WallObstacle_OptiTrack_Config) if isinstance(wall, str) else wall
-            for wall in self.walls
-        ]
-
-        self.robots = [
-            _resolve_config_from_file(robot, _ROBOTS_DIR, BILBO_Config) if isinstance(robot, str) else robot
-            for robot in self.robots
-        ]
+    tracked_robots: list[str] = dataclasses.field(default_factory=list)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -98,6 +97,7 @@ class ExtensionsSettings:
     timecode: bool = False
     limbobar: bool = True
     display: bool = True
+    joystick: bool = False
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -110,10 +110,9 @@ class RobotSettings:
 # ----------------------------------------------------------------------------------------------------------------------
 @dataclasses.dataclass
 class TestbedManagerSettings:
-    testbed: TestbedSettings = dataclasses.field(default_factory=TestbedSettings)
+    testbed: str = 'lab'  # Testbed ID — resolved to a TestbedDefinition from definitions/testbeds/<id>.yaml
     robots: RobotSettings = dataclasses.field(default_factory=RobotSettings)
     tracker: TrackerSettings = dataclasses.field(default_factory=TrackerSettings)
-    tracked_objects: TrackedObjects = dataclasses.field(default_factory=TrackedObjects)
     extensions: ExtensionsSettings = dataclasses.field(default_factory=ExtensionsSettings)
     simulation: VirtualTestbed_Config = dataclasses.field(default_factory=VirtualTestbed_Config)
 
@@ -135,6 +134,7 @@ class TestbedManagerEvents:
 # ----------------------------------------------------------------------------------------------------------------------
 class TestbedManager:
     testbed: Testbed  # Combined testbed with real and virtual agents and objects
+    testbed_definition: TestbedDefinition  # Loaded testbed definition (single source of truth)
 
     # Sources
     tracker: BILBO_Tracker | None = None
@@ -160,6 +160,16 @@ class TestbedManager:
         self.settings = settings
         self.events = TestbedManagerEvents()
         self.virtual_testbed = VirtualTestbed(settings.simulation)
+
+        # Load the testbed definition from definitions/testbeds/<id>.yaml
+        testbed_id = settings.testbed if isinstance(settings.testbed, str) else 'lab'
+        try:
+            self.testbed_definition = load_testbed_definition(testbed_id)
+            self.logger.info(f"Loaded testbed definition '{testbed_id}' "
+                             f"(origin: {self.testbed_definition.origin.id if self.testbed_definition.origin else 'none'})")
+        except FileNotFoundError as e:
+            self.logger.warning(f"Testbed definition not found: {e}. Using empty definition.")
+            self.testbed_definition = TestbedDefinition(id=testbed_id)
 
         self.robot_manager = BILBO_Manager(enable_scanner=settings.robots.autostart,
                                            autostop_robots=settings.robots.autostop)
@@ -200,7 +210,7 @@ class TestbedManager:
         self._register_events()
         self.robot_manager.init()
         self.virtual_testbed.init()
-        self._load_obstacles_from_settings()
+        self._load_obstacles_from_definition()
 
         if self.tracker is not None:
             self.tracker.init()
@@ -264,6 +274,9 @@ class TestbedManager:
         self._send_testbed_config_to_robot(robot)
         self._sync_obstacles_to_robot(robot)
 
+        # Give the robot's CLI access to testbed poses
+        robot.interfaces.cli_command_set.testbed = self.testbed
+
         self.testbed.add_bilbo(testbed_bilbo)
         self.events.new_bilbo.set(testbed_bilbo)
 
@@ -321,34 +334,45 @@ class TestbedManager:
 
     # === EVENT HANDLERS: TRACKER ======================================================================================
     def _on_tracker_initialized(self, *args, **kwargs):
-        if self.settings.tracked_objects.origin is not None:
-            self.tracker.add_origin(self.settings.tracked_objects.origin.id, self.settings.tracked_objects.origin)
+        td = self.testbed_definition
 
-        if self.settings.tracked_objects.limbo_bar is not None:
-            self.tracker.add_limbo_bar(self.settings.tracked_objects.limbo_bar.id,
-                                       self.settings.tracked_objects.limbo_bar)
+        # Add origin from testbed definition
+        if td.origin is not None:
+            self.tracker.add_origin(td.origin.id, td.origin)
 
-        if self.settings.tracked_objects.boxes is not None and isinstance(self.settings.tracked_objects.boxes, list):
-            for box_tracking_config in self.settings.tracked_objects.boxes:
-                tracked_box = self.tracker.add_obstacle(box_tracking_config.id, box_tracking_config)
-                if tracked_box is not None:
-                    # Look up obstacle dimensions from testbed config by matching ID
-                    obstacle_config = self._get_obstacle_config_by_id(box_tracking_config.id)
-                    if obstacle_config is not None:
-                        real_obstacle = RealBoxObstacle(
-                            id=box_tracking_config.id,
-                            config=obstacle_config,
-                            tracked_object=tracked_box
-                        )
-                        self.testbed.add_obstacle(real_obstacle)
-                        self.events.new_obstacle.set(real_obstacle)
-                    else:
-                        self.logger.warning(
-                            f"Tracked box {box_tracking_config.id} has no matching obstacle config with dimensions")
+        # Scan obstacles for tracking configs (limbo bars, tracked boxes/walls)
+        if td.obstacles:
+            for obs in td.obstacles:
+                obs_dict = obs if isinstance(obs, dict) else dataclasses.asdict(obs)
+                obs_type = obs_dict.get('type', 'box')
+                tracking = obs_dict.get('tracking')
+                if tracking is None:
+                    continue
 
-        if self.settings.tracked_objects.walls is not None and isinstance(self.settings.tracked_objects.walls, list):
-            for wall in self.settings.tracked_objects.walls:
-                self.tracker.add_wall(wall.id, wall)
+                obs_id = obs_dict.get('id', tracking.get('id', ''))
+
+                if obs_type == 'limbo_bar':
+                    limbo_config = from_dict_auto(LimboMarker_OptiTrack_Config, tracking)
+                    self.tracker.add_limbo_bar(limbo_config.id, limbo_config)
+                elif obs_type == 'box':
+                    box_tracking_config = from_dict_auto(BoxObstacle_OptiTrack_Config, tracking)
+                    tracked_box = self.tracker.add_obstacle(obs_id, box_tracking_config)
+                    if tracked_box is not None:
+                        obstacle_config = self._get_obstacle_config_by_id(obs_id)
+                        if obstacle_config is not None:
+                            real_obstacle = RealBoxObstacle(
+                                id=obs_id,
+                                config=obstacle_config,
+                                tracked_object=tracked_box
+                            )
+                            self.testbed.add_obstacle(real_obstacle)
+                            self.events.new_obstacle.set(real_obstacle)
+                        else:
+                            self.logger.warning(
+                                f"Tracked box {obs_id} has no matching obstacle config with dimensions")
+                elif obs_type == 'wall':
+                    wall_config = from_dict_auto(WallObstacle_OptiTrack_Config, tracking)
+                    self.tracker.add_wall(obs_id, wall_config)
 
     # ------------------------------------------------------------------------------------------------------------------
     def _on_new_tracker_sample(self, *args, **kwargs):
@@ -472,6 +496,29 @@ class TestbedManager:
             ]
         )
 
+        load_command = Command(
+            name='load',
+            function=self._cli_load_environment,
+            description='Load a testbed environment from YAML file. Opens file picker if no file specified.',
+            allow_positionals=True,
+            execute_in_thread=True,
+            arguments=[
+                CommandArgument(name='file', short_name='f', type=str, optional=True, default=None,
+                                description='Path to environment YAML file. Opens native picker if not specified.'),
+            ]
+        )
+
+        save_command = Command(
+            name='save',
+            function=self._cli_save_environment,
+            description='Save the current testbed environment to a YAML file.',
+            allow_positionals=True,
+            arguments=[
+                CommandArgument(name='file', short_name='f', type=str, optional=True, default=None,
+                                description='Output file path. Defaults to environments directory with testbed ID as name.'),
+            ]
+        )
+
         run_final_command = Command(
             name='runFinal',
             function=self._cli_run_final,
@@ -483,7 +530,7 @@ class TestbedManager:
         return CommandSet(
             name='testbed',
             commands=[add_box_command, remove_command, clear_command, list_command, set_state_command,
-                      run_final_command]
+                      load_command, save_command, run_final_command]
         )
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -541,6 +588,151 @@ class TestbedManager:
         from research.Boppard_2026.experiments.final.run_final import run_final
         self.logger.info("Starting Boppard final experiments...")
         run_final(self)
+
+    def _cli_load_environment(self, file: str | None = None):
+        """Load a testbed environment from a YAML file. Opens file picker if no file specified."""
+        if not file:
+            self.logger.info("No file specified, opening native file picker...")
+            try:
+                from core.utils.filepicker import pick_file
+                file = pick_file(
+                    title='Select Testbed Environment File',
+                    initial_dir=_ENVIRONMENTS_DIR,
+                    allowed_extensions=['yaml', 'yml']
+                )
+            except Exception as e:
+                self.logger.error(f"File picker failed: {e}. Use -f <path> to specify a file.")
+                return
+            if not file:
+                self.logger.info("File selection cancelled.")
+                return
+
+        if not os.path.isfile(file):
+            self.logger.error(f"File not found: {file}")
+            return
+
+        try:
+            env_data = load_yaml(file)
+        except Exception as e:
+            self.logger.error(f"Failed to load environment file: {e}")
+            return
+
+        # Parse into TestbedDefinition
+        try:
+            env_def = from_dict_auto(TestbedDefinition, env_data)
+        except Exception as e:
+            self.logger.error(f"Failed to parse environment file: {e}")
+            return
+
+        # Clear existing virtual obstacles, lines, points, poses
+        obstacle_ids = list(self.virtual_testbed.obstacles.keys())
+        for obs_id in obstacle_ids:
+            del self.virtual_testbed.obstacles[obs_id]
+            self.virtual_testbed.events.obstacle_removed.set(obs_id)
+
+        line_ids = list(self.testbed.lines.keys())
+        for line_id in line_ids:
+            del self.testbed.lines[line_id]
+
+        point_ids = list(self.testbed.points.keys())
+        for point_id in point_ids:
+            del self.testbed.points[point_id]
+
+        pose_ids = list(self.testbed.poses.keys())
+        for pose_id in pose_ids:
+            del self.testbed.poses[pose_id]
+
+        # Update testbed definition and config
+        self.testbed_definition = env_def
+        if env_def.size is not None:
+            from robots.bilbo.testbed.testbed import TestbedSize, TestbedConfig
+            self.testbed.config = TestbedConfig(
+                id=env_def.id,
+                size=TestbedSize(
+                    x_min=env_def.size['x'][0],
+                    x_max=env_def.size['x'][1],
+                    y_min=env_def.size['y'][0],
+                    y_max=env_def.size['y'][1],
+                ),
+                origin=env_def.origin,
+            )
+
+        # Load new objects
+        self._load_obstacles_from_definition()
+
+        # Sync to all connected robots
+        for bilbo_id, testbed_bilbo in self.testbed.bilbos.items():
+            if isinstance(testbed_bilbo, RealTestbedBILBO):
+                self._send_testbed_config_to_robot(testbed_bilbo.robot)
+                self._sync_obstacles_to_robot(testbed_bilbo.robot)
+
+        env_name = env_def.id or os.path.splitext(os.path.basename(file))[0]
+        n_obs = len(self.testbed.obstacles)
+        n_lines = len(self.testbed.lines)
+        n_points = len(self.testbed.points)
+        self.logger.info(f"Loaded environment '{env_name}' ({n_obs} obstacles, {n_lines} lines, {n_points} points)")
+
+    def _cli_save_environment(self, file: str | None = None):
+        """Save the current testbed environment to a YAML file."""
+        if not file:
+            env_id = self.testbed.config.id if self.testbed.config else 'testbed'
+            file = os.path.join(_ENVIRONMENTS_DIR, f'{env_id}.yaml')
+
+        env = {}
+
+        # ID
+        if self.testbed.config and self.testbed.config.id:
+            env['id'] = self.testbed.config.id
+
+        # Origin
+        if self.testbed_definition.origin is not None:
+            env['origin'] = dataclasses.asdict(self.testbed_definition.origin)
+
+        # Size
+        if self.testbed.config and self.testbed.config.size:
+            s = self.testbed.config.size
+            env['size'] = {
+                'x': [s.x_min, s.x_max],
+                'y': [s.y_min, s.y_max],
+            }
+
+        # Obstacles
+        if self.testbed.obstacles:
+            obstacles = []
+            for obs in self.testbed.obstacles.values():
+                d = obs.to_dict()
+                entry = {'id': d['id'], 'type': 'box'}
+                entry['size'] = [d['width'], d['height']]
+                entry['state'] = [round(d['x'], 4), round(d['y'], 4), round(d.get('psi', 0), 4)]
+                obstacles.append(entry)
+            env['obstacles'] = obstacles
+
+        # Lines
+        if self.testbed.lines:
+            lines = []
+            for line in self.testbed.lines.values():
+                lines.append({'id': line.id, 'start': line.start, 'end': line.end})
+            env['lines'] = lines
+
+        # Points
+        if self.testbed.points:
+            points = []
+            for point in self.testbed.points.values():
+                points.append({'id': point.id, 'position': point.position})
+            env['points'] = points
+
+        # Poses
+        if self.testbed.poses:
+            poses = []
+            for pose in self.testbed.poses.values():
+                poses.append({'id': pose.id, 'pose': [pose.x, pose.y, pose.psi]})
+            env['poses'] = poses
+
+        os.makedirs(os.path.dirname(file), exist_ok=True)
+        with open(file, 'w') as f:
+            yaml.dump(env, f, default_flow_style=None, sort_keys=False, allow_unicode=True)
+
+        self.logger.info(f"Saved environment to {file}")
 
     # === OBSTACLE SYNCING =============================================================================================
     def _sync_obstacles_to_robot(self, robot: BILBO):
@@ -602,15 +794,26 @@ class TestbedManager:
             time.sleep(interval)
 
     # === PRIVATE METHODS ==============================================================================================
-    def _load_obstacles_from_settings(self):
-        """Load obstacles, lines, and points from testbed settings into the testbed."""
-        ts = self.settings.testbed
+    def _load_obstacles_from_definition(self):
+        """Load obstacles, lines, and points from testbed definition into the testbed."""
+        td = self.testbed_definition
 
         # Load obstacles into virtual testbed (which bridges them to testbed via events)
-        if ts.obstacles:
-            for obstacle_config in ts.obstacles:
+        if td.obstacles:
+            for obs in td.obstacles:
+                obs_dict = obs if isinstance(obs, dict) else dataclasses.asdict(obs)
+                obs_type = obs_dict.get('type', 'box')
+
+                # Skip tracked-only obstacles (limbo bars, tracked boxes) — they're handled via tracker
+                if obs_dict.get('tracking') and obs_type == 'limbo_bar':
+                    continue
+
+                # Build BoxObstacle_Config from obstacle dict (stripping non-config keys)
+                config_data = {k: v for k, v in obs_dict.items() if k not in ('tracking',)}
+                obstacle_config = from_dict_auto(BoxObstacle_Config, config_data)
+
                 state = None
-                if hasattr(obstacle_config, 'state') and obstacle_config.state is not None:
+                if obstacle_config.state is not None:
                     s = obstacle_config.state
                     if isinstance(s, (list, tuple)) and len(s) >= 2:
                         state = BoxObstacle_State(
@@ -621,35 +824,36 @@ class TestbedManager:
                 self.virtual_testbed.add_box_obstacle(obstacle_config, state=state)
 
         # Load lines directly into testbed
-        if ts.lines:
-            for line_config in ts.lines:
+        if td.lines:
+            for line_config in td.lines:
                 self.testbed.add_line(line_config)
 
         # Load points directly into testbed
-        if ts.points:
-            for point_config in ts.points:
+        if td.points:
+            for point_config in td.points:
                 self.testbed.add_point(point_config)
 
         # Load poses directly into testbed
-        if ts.poses:
-            for pose_config in ts.poses:
+        if td.poses:
+            for pose_config in td.poses:
                 self.testbed.add_pose(pose_config)
 
     # ------------------------------------------------------------------------------------------------------------------
     def _build_testbed_config(self) -> TestbedConfig | None:
-        """Convert testbed settings (from application YAML) into a TestbedConfig."""
-        ts = self.settings.testbed
-        if ts is None or ts.size is None:
+        """Convert testbed definition into a TestbedConfig for the Testbed."""
+        td = self.testbed_definition
+        if td is None or td.size is None:
             return None
         from robots.bilbo.testbed.testbed import TestbedSize
         return TestbedConfig(
-            id=ts.id,
+            id=td.id,
             size=TestbedSize(
-                x_min=ts.size['x'][0],
-                x_max=ts.size['x'][1],
-                y_min=ts.size['y'][0],
-                y_max=ts.size['y'][1],
-            )
+                x_min=td.size['x'][0],
+                x_max=td.size['x'][1],
+                y_min=td.size['y'][0],
+                y_max=td.size['y'][1],
+            ),
+            origin=td.origin,
         )
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -663,16 +867,16 @@ class TestbedManager:
 
     # ------------------------------------------------------------------------------------------------------------------
     def _get_obstacle_config_by_id(self, obstacle_id: str) -> BoxObstacle_Config | None:
-        """Look up obstacle dimensions from testbed settings by ID."""
-        obstacles = self.settings.testbed.obstacles
+        """Look up obstacle dimensions from testbed definition by ID."""
+        obstacles = self.testbed_definition.obstacles
         if not obstacles:
             return None
-        for obs_config in obstacles:
-            obs_id = obs_config.get('id') if isinstance(obs_config, dict) else getattr(obs_config, 'id', None)
+        for obs in obstacles:
+            obs_dict = obs if isinstance(obs, dict) else dataclasses.asdict(obs)
+            obs_id = obs_dict.get('id')
             if obs_id == obstacle_id:
-                if isinstance(obs_config, dict):
-                    return from_dict_auto(BoxObstacle_Config, obs_config)
-                return obs_config
+                config_data = {k: v for k, v in obs_dict.items() if k not in ('tracking',)}
+                return from_dict_auto(BoxObstacle_Config, config_data)
         return None
 
     # ------------------------------------------------------------------------------------------------------------------

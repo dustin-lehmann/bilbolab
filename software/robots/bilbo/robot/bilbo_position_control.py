@@ -73,6 +73,20 @@ class TurnToHeadingCommand:
 
 
 @dataclasses.dataclass
+class MoveToPoseCommand:
+    """Data for active move_to_pose command"""
+    x: float = 0.0
+    y: float = 0.0
+    heading: float = 0.0
+    heading_deg: float = 0.0
+    max_speed: float = 0.0
+    max_angular_speed: float = 0.0
+    timeout: float = 0.0
+    active: bool = False
+    phase: str = ''  # 'move' or 'turn'
+
+
+@dataclasses.dataclass
 class PathData:
     """Data for loaded/active path"""
     path_point_count: int = 0
@@ -116,6 +130,11 @@ class PositionControlEvents:
     turn_to_heading_completed: Event
     turn_to_heading_timeout: Event
 
+    # Compound pose command events
+    move_to_pose_started: Event = Event(copy_data_on_set=False)
+    move_to_pose_completed: Event
+    move_to_pose_timeout: Event
+
     # Mode change
     mode_changed: Event = Event(flags=EventFlag('mode', PositionControlMode))
 
@@ -141,6 +160,8 @@ class PositionControlCallbacks:
     move_to_point_completed: CallbackContainer
     turn_to_heading_started: CallbackContainer
     turn_to_heading_completed: CallbackContainer
+    move_to_pose_started: CallbackContainer
+    move_to_pose_completed: CallbackContainer
     mode_changed: CallbackContainer
     path_planning_started: CallbackContainer
     path_planned: CallbackContainer
@@ -174,6 +195,7 @@ class BILBO_PositionControl:
         # Track active commands for visualization
         self._current_move_to_point = MoveToPointCommand()
         self._current_turn_to_heading = TurnToHeadingCommand()
+        self._current_move_to_pose = MoveToPoseCommand()
         self._current_path = PathData()
 
         # Track top-level control mode for validation
@@ -233,6 +255,11 @@ class BILBO_PositionControl:
     def current_turn_to_heading(self) -> TurnToHeadingCommand | None:
         """Active turn_to_heading command, or None if not active"""
         return self._current_turn_to_heading if self._current_turn_to_heading.active else None
+
+    @property
+    def current_move_to_pose(self) -> MoveToPoseCommand | None:
+        """Active move_to_pose command, or None if not active"""
+        return self._current_move_to_pose if self._current_move_to_pose.active else None
 
     @property
     def current_path(self) -> PathData | None:
@@ -433,7 +460,8 @@ class BILBO_PositionControl:
                         allow_reverse: bool = False,
                         seed: int | None = None,
                         blocking: bool = False,
-                        target_heading: float | None = None) -> bool:
+                        target_heading: float | None = None,
+                        heading_strength: float = 1.0) -> bool:
         """
         Plan a collision-free path from the robot's current position to target,
         load it, and start following it. The motion planner runs on the robot.
@@ -456,6 +484,7 @@ class BILBO_PositionControl:
             seed: RNG seed for motion planner reproducibility
             blocking: If True, block until path finished or timeout
             target_heading: Desired heading [rad] at the target (None = unconstrained)
+            heading_strength: Strength of the heading constraint on the spline (default 1.0)
 
         Returns:
             True if path was planned, loaded, and started successfully
@@ -492,6 +521,7 @@ class BILBO_PositionControl:
             'allow_reverse': allow_reverse,
             'seed': seed,
             'target_heading': target_heading,
+            'heading_strength': heading_strength,
         }
 
         self.logger.info(
@@ -532,7 +562,8 @@ class BILBO_PositionControl:
                   obstacles: list[dict] | None = None,
                   bounds: dict | tuple | None = None,
                   seed: int | None = None,
-                  target_heading: float | None = None) -> bool:
+                  target_heading: float | None = None,
+                  heading_strength: float = 1.0) -> bool:
         """
         Plan a path from the robot's current position to target (preview only).
         Does NOT load or start the path. The robot emits a path_planned WiFi event
@@ -545,6 +576,7 @@ class BILBO_PositionControl:
             bounds: Workspace limits as dict or (x_min, x_max, y_min, y_max) tuple.
             seed: RNG seed for motion planner reproducibility
             target_heading: Desired heading [rad] at the target (None = unconstrained)
+            heading_strength: Strength of the heading constraint on the spline (default 1.0)
 
         Returns:
             True if path was planned successfully
@@ -583,6 +615,7 @@ class BILBO_PositionControl:
                     'bounds': bounds_arg,
                     'seed': seed,
                     'target_heading': target_heading,
+                    'heading_strength': heading_strength,
                 },
                 return_type=bool,
                 request_response=True,
@@ -702,6 +735,62 @@ class BILBO_PositionControl:
             if match is None:
                 return False
             return match.caused_by(self.events.turn_to_heading_completed)
+
+        return True
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def move_to_pose(self, x: float,
+                     y: float,
+                     heading: float,
+                     max_speed: float = 0.0,
+                     max_angular_speed: float = 1.0,
+                     position_tolerance: float = 0.0,
+                     max_corrections: int = 3,
+                     timeout: float = 0.0,
+                     blocking: bool = False) -> bool:
+        """
+        Move to a pose (position + heading).
+        First moves to the target point, then rotates to the target heading.
+        If turning causes position drift, repeats the cycle.
+
+        Args:
+            x, y: Target position in world coordinates [m]
+            heading: Target heading [rad]
+            max_speed: Maximum speed for move phase (0 = use default)
+            max_angular_speed: Maximum turn rate for turn phase [rad/s]
+            position_tolerance: Max drift before re-correcting [m] (0 = use config default)
+            max_corrections: Maximum number of move+turn correction cycles
+            timeout: Total command timeout (0 = no timeout)
+            blocking: If True, wait for completion before returning
+        """
+        import math
+        self.logger.info(
+            f"Moving to pose ({x:.2f}, {y:.2f}, {math.degrees(heading):.1f} deg)..."
+        )
+
+        self.device.executeFunction(
+            function_name='position_control_move_to_pose',
+            arguments={
+                'x': x,
+                'y': y,
+                'heading': heading,
+                'max_speed': max_speed,
+                'max_angular_speed': max_angular_speed,
+                'position_tolerance': position_tolerance,
+                'max_corrections': max_corrections,
+                'timeout': timeout,
+            },
+        )
+
+        if blocking:
+            wait_timeout = (timeout + 10.0) if timeout > 0 else 120.0
+            _, match = wait_for_events(
+                OR(self.events.move_to_pose_completed, self.events.move_to_pose_timeout),
+                timeout=wait_timeout,
+            )
+            if match is None:
+                return False
+            return match.caused_by(self.events.move_to_pose_completed)
 
         return True
 
@@ -888,6 +977,39 @@ class BILBO_PositionControl:
                 self._current_turn_to_heading.active = False
                 self.events.turn_to_heading_timeout.set(data=target)
 
+            case 'move_to_pose_started':
+                target = data.get('target', {})
+                cmd = MoveToPoseCommand(
+                    x=target.get('x', 0.0),
+                    y=target.get('y', 0.0),
+                    heading=data.get('heading', 0.0),
+                    heading_deg=data.get('heading_deg', 0.0),
+                    max_speed=data.get('max_speed', 0.0),
+                    max_angular_speed=data.get('max_angular_speed', 0.0),
+                    timeout=data.get('timeout', 0.0),
+                    active=True,
+                    phase='move',
+                )
+                self._current_move_to_pose = cmd
+                self.events.move_to_pose_started.set(data=cmd)
+                self.callbacks.move_to_pose_started.call(cmd)
+
+            case 'move_to_pose_completed':
+                target = data.get('target')
+                heading_info = {'heading': data.get('heading'), 'heading_deg': data.get('heading_deg')}
+                pose_data = {**(target or {}), **heading_info} if target else heading_info
+                self._current_move_to_pose.active = False
+                self.events.move_to_pose_completed.set(data=pose_data)
+                self.callbacks.move_to_pose_completed.call(pose_data)
+
+            case 'move_to_pose_timeout':
+                target = data.get('target')
+                heading_info = {'heading': data.get('heading'), 'heading_deg': data.get('heading_deg')}
+                pose_data = {**(target or {}), **heading_info, 'phase': data.get('phase', '')} if target else {
+                    **heading_info, 'phase': data.get('phase', '')}
+                self._current_move_to_pose.active = False
+                self.events.move_to_pose_timeout.set(data=pose_data)
+
             case 'mode_changed':
                 new_mode = PositionControlMode(data.get('new_mode', 0))
                 self.events.mode_changed.set(flags={'mode': new_mode})
@@ -956,9 +1078,11 @@ class BILBO_PositionControl:
             self._current_path = PathData()
             self._current_move_to_point = MoveToPointCommand()
             self._current_turn_to_heading = TurnToHeadingCommand()
+            self._current_move_to_pose = MoveToPoseCommand()
         else:
             # Leaving POSITION mode: clear state
             self._state = PositionControlState()
             self._current_path = PathData()
             self._current_move_to_point = MoveToPointCommand()
             self._current_turn_to_heading = TurnToHeadingCommand()
+            self._current_move_to_pose = MoveToPoseCommand()

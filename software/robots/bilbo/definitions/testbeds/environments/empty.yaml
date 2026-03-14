@@ -1,0 +1,5 @@
+# Empty testbed - no obstacles
+id: empty
+size:
+  x: [0, 3]
+  y: [0, 3]

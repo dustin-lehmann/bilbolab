@@ -1,5 +1,0 @@
-teleplot-server:
-  build: .
-  ports:
-  - 47269:47269/udp
-  - 8080:8080

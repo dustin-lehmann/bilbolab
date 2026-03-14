@@ -17,21 +17,25 @@ class BILBO_LL_Sample_General:
 
 
 class BILBO_ErrorType(enum.IntEnum):
-    NONE = 0,
-    MINOR = 1,
-    MAJOR = 2,
-    CRITICAL = 3,
+    # Must match firmware bilbo_error_type_t : uint8_t
+    NONE = 0
+    WARNING = 1
+    MINOR = 2
+    MAJOR = 3
+    CRITICAL = 4
 
 
 class BILBO_ErrorCodes(enum.IntEnum):
-    UNSPECIFIED = 0,
-    WHEEL_SPEED = 1,
-    MANUAL_STOP = 2,
-    INIT = 3,
-    START = 4,
-    IMU_INITIALIZE = 5,
-    MOTOR_RACECONDITIONS = 6,
+    # Must match firmware bilbo_error_t : uint8_t
+    UNSPECIFIED = 0
+    WHEEL_SPEED = 1
+    MANUAL_STOP = 2
+    INIT = 3
+    START = 4
+    IMU_INITIALIZE = 5
+    MOTOR_RACECONDITIONS = 6
     FIRMWARE_RACECONDITION = 7
+    MOTOR_COMM = 8
 
 
 @dataclasses.dataclass

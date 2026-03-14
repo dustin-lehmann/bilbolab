@@ -3,8 +3,8 @@ import time
 
 import numpy as np
 
-from extensions.cli.cli import CommandSet, CommandArgument, Command
-from extensions.joystick.joystick_manager import Joystick
+from extensions.tools.cli.cli import CommandSet, CommandArgument, Command
+from extensions.hardware.joystick.joystick_manager import Joystick
 from robots.frodo.frodo import FRODO_Control
 from robots.frodo.frodo_core import FRODO_Core
 from robots.frodo.frodo_definitions import FRODO_ControlMode

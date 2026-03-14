@@ -21,9 +21,9 @@ from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger, addLogRedirection, LOGGING_COLORS
 from core.utils.time import Timer
 from core.utils.video.camera_streamer import VideoStreamer
-from extensions.babylon.src.babylon import BabylonVisualization
-from extensions.babylon.src.lib.objects.floor.floor import SimpleFloor
-from extensions.cli.cli import CLI, CommandSet
+from extensions.libs.babylon.src.babylon import BabylonVisualization
+from extensions.libs.babylon.src.lib.objects.floor.floor import SimpleFloor
+from extensions.tools.cli.cli import CLI, CommandSet
 from extensions.gui.src.app import App
 from extensions.gui.src.gui import GUI, Page, Category
 from extensions.gui.src.lib.map.map import MapWidget

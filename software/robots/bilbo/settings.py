@@ -4,8 +4,8 @@ import os
 from core.utils.dataclass_utils import from_dict_auto
 from core.utils.files import get_absolute_path
 from core.utils.yaml_utils import load_yaml
-from robots.bilbo.testbed.testbed_manager import TestbedManagerSettings, TestbedSettings, \
-    TrackerSettings, TrackedObjects, ExtensionsSettings, RobotSettings
+from robots.bilbo.testbed.testbed_manager import TestbedManagerSettings, \
+    TrackerSettings, ExtensionsSettings, RobotSettings
 from robots.bilbo.simulation.virtual_testbed import VirtualTestbed_Config
 
 SETTINGS_FILE = get_absolute_path('./settings.yaml')
@@ -30,12 +30,11 @@ class MDNSSettings:
 class ApplicationSettings:
     """Settings as loaded from settings.yaml. Top-level keys map 1:1 to the YAML."""
     paths: PathSettings = dataclasses.field(default_factory=PathSettings)
-    testbed: TestbedSettings = dataclasses.field(default_factory=TestbedSettings)
+    testbed: str = 'lab'  # Testbed ID — resolved to a definition file at runtime
     robots: RobotSettings = dataclasses.field(default_factory=RobotSettings)
     extensions: ExtensionsSettings = dataclasses.field(default_factory=ExtensionsSettings)
     simulation: VirtualTestbed_Config = dataclasses.field(default_factory=VirtualTestbed_Config)
     tracker: TrackerSettings = dataclasses.field(default_factory=TrackerSettings)
-    tracked_objects: TrackedObjects = dataclasses.field(default_factory=TrackedObjects)
     mdns: MDNSSettings = dataclasses.field(default_factory=MDNSSettings)
 
     @property
@@ -44,7 +43,6 @@ class ApplicationSettings:
             testbed=self.testbed,
             robots=self.robots,
             tracker=self.tracker,
-            tracked_objects=self.tracked_objects,
             extensions=self.extensions,
             simulation=self.simulation,
         )

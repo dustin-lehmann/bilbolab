@@ -9,7 +9,7 @@ from applications.FRODO.testbed.tracker.definitions import TrackedFRODO, Tracked
 from core.utils.events import event_definition, Event
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger
-from extensions.optitrack.optitrack import OptiTrack, RigidBodySample
+from extensions.hardware.optitrack.optitrack import OptiTrack, RigidBodySample
 from core.utils.callbacks import callback_definition, CallbackContainer
 
 

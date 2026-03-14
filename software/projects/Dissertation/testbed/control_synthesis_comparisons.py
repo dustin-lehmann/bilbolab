@@ -5,7 +5,7 @@ from numpy import nan
 from core.utils.colors import get_palette
 from core.utils.data import generate_time_vector
 from core.utils.plotting.plot import Plot, AxisConfig, Axis
-from robots.bilbo.simulation.bilbo_model import BILBO_Dynamics_3D, DEFAULT_BILBO_MODEL, BILBO_3D_State
+from robots.bilbo.simulation.model import BILBO_Dynamics_3D, DEFAULT_BILBO_MODEL, BILBO_3D_State
 from projects.Dissertation.settings import TESTBED_SIM_RESULTS_PATH
 
 TS = 0.01

@@ -1,0 +1,15 @@
+# Simple corridor environment
+id: corridor
+size:
+  x: [0, 3]
+  y: [0, 3]
+
+obstacles:
+  - id: wall-left
+    type: box
+    size: [0.05, 3]
+    state: [1, 1.5, 0]
+  - id: wall-right
+    type: box
+    size: [0.05, 3]
+    state: [2, 1.5, 0]

@@ -16,13 +16,14 @@ if top_level_module not in sys.path:
 
 # === CUSTOM MODULES ===================================================================================================
 from robots.bilbo.gui.bilbo_gui import BILBO_Application_GUI
-from extensions.cli.cli import CLI
+from extensions.tools.cli.cli import CLI
 from core.utils.exit import register_exit_callback, exit_program
 from core.utils.logging_utils import setLoggerLevel, Logger
-from core.utils.loop import infinite_loop
+from core.utils.exit import infinite_loop
 from core.utils.sound.sound import speak, SoundSystem
 from robots.bilbo.testbed.testbed_manager import TestbedManager
 from core.utils.network.network import getHostIP
+from robots.bilbo.manager.bilbo_joystick_control import BILBO_JoystickControl
 from robots.bilbo.settings import ApplicationSettings, load_settings
 
 # ======================================================================================================================
@@ -34,6 +35,7 @@ ENABLE_SPEECH_OUTPUT = True
 class BILBO_Application:
     manager: TestbedManager
     soundsystem: SoundSystem
+    joystick_control: BILBO_JoystickControl | None
 
     def __init__(self, settings: ApplicationSettings):
 
@@ -59,12 +61,18 @@ class BILBO_Application:
         self.soundsystem = SoundSystem(primary_engine='etts', volume=1)
         self.soundsystem.start()
 
+        # Joystick Control
+        if settings.extensions.joystick:
+            self.joystick_control = BILBO_JoystickControl(self.manager.robot_manager)
+        else:
+            self.joystick_control = None
+
         # GUI
         self.gui = BILBO_Application_GUI(settings=self.settings,
                                          host=self.manager.robot_manager.host,
                                          testbed_manager=self.manager,
                                          cli=self.cli,
-                                         joystick_control=None,
+                                         joystick_control=self.joystick_control,
                                          enable_mdns=settings.mdns.enabled,
                                          mdns_hostname=settings.mdns.hostname,
                                          mdns_use_port_80=settings.mdns.use_port_80)
@@ -83,19 +91,26 @@ class BILBO_Application:
 
         self.manager.init()
 
+        if self.joystick_control is not None:
+            self.joystick_control.init()
+
         self.cli.root.addChild(self.manager.robot_manager.cli)
         self.cli.root.addChild(self.manager.cli)
+        if self.joystick_control is not None:
+            self.cli.root.addChild(self.joystick_control.cli_command_set)
 
     # ------------------------------------------------------------------------------------------------------------------
     def start(self):
         self.logger.info('Starting Bilbo application')
         speak('Start Bilbo application')
         self.manager.start()
+        if self.joystick_control is not None:
+            self.joystick_control.start()
         self.gui.start()
 
         # Start network monitor as subprocess (separate process avoids eventlet conflicts)
         software_dir = os.path.abspath(os.path.join(top_level_module, '..'))
-        network_monitor_script = os.path.join(software_dir, 'extensions', 'network_monitor', 'network_monitor_app.py')
+        network_monitor_script = os.path.join(software_dir, 'extensions', 'apps', 'network_monitor', 'network_monitor_app.py')
         self._network_monitor_proc = subprocess.Popen(
             [sys.executable, network_monitor_script],
             cwd=software_dir,
@@ -107,6 +122,8 @@ class BILBO_Application:
     def close(self, *args, **kwargs):
         speak('Stop Bilbo application')
         self.logger.info('Closing Bilbo application')
+        if self.joystick_control is not None:
+            self.joystick_control.close()
         if self._network_monitor_proc and self._network_monitor_proc.poll() is None:
             self._network_monitor_proc.terminate()
         self.gui.close()

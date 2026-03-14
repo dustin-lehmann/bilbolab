@@ -5,7 +5,7 @@ from core.utils.states import State
 from core.utils.uuid_utils import generate_uuid
 
 # ======================================================================================================================
-EXPERIMENT_DIR = get_absolute_path('./experiments/')
+EXPERIMENT_DIR = get_absolute_path('./definitions/tests/')
 
 
 # === COMMON OBJECTS AND CONFIGS =======================================================================================

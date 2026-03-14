@@ -7,7 +7,7 @@ from robots.bilbo.robot.bilbo_control import BILBO_Control
 from robots.bilbo.robot.bilbo_core import BILBO_Core
 from robots.bilbo.robot.bilbo_estimation import BILBO_Estimation
 from robots.bilbo.robot.bilbo_position_control import BILBO_PositionControl
-from robots.bilbo.robot.experiment.bilbo_experiment import BILBO_ExperimentHandler
+from robots.bilbo.robot.experiment.bilbo_experiment_handler import BILBO_ExperimentHandler
 from robots.bilbo.robot.bilbo_interfaces import BILBO_Interfaces
 from robots.bilbo.robot.bilbo_data import BILBO_Sample, bilboSampleFromDict
 from robots.bilbo.robot.bilbo_definitions import *

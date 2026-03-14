@@ -20,8 +20,8 @@ from core.utils.exit import register_exit_callback
 from core.utils.files import get_absolute_path, get_absolute_path
 from core.utils.logging_utils import Logger
 from core.utils.states import State
-from extensions.cli.cli import CommandSet, Command, CommandArgument
-from extensions.joystick.joystick_manager import Joystick
+from extensions.tools.cli.cli import CommandSet, Command, CommandArgument
+from extensions.hardware.joystick.joystick_manager import Joystick
 from extensions.simulation.src.core.environment import BASE_ENVIRONMENT_ACTIONS, Object
 from extensions.simulation.src.objects.base_environment import BaseEnvironment
 from extensions.simulation.src.objects.frodo.frodo import FRODO_DynamicAgent, FRODO_Input

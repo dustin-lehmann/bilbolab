@@ -7,7 +7,7 @@ from core.utils.events import event_definition, Event
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger
 from core.utils.network.network import getHostIP
-from extensions.cli.cli import CommandSet
+from extensions.tools.cli.cli import CommandSet
 from robots.frodo.frodo import FRODO
 from robots.frodo.frodo_definitions import FRODO_Config
 

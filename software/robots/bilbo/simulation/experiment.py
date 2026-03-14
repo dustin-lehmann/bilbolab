@@ -1,6 +1,13 @@
 """
 Lightweight experiment system for BILBO_CompleteAgent.
 
+NOTE: This module does NOT use the core.utils.experiments framework that
+the on-robot software and the host-side experiment handler use. It is a
+standalone, simplified reimplementation for simulation purposes only.
+If you are looking for the production experiment architecture (with
+ActionRegistry, guards, requirements, expression engine, etc.), see
+core.utils.experiments and robots/bilbo/software/robot/experiment/.
+
 Mirrors the real robot's experiment builder/runner pattern but executes
 directly on the simulation agent. Actions run sequentially; each action
 starts, is polled for completion each tick, and advances to the next.
@@ -36,11 +43,11 @@ from typing import Any, Callable, TYPE_CHECKING
 import yaml
 
 if TYPE_CHECKING:
-    from robots.bilbo.simulation.bilbo_complete_agent import BILBO_CompleteAgent
+    from robots.bilbo.simulation.agent import BILBO_CompleteAgent
 
 from robots.bilbo.robot.bilbo_definitions import BILBO_Control_Mode
 from robots.bilbo.robot.experiment.experiment_definitions import read_input_file, InputTrajectory
-from robots.bilbo.simulation.bilbo_model import BILBO_3D_Input
+from robots.bilbo.simulation.model import BILBO_3D_Input
 from core.utils.dataclass_utils import from_dict_auto
 
 logger = logging.getLogger(__name__)
@@ -190,7 +197,8 @@ def _action_from_dict(d: dict, source_dir: str | None = None) -> list[Experiment
                 type='move_to',
                 params={'x': float(params.get('x', 0)), 'y': float(params.get('y', 0)),
                         'max_speed': float(params.get('max_speed', 0.0)),
-                        'target_heading': heading},
+                        'target_heading': heading,
+                        'heading_strength': float(params.get('heading_strength', 1.0))},
                 label=label or f"Move to ({params.get('x', 0):.2f}, {params.get('y', 0):.2f})",
                 timeout=timeout))
 
@@ -214,6 +222,7 @@ def _action_from_dict(d: dict, source_dir: str | None = None) -> list[Experiment
                 params={'waypoints': wps, 'target': target,
                         'max_speed': float(params.get('max_speed', 0.0)),
                         'target_heading': heading,
+                        'heading_strength': float(params.get('heading_strength', 1.0)),
                         'allow_reverse': bool(params.get('allow_reverse', False)),
                         'stop_indices': params.get('stop_indices')},
                 label=label or 'Follow path',
@@ -375,6 +384,7 @@ class ExperimentRunner:
                     x=p['x'], y=p['y'],
                     max_speed=p.get('max_speed', 0.0),
                     target_heading=p.get('target_heading'),
+                    heading_strength=p.get('heading_strength', 1.0),
                     timeout=p.get('move_timeout', 0.0),
                 )
                 self._done_check = lambda: (
@@ -394,6 +404,7 @@ class ExperimentRunner:
                     waypoints=p['waypoints'],
                     max_speed=p.get('max_speed', 0.0),
                     target_heading=p.get('target_heading'),
+                    heading_strength=p.get('heading_strength', 1.0),
                     allow_reverse=p.get('allow_reverse', False),
                     timeout=p.get('path_timeout', 0.0),
                     stop_indices=p.get('stop_indices'),
@@ -484,11 +495,13 @@ class ExperimentBuilder:
 
     def move_to(self, x: float, y: float, max_speed: float = 0.0,
                 target_heading: float | None = None,
+                heading_strength: float = 1.0,
                 timeout: float = 0.0) -> ExperimentBuilder:
         self._actions.append(ExperimentAction(
             type='move_to',
             params={'x': x, 'y': y, 'max_speed': max_speed,
-                    'target_heading': target_heading},
+                    'target_heading': target_heading,
+                    'heading_strength': heading_strength},
             label=f'Move to ({x:.2f}, {y:.2f})',
             timeout=timeout,
         ))
@@ -508,12 +521,14 @@ class ExperimentBuilder:
 
     def follow_path(self, waypoints: list, max_speed: float = 0.0,
                     target_heading: float | None = None,
+                    heading_strength: float = 1.0,
                     allow_reverse: bool = False, timeout: float = 0.0,
                     stop_indices: list[int] | None = None) -> ExperimentBuilder:
         self._actions.append(ExperimentAction(
             type='follow_path',
             params={'waypoints': waypoints, 'max_speed': max_speed,
                     'target_heading': target_heading,
+                    'heading_strength': heading_strength,
                     'allow_reverse': allow_reverse,
                     'stop_indices': stop_indices},
             label=f'Follow path ({len(waypoints)} waypoints)',

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from extensions.cli.cli import CommandSet, Command, CommandArgument
+from extensions.tools.cli.cli import CommandSet, Command, CommandArgument
 
 
 # ======================================================================================================================

@@ -26,12 +26,12 @@ from core.utils.logging_utils import Logger, LOGGING_COLORS, addLogRedirection
 from core.utils.network.network import getHostIP
 from core.utils.sound.sound import SoundSystem
 from core.utils.time import setTimeout
-from extensions.babylon.src.babylon import BabylonVisualization
-from extensions.babylon.src.lib.objects.box.box import WallFancy
-from extensions.babylon.src.lib.objects.floor.floor import SimpleFloor
-from extensions.babylon.src.lib.objects.frodo.frodo import BabylonFrodo
-from extensions.babylon.src.lib.objects.static.static import BabylonStatic
-from extensions.cli.cli import CommandSet, Command, CommandArgument, CLI
+from extensions.libs.babylon.src.babylon import BabylonVisualization
+from extensions.libs.babylon.src.lib.objects.box.box import WallFancy
+from extensions.libs.babylon.src.lib.objects.floor.floor import SimpleFloor
+from extensions.libs.babylon.src.lib.objects.frodo.frodo import BabylonFrodo
+from extensions.libs.babylon.src.lib.objects.static.static import BabylonStatic
+from extensions.tools.cli.cli import CommandSet, Command, CommandArgument, CLI
 from extensions.gui.src.gui import GUI, Category, Page
 from extensions.gui.src.lib.map.map import MapWidget
 from extensions.gui.src.lib.map.map_objects import VisionAgent, MapObjectGroup, Point, CoordinateSystem, Agent, Line, \
@@ -40,7 +40,7 @@ from extensions.gui.src.lib.objects.objects import Widget_Group
 from extensions.gui.src.lib.objects.python.babylon_widget import BabylonWidget
 from extensions.gui.src.lib.objects.python.buttons import Button
 from extensions.gui.src.lib.plot.realtime.rt_plot import RT_Plot_Widget, Y_Axis, TimeSeries
-from extensions.joystick.joystick_manager import Joystick, JoystickManager
+from extensions.hardware.joystick.joystick_manager import Joystick, JoystickManager
 from extensions.simulation.src.core.environment import BASE_ENVIRONMENT_ACTIONS
 
 from core.utils.colors import darken_color

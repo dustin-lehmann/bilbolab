@@ -5,8 +5,8 @@ import enum
 import numpy as np
 import qmt
 
-from core.utils.control.lib_control.estimation.data_fusion import covariance_intersection
-from core.utils.control.lib_control.orientation import align_angle
+from core.utils.control_lib.lib_control.estimation.data_fusion import covariance_intersection
+from core.utils.control_lib.lib_control.orientation import align_angle
 from core.utils.logging_utils import Logger
 
 INDEX_X = 0

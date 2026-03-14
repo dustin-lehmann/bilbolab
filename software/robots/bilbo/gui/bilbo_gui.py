@@ -3,11 +3,11 @@ import dataclasses
 from core.utils.callbacks import callback_definition, CallbackContainer, Callback
 from core.utils.dataclass_utils import from_dict_auto
 from core.utils.files import get_absolute_path, file_exists
-from core.utils.logging_utils import Logger, addLogRedirection, LOGGING_COLORS
+from core.utils.logging_utils import Logger, enable_redirection, addLogRedirection, LOGGING_COLORS
 from core.utils.mdns import MDNSAdvertiser
 from core.utils.network.port_forwarder import PortForwarder
 from core.utils.yaml_utils import load_yaml
-from extensions.cli.cli import CLI
+from extensions.tools.cli.cli import CLI
 from extensions.gui.src.app import App
 from extensions.gui.src.gui import GUI, Category, Page
 from extensions.gui.src.lib.objects.python.buttons import Button
@@ -35,11 +35,13 @@ class BILBO_GUI_Settings:
     enable_camera: bool = False
     enable_emergency_stop: bool = False
     enable_terminal: bool = True
-    bottom_group_size: list = dataclasses.field(default_factory=lambda: [3, 3])
+    bottom_group_size: list = dataclasses.field(default_factory=lambda: [3, 4])
     enable_top_bar: bool = True
     allow_multiple_instances: bool = False
     show_message_rate: bool = True
     message_rate_warning: int = 200
+    category_bottom_group_size: list = dataclasses.field(default_factory=lambda: [3, 3])
+    category_bottom_width: float = 0.4
 
 
 @callback_definition
@@ -96,6 +98,8 @@ class BILBO_Application_GUI:
                 'allow_multiple_instances': self.settings.allow_multiple_instances,
                 'show_message_rate': self.settings.show_message_rate,
                 'message_rate_warning': self.settings.message_rate_warning,
+                'category_bottom_group_size': self.settings.category_bottom_group_size,
+                'category_bottom_width': self.settings.category_bottom_width,
             }
         )
 
@@ -188,11 +192,14 @@ class BILBO_Application_GUI:
 
     # ------------------------------------------------------------------------------------------------------------------
     def addRobot(self, robot: BILBO):
+        if robot.id in self.robot_ui:
+            self.removeRobot(robot.id)
         self.robot_ui[robot.id] = RobotUI(robot=robot,
                                           manager=self.testbed_manager,
                                           gui=self.gui,
                                           app=self.app,
-                                          application_settings=self.application_settings)
+                                          application_settings=self.application_settings,
+                                          joystick_control=self.joystick_control)
 
         self.gui.callout_handler.add(callout_type=CalloutType.INFO,
                                      title='Robot Connected',
@@ -241,7 +248,8 @@ class BILBO_Application_GUI:
     # === PRIVATE METHODS ==============================================================================================
     def _addCategoriesAndPages(self):
         # Application category
-        category_application = Category(id='application', name='Application', icon='🎛️')
+        category_application = Category(id='application', name='Application', icon='🎛️',
+                                               bottom_group_size=self.settings.category_bottom_group_size)
         self.gui.addCategory(category_application)
         self.categories['application'] = {'category': category_application}
 
@@ -258,6 +266,13 @@ class BILBO_Application_GUI:
         self.categories['application']['pages'] = {
             'testbed': self.testbed_page.page,
         }
+
+        # Application category bottom group
+        testbed_button = Button(
+            widget_id='testbed_btn', text='Testbed', icon='🏗️',
+            font_size=9, color=[0.15, 0.2, 0.25],
+        )
+        category_application.bottom_group.addWidget(testbed_button, row=1, column=1, width=1, height=1)
 
         # Robots Category
         category_robots = Category(id='robots', name='Robots', icon='🤖', number_of_pages=1, max_pages=1)
@@ -310,10 +325,40 @@ class BILBO_Application_GUI:
         self.gui.bottom_group.addWidget(network_button, row=1, column=2, width=1, height=1)
         self._network_button = network_button
 
+        experiment_designer_button = Button(
+            widget_id='experiment_designer_btn', text='Designer', icon='🧪',
+            font_size=9, color=[0.15, 0.2, 0.25],
+        )
+        experiment_designer_button.callbacks.click.register(
+            Callback(function=self._open_experiment_designer, discard_inputs=True)
+        )
+        self.gui.bottom_group.addWidget(experiment_designer_button, row=1, column=3, width=1, height=1)
+        self._experiment_designer_button = experiment_designer_button
+
+        experiment_viewer_button = Button(
+            widget_id='experiment_viewer_btn', text='Viewer', icon='📊',
+            font_size=9, color=[0.15, 0.2, 0.25],
+        )
+        experiment_viewer_button.callbacks.click.register(
+            Callback(function=self._open_experiment_viewer, discard_inputs=True)
+        )
+        self.gui.bottom_group.addWidget(experiment_viewer_button, row=1, column=4, width=1, height=1)
+        self._experiment_viewer_button = experiment_viewer_button
+
     # ------------------------------------------------------------------------------------------------------------------
     def _open_network_monitor(self, *args, **kwargs):
         url = f"/network-popup.html?host={self.host}&port=8500&title=Network%20Monitor"
         self._network_button.function('openUrl', [url, 'width=900,height=500,noopener'])
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _open_experiment_designer(self, *args, **kwargs):
+        url = '/experiment-designer-popup.html'
+        self._experiment_designer_button.function('openUrl', [url, 'noopener'])
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _open_experiment_viewer(self, *args, **kwargs):
+        url = '/experiment-viewer-popup.html'
+        self._experiment_viewer_button.function('openUrl', [url, 'noopener'])
 
     # ------------------------------------------------------------------------------------------------------------------
     def _openInputViewer(self, sender, *args, **kwargs):

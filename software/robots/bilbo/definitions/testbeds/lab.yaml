@@ -1,0 +1,39 @@
+id: lab
+
+origin: bilbo-origin
+
+size:
+  x: [ 0, 3 ]
+  y: [ 0, 3 ]
+
+obstacles:
+  - id: wall-1
+    type: box
+    size: [ 0.05, 1.5 ]
+    state: [ 0.75, 1.5, 0 ]
+  - id: wall-2
+    type: box
+    size: [ 0.05, 1.25 ]
+    state: [ 1.375, 2.25, -1.5708 ]
+  - id: wall-3
+    type: box
+    size: [ 0.05, 0.75 ]
+    state: [ 2, 1.875, -3.1416 ]
+  - id: wall-4
+    type: box
+    size: [ 0.05, 1 ]
+    state: [ 2.5, 1.5, -1.5708 ]
+
+lines:
+  - id: line-1
+    start: [ 0, 1.5 ]
+    end: [ 0.75, 1.5 ]
+  - id: line-2
+    start: [ 1.5, 3 ]
+    end: [ 1.5, 2.25 ]
+
+points:
+  - id: point-1
+    position: [ 0.375, 1 ]
+  - id: point-2
+    position: [ 0.75, 2.625 ]

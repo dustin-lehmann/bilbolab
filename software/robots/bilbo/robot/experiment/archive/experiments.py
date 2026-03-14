@@ -2,9 +2,9 @@
 # import numpy as np
 #
 # # === CUSTOM PACKAGES ==================================================================================================
-# from core.utils.control.lib_control.il.ilc import BILBO_BUMPED_REFERENCE_TRAJECTORY, BILBO_REFERENCE_LONGER
-# from core.utils.control.lib_control.il.q_filter import design_zero_phase_fir, build_Qf_zero_padded
-# from core.utils.control.lib_control.lifted_systems import vec2liftedMatrix, liftedMatrix2Vec
+# from core.utils.control_lib.lib_control.il.ilc import BILBO_BUMPED_REFERENCE_TRAJECTORY, BILBO_REFERENCE_LONGER
+# from core.utils.control_lib.lib_control.il.q_filter import design_zero_phase_fir, build_Qf_zero_padded
+# from core.utils.control_lib.lib_control.lifted_systems import vec2liftedMatrix, liftedMatrix2Vec
 # from core.utils.data import generate_time_vector, generate_random_input, generate_time_vector_by_length
 # from core.utils.events import event_definition, Event, OR, wait_for_events, EventFlag
 # from core.utils.logging_utils import Logger

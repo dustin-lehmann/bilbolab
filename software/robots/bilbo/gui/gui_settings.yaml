@@ -1,7 +1,7 @@
 enable_camera: true
 enable_emergency_stop: true
 enable_terminal: true
-bottom_group_size: [4, 7]
+bottom_group_size: [4, 4]
 enable_top_bar: false
 show_message_rate: false
 message_rate_warning: 200

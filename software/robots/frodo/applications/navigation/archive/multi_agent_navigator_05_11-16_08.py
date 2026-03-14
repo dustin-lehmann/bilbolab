@@ -23,7 +23,7 @@ from core.utils.events import Event, event_definition, EventFlag, pred_flag_equa
 from core.utils.exit import register_exit_callback
 from core.utils.files import fileExists
 from core.utils.logging_utils import Logger
-from core.utils.loop import infinite_loop
+from core.utils.exit import infinite_loop
 from core.utils.time import IntervalTimer, TimeoutTimer, setTimeout
 
 

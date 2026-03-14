@@ -4,6 +4,7 @@ from core.utils.events import event_definition, Event
 from core.utils.logging_utils import Logger
 from robots.bilbo.definitions import Line_Config, Point_Config, Pose_Config
 from robots.bilbo.testbed.objects import TestbedBILBO, Obstacle, LimboBar
+from robots.bilbo.testbed.tracker.tracked_objects import Origin_OptiTrack_Config
 
 
 @dataclasses.dataclass
@@ -18,6 +19,12 @@ class TestbedSize:
 class TestbedConfig:
     size: TestbedSize
     id: str | None = None
+    origin: Origin_OptiTrack_Config | None = None
+
+
+@dataclasses.dataclass
+class TestbedData:
+    config: TestbedConfig | None = None
 
 
 @event_definition
@@ -142,6 +149,8 @@ class Testbed:
         }
         if self.config.id is not None:
             config['id'] = self.config.id
+        if self.config.origin is not None:
+            config['origin'] = dataclasses.asdict(self.config.origin)
         return config
 
     # ------------------------------------------------------------------------------------------------------------------

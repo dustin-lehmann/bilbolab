@@ -25,8 +25,8 @@ from core.utils.logging_utils import Logger
 from core.utils.network.network import getHostIP
 from core.utils.sound.sound import SoundSystem, speak
 from core.utils.time import IntervalTimer
-from extensions.cli.cli import CLI, CommandSet, Command, CommandArgument
-from extensions.joystick.joystick_manager import JoystickManager
+from extensions.tools.cli.cli import CLI, CommandSet, Command, CommandArgument
+from extensions.hardware.joystick.joystick_manager import JoystickManager
 from robots.frodo.frodo import FRODO
 from robots.frodo.frodo_manager import FRODO_Manager
 
