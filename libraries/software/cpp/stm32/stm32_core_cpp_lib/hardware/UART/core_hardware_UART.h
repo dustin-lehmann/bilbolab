@@ -90,7 +90,10 @@ public:
 			core_ErrorHandler(1);
 		}
 		HAL_UART_RegisterRxEventCallback(this->huart, uartRxCmpltDMA_callback);
-		__HAL_DMA_DISABLE_IT(this->huart->hdmarx, DMA_IT_HT);
+		// __HAL_DMA_DISABLE_IT(this->huart->hdmarx, DMA_IT_HT);
+		// Expanded manually to avoid C++20 volatile compound-assignment warning
+		static_cast<DMA_Stream_TypeDef*>(this->huart->hdmarx->Instance)->CR =
+				static_cast<DMA_Stream_TypeDef*>(this->huart->hdmarx->Instance)->CR & ~(DMA_IT_HT);
 
 		this->state = CORE_HARDWARE_UART_STATE_INIT;
 
@@ -168,7 +171,10 @@ public:
 		if (this->config.queues) {
 			HAL_UARTEx_ReceiveToIdle_DMA(this->huart,
 					&this->_rx_buffer.buffer[0], size_buffers);
-			__HAL_DMA_DISABLE_IT(this->huart->hdmarx, DMA_IT_HT);
+			// __HAL_DMA_DISABLE_IT(this->huart->hdmarx, DMA_IT_HT);
+			// Expanded manually to avoid C++20 volatile compound-assignment warning
+			static_cast<DMA_Stream_TypeDef*>(this->huart->hdmarx->Instance)->CR =
+				static_cast<DMA_Stream_TypeDef*>(this->huart->hdmarx->Instance)->CR & ~(DMA_IT_HT);
 		} else {
 			core_ErrorHandler(CORE_ERROR_NOT_IMPLEMENTED);
 		}

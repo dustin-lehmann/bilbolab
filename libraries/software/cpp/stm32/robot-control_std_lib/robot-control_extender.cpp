@@ -383,7 +383,7 @@ static void flush_kick_next() {
 	if (st != HAL_OK) {
 		// Simple policy: skip this op and continue.
 		// You can add retries/backoff based on st and HAL_I2C_GetError().
-		++s_op_index;
+		s_op_index = static_cast<uint8_t>(s_op_index + 1);
 		flush_kick_next();
 	}
 }
@@ -420,7 +420,7 @@ extern "C" void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c) {
 	if (!s_self)
 		return;
 	if (hi2c == s_self->config.hi2c) {
-		++s_op_index;
+		s_op_index = static_cast<uint8_t>(s_op_index + 1);
 		flush_kick_next();
 	}
 }

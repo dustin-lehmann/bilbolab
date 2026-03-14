@@ -6,6 +6,7 @@
  */
 
 #include "robot-control_indicators.h"
+#include "robot-control_led_strip.h"
 
 extern RobotControl_Extender extender;
 
@@ -54,6 +55,8 @@ void RobotControl_StatusLED::setState(int8_t state) {
 }
 
 
+extern RobotControl_LEDStrip rc_led_strip;
+
 RobotControl_ExternalRGBStrip::RobotControl_ExternalRGBStrip() {
 
 }
@@ -65,6 +68,6 @@ void RobotControl_ExternalRGBStrip::setColor(uint8_t red, uint8_t green, uint8_t
 			.green = green,
 			.blue = blue
 	};
-	extender.rgbLEDStrip_extern_setColor(color);
+	rc_led_strip.setColor(color);
 }
 

@@ -22,6 +22,7 @@ uint8_t board_revision = BOARD_REVISION;
 
 
 RobotControl_Extender extender;
+RobotControl_LEDStrip rc_led_strip;
 
 RobotControl_RGBLED rc_rgb_led_status(0);
 RobotControl_RGBLED rc_rgb_led_side_1(1);
@@ -53,9 +54,12 @@ void robot_control_init(){
 			.hi2c = BOARD_I2C_INTERN,
 	};
 	extender.init(extender_config);
-//	debug_uart.init();
-//	debug_uart.registerCallback(CORE_COMM_SERIAL_SOCKET_CB_RX, uart_rx_fun, NULL);
 
+#ifdef LED_STRIP_APA102
+	rc_led_strip.init();
+#else
+	rc_led_strip.extender = &extender;
+#endif
 }
 // ------------------------------------------------------------------------------------------------------------
 void robot_control_start(){
@@ -66,7 +70,7 @@ void robot_control_start(){
 			.green = 0,
 			.blue = 0,
     };
-    extender.rgbLEDStrip_extern_setColor(color);
+    rc_led_strip.setColor(color);
 
 //	debug_uart.start();
 //	osThreadNew(robot_control_task, NULL, &rc_task_attributes);

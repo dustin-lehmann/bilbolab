@@ -13,6 +13,7 @@
 #include "robot-control_default_config.h"
 #include "robot-control_extender.h"
 #include "robot-control_indicators.h"
+#include "robot-control_led_strip.h"
 
 extern core_hardware_LED rc_status_led_1;
 extern core_hardware_LED rc_status_led_2;
@@ -33,6 +34,7 @@ extern core_hardware_Button button;
 
 
 extern RobotControl_Extender extender;
+extern RobotControl_LEDStrip rc_led_strip;
 
 extern UART debug_uart;
 

@@ -21,8 +21,9 @@
 
 
 #if CORE_CONFIG_USE_RTOS
+#include "FreeRTOS.h"
+#include "task.h"
 #include "cmsis_os.h"
-//#include "cmsis_os2.h"
 #endif
 
 #include "core_defs.h"

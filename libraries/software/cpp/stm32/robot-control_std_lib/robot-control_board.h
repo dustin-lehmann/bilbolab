@@ -106,6 +106,8 @@ extern UART_HandleTypeDef huart1;
 extern DMA_HandleTypeDef hdma_usart1_rx;
 extern DMA_HandleTypeDef hdma_usart1_tx;
 
+extern SPI_HandleTypeDef hspi3;
+#define LED_APA102_SPI &hspi3
 
 #define BOARD_RS485_UART &huart8
 #define BOARD_RS485_UART_EN_GPIOx GPIOD
