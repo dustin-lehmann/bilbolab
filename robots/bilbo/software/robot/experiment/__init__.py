@@ -1,59 +1,40 @@
-# Re-export from submodules for backwards compatibility
-
-# Parser components
-from robot.experiment.experiment_parser import (
-    ActionParameter,
-    ActionEntry,
-    ActionRegistry,
-    ExperimentParser,
-    get_registry,
-    register_action,
-    parse_experiment_file,
-    parse_experiment_dict,
-    parse_time_ms,
-    parse_control_mode,
-    normalize_path_points,
-    normalize_waypoints,
+# New experiment framework (core.utils.experiments)
+from core.utils.experiments import (
+    ActionStatus, ActionResult, ExperimentStatus, TriggerType,
+    ActionBase, ActionContext, ActionRegistry,
+    ActionDefinition, ExperimentDefinition, ExperimentRunner,
+    ExperimentParser, register_builtin_actions,
 )
 
-from robot.experiment.experiment import (
-    ExperimentActionDefinition,
-    ExperimentAction,
-    ExperimentActionEvents,
-    ExperimentActionCallbacks,
-    BeepAction,
-    SetModeAction,
-    SetTICAction,
-    SpeakAction,
-    SetMarkerAction,
-    EnableExternalInputAction,
-    SetVelocityAction,
-    ResetAction,
+# BILBO-specific actions
+from robot.experiment.actions import (
+    register_bilbo_actions, ALL_BILBO_ACTIONS,
+    # Control
+    SetModeAction, SetFeedbackGainAction, SetTICAction, SetVICAction,
+    SetPSIControlAction, SetPSISetpointAction, ResetControlAction,
+    LoadControlConfigAction, SetVelocityPIDAction, SetTurnPIDAction,
+    SetVelocityFeedforwardAction, SetPositionControlConfigAction,
+    SetMaxWheelSpeedAction,
+    # Navigation
+    MoveToAction, TurnToAction, FollowPathAction, StopPathAction,
+    WaitPositionEventAction, SetPlannerAction, SetPlannerConfigAction,
+    # Drive
+    SetVelocityAction, SetInputAction,
+    # Trajectory
     RunTrajectoryAction,
-    SetInputAction,
-    WaitTimeAction,
-    WaitTickAction,
-    WaitUntilTickAction,
-    WaitEventAction,
-    ParallelAction,
-    FuncAction,
-    SetFeedbackGainAction,
-    ResetControlAction,
-    MoveToAction,
-    TurnToAction,
-    StopPathAction,
-    WaitPositionEventAction,
-    EXPERIMENT_ACTION_TYPE_MAPPING,
-    ExperimentDefinition,
-    ExperimentActionData,
-    ExperimentMetaData,
-    ExperimentData,
-    BILBO_Experiment_Events,
-    BILBO_Experiment_Callbacks,
-    ExperimentActionContainer,
-    Experiment,
+    # Estimation
+    EnableTrackingAction, WaitForStaticAction,
+    # Audio / IO
+    BeepAction, SpeakAction, PlayToneAction, SetLEDAction, SetMarkerAction,
+    # Input
+    EnableExternalInputAction, ResetAction,
+    # Testbed
+    AddObstacleAction, RemoveObstacleAction, ClearObstaclesAction,
+    # Data
+    ReadStateAction, FlushLogsAction,
 )
 
+# Experiment handler (trajectory execution, WiFi commands, markers, sequencer events)
 from robot.experiment.experiment_handler import (
     BILBO_ExperimentHandler_Events,
     BILBO_ExperimentHandler_Status,
@@ -62,6 +43,14 @@ from robot.experiment.experiment_handler import (
     BILBO_ExperimentHandler,
 )
 
+# BILBO experiment wrapper
+from robot.experiment.bilbo_experiment import (
+    BILBO_Experiment,
+    BILBO_ExperimentResult,
+    BILBO_ExperimentContext,
+)
+
+# Data types (still needed by trajectory system)
 from robot.experiment.definitions import (
     BILBO_LL_Sequencer_Event_Type,
     BILBO_InputTrajectoryStep,

@@ -53,13 +53,14 @@ from simulation.control import (
     VelocityControlOutput,
     TICController, TICConfig,
     VICController, VICConfig,
+    PSIController, PSIConfig,
     PIDConfig, FeedforwardConfig,
 )
 from simulation.position_control import (
     SimulatedPositionControl,
     PositionControlConfig,
     PositionControlMode,
-    PositionControlEvent,
+    PositionControlEvent,  # Used for velocity reset on command finish
     PathState,
 )
 
@@ -79,6 +80,7 @@ class SimulatedFirmware:
         self.velocity = VelocityController(Ts=self.Ts)
         self.tic = TICController(TICConfig(Ts=self.Ts))
         self.vic = VICController(VICConfig(Ts=self.Ts))
+        self.psi_ctrl = PSIController(PSIConfig(Ts=self.Ts))
         self.position_control = SimulatedPositionControl(PositionControlConfig(Ts=self.Ts))
 
         # State
@@ -139,23 +141,50 @@ class SimulatedFirmware:
 
             old_mode = self.mode
 
-            # Transition logic (mirrors firmware)
-            if new_mode == bilbo_control_mode_t.VELOCITY:
-                self.velocity.reset()
-                self.vic.reset()
-            elif new_mode == bilbo_control_mode_t.POSITION:
-                self.velocity.reset()
-                self.position_control.reset()
-            elif new_mode == bilbo_control_mode_t.BALANCING:
-                self.vic.reset()
-                self.tic.reset()
-            elif new_mode == bilbo_control_mode_t.OFF:
-                self.vic.reset()
-                self.tic.reset()
+            # Transition logic (mirrors firmware bilbo_control.cpp set_mode)
+            if new_mode == bilbo_control_mode_t.OFF:
+                self.vic.set_enabled(False)
+                self.tic.set_enabled(False)
+                self.psi_ctrl.set_enabled(False)
                 self._ext_input_left = 0.0
                 self._ext_input_right = 0.0
                 self._velocity_cmd_v = 0.0
                 self._velocity_cmd_psidot = 0.0
+            elif new_mode == bilbo_control_mode_t.DIRECT:
+                self.vic.set_enabled(False)
+                self.tic.set_enabled(False)
+                self.psi_ctrl.set_enabled(False)
+            elif new_mode == bilbo_control_mode_t.BALANCING:
+                self.vic.reset()
+                self.psi_ctrl.reset()
+                self.vic.set_enabled(True)
+                self.tic.set_enabled(False)
+                self.psi_ctrl.set_enabled(False)
+            elif new_mode == bilbo_control_mode_t.VELOCITY:
+                # Cannot go from OFF directly to VELOCITY (firmware blocks this)
+                if old_mode == bilbo_control_mode_t.OFF:
+                    return
+                self.velocity.reset()
+                self.vic.set_enabled(False)
+                self.tic.set_enabled(False)
+                self.psi_ctrl.set_enabled(False)
+            elif new_mode == bilbo_control_mode_t.POSITION:
+                # Cannot go from OFF directly to POSITION (firmware blocks this)
+                if old_mode == bilbo_control_mode_t.OFF:
+                    return
+                self.vic.set_enabled(False)
+                self.tic.set_enabled(False)
+                self.psi_ctrl.set_enabled(False)
+                self.velocity.reset()
+                self.position_control.reset()
+                self.position_control.clear_path()
+
+            # General reset on every mode change (firmware: this->reset())
+            # Resets balancing, velocity, position controllers and external input
+            self.velocity.reset()
+            self.position_control.reset()
+            self._ext_input_left = 0.0
+            self._ext_input_right = 0.0
 
             self.mode = new_mode
 
@@ -194,25 +223,40 @@ class SimulatedFirmware:
 
     def set_tic_config(self, config: TICConfig):
         with self._lock:
-            self.tic.config = config
+            self.tic.set_config(config)
 
     def set_vic_config(self, config: VICConfig):
         with self._lock:
-            self.vic.config = config
+            self.vic.set_config(config)
 
     def set_tic_enabled(self, enabled: bool):
         with self._lock:
-            self.tic.config.enabled = enabled
-            if not enabled:
-                self.tic.reset()
+            if not self.tic.config.enabled:
+                return  # Config master switch off → can't enable
+            self.tic.set_enabled(enabled)
         self._fire_control_event(control_event_t.TIC_CHANGED)
 
     def set_vic_enabled(self, enabled: bool):
         with self._lock:
-            self.vic.config.enabled = enabled
-            if not enabled:
-                self.vic.reset()
+            if not self.vic.config.enabled:
+                return  # Config master switch off → can't enable
+            self.vic.set_enabled(enabled)
         self._fire_control_event(control_event_t.VIC_CHANGED)
+
+    def set_psi_config(self, config: PSIConfig):
+        with self._lock:
+            self.psi_ctrl.set_config(config)
+
+    def set_psi_enabled(self, enabled: bool):
+        with self._lock:
+            if enabled == self.psi_ctrl.is_enabled():
+                return  # No change (matches firmware)
+            self.psi_ctrl.set_enabled(enabled)
+        self._fire_control_event(control_event_t.PSI_CHANGED)
+
+    def set_psi_setpoint(self, psi_ref: float):
+        with self._lock:
+            self.psi_ctrl.set_setpoint(psi_ref)
 
     def set_max_torque(self, torque: float):
         with self._lock:
@@ -246,6 +290,7 @@ class SimulatedFirmware:
             self.velocity.reset()
             self.tic.reset()
             self.vic.reset()
+            self.psi_ctrl.reset()
             self.position_control.reset()
             self._ext_input_left = 0.0
             self._ext_input_right = 0.0
@@ -329,16 +374,19 @@ class SimulatedFirmware:
                 tau_right = self._ext_input_right
 
             elif self.mode == bilbo_control_mode_t.BALANCING:
-                # VIC (only in balancing mode)
-                vic_torque = self.vic.update(state.v, state.theta)
-                # TIC
-                tic_torque = self.tic.update(state.theta)
-                # LQR
+                # 1. LQR with external input
                 bal_left, bal_right = self.balancing.update(
                     state.v, state.theta, state.theta_dot, state.psi_dot,
                     self._ext_input_left, self._ext_input_right)
-                tau_left = bal_left + tic_torque + vic_torque
-                tau_right = bal_right + tic_torque + vic_torque
+                # 2. VIC
+                vic_torque = self.vic.update(state.v, state.theta)
+                # 3. TIC
+                tic_torque = self.tic.update(state.theta)
+                # 4. PSI (differential: +left, -right)
+                psi_torque = self.psi_ctrl.update(state.psi)
+                # 5. Combine (matches firmware bilbo_control.cpp:435-436)
+                tau_left = bal_left + vic_torque + tic_torque + psi_torque
+                tau_right = bal_right + vic_torque + tic_torque - psi_torque
                 self._last_bal_left = bal_left
                 self._last_bal_right = bal_right
 
@@ -387,8 +435,9 @@ class SimulatedFirmware:
             self._last_output_left = tau_left
             self._last_output_right = tau_right
 
-            # Step dynamics
-            self.dynamics.step(tau_left, tau_right)
+            # Step dynamics (skip when lying on ground in OFF mode)
+            if not (self.mode == bilbo_control_mode_t.OFF and self.dynamics._ground_contact):
+                self.dynamics.step(tau_left, tau_right)
             new_state = self.dynamics.state
 
             # Get wheel speeds
@@ -400,6 +449,19 @@ class SimulatedFirmware:
             # Collect position control events
             pc_events = list(self.position_control.pending_events)
             self.position_control.pending_events.clear()
+
+            # Reset velocity control on path finish/timeout/abort
+            # (mirrors firmware _on_position_command_finished callback —
+            #  only registered for path events, NOT move_to_point or turn_to_heading)
+            _vel_reset_events = {
+                PositionControlEvent.PATH_FINISHED,
+                PositionControlEvent.PATH_TIMEOUT,
+                PositionControlEvent.PATH_ABORTED,
+            }
+            for evt, _ in pc_events:
+                if evt in _vel_reset_events:
+                    self.velocity.reset()
+                    break
 
             self.tick += 1
 
@@ -433,8 +495,9 @@ class SimulatedFirmware:
             control=bilbo_ll_control_data(
                 mode=int(self.mode),
                 status=1,
-                vic_enabled=int(self.vic.config.enabled and self.vic.active),
-                tic_enabled=int(self.tic.config.enabled and self.tic.active),
+                vic_enabled=int(self.vic.is_active()),
+                tic_enabled=int(self.tic.is_enabled()),
+                psi_enabled=int(self.psi_ctrl.is_active()),
                 position_control_data=bilbo_position_control_data(
                     mode=pc_data.mode,
                     path_state=pc_data.path_state,
@@ -511,8 +574,11 @@ class SimulatedFirmware:
             self._event_callback('control', {
                 'event': int(event),
                 'mode': int(self.mode),
-                'vic_enabled': int(self.vic.config.enabled and self.vic.active),
-                'tic_enabled': int(self.tic.config.enabled and self.tic.active),
+                'data': {
+                    'vic_enabled': int(self.vic.is_active()),
+                    'tic_enabled': int(self.tic.is_enabled()),
+                    'psi_enabled': int(self.psi_ctrl.is_active()),
+                },
                 'tick': self.tick,
             })
 

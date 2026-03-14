@@ -27,8 +27,8 @@ from core.communication.wifi.bilbolab_wifi_interface import (
     wifi_event_definition, WifiEventContainer, WifiEvent, WifiEventFlag,
 )
 from core.utils.callbacks import callback_definition, CallbackContainer
-from core.utils.control.lib_control.il.q_filter import FIR_Design_Params, design_zero_phase_fir, build_Qf_zero_padded
-from core.utils.control.lib_control.lifted_systems import vec2liftedMatrix
+from core.utils.control_lib.lib_control.il.q_filter import FIR_Design_Params, design_zero_phase_fir, build_Qf_zero_padded
+from core.utils.control_lib.lib_control.lifted_systems import vec2liftedMatrix
 from core.utils.data import generate_time_vector_by_length, generate_random_input
 from core.utils.events import event_definition, Event, wait_for_events, OR, TIMEOUT
 from core.utils.logging_utils import Logger, enable_redirection, disable_redirection

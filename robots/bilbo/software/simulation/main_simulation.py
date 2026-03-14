@@ -1,10 +1,16 @@
 import argparse
 import os
+import sys
 import time
 
 import yaml
 
 SOFTWARE_ROOT = os.path.dirname(os.path.abspath(__file__))
+SOFTWARE_PARENT = os.path.dirname(SOFTWARE_ROOT)
+
+# Add the software root to the Python path so this file can be run directly
+if SOFTWARE_PARENT not in sys.path:
+    sys.path.insert(0, SOFTWARE_PARENT)
 
 
 def _load_simulation_settings() -> dict:

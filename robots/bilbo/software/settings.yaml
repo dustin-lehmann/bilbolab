@@ -1,5 +1,8 @@
 stm32:
-  reset: true
+  reset: false
+
+testbed:
+  id: track
 
 tracker:
   enabled: true
@@ -8,8 +11,13 @@ tracker:
 joystick:
   enabled: true
 
+sound:
+  volume: 1.0
+  voice: robot  # female, male, or robot
+
 paths:
   main: '~/robot'
 
 misc:
   warn_on_sample_batching: true
+

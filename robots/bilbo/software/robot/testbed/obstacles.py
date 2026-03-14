@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import dataclasses
+import math
 
 
 @dataclasses.dataclass
@@ -101,8 +102,6 @@ class LimboBar:
             psi: Yaw angle (rotation around global z).
             config: Robot config with .model (wheel_diameter, height, width, depth).
         """
-        import math
-
         # Robot dimensions
         wheel_radius = config.model.wheel_diameter / 2
         wheel_thickness = 0.02  # m
@@ -262,8 +261,6 @@ class LimboBar:
 
     def _sort_convex_polygon(self, points: list) -> list:
         """Sort points counter-clockwise around their centroid to form convex polygon."""
-        import math
-
         if len(points) < 3:
             return points
 

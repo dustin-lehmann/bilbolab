@@ -6,6 +6,7 @@ from robot.lowlevel.stm32_errors import bilbo_ll_log_entry_t, BILBO_LL_Log_Entry
 
 # Samples LL
 SAMPLE_BUFFER_LL_SIZE = 10
+MAX_PENDING_BATCHES = 4
 
 
 class bilbo_ll_sample_general_struct(ctypes.Structure):
@@ -20,7 +21,7 @@ class BILBO_LL_Sample_General:
 
 
 class bilbo_ll_sample_errors_struct(ctypes.Structure):
-    _fields_ = [("state", ctypes.c_int8),
+    _fields_ = [("state", ctypes.c_uint8),
                 ("last_entry", bilbo_ll_log_entry_t), ]
 
 
@@ -192,7 +193,8 @@ class bilbo_estimation_config_t(ctypes.Structure):
 @dataclasses.dataclass
 class EstimationConfig:
     velocity_filter_config: VelocityLowpassFilterConfig = dataclasses.field(default_factory=VelocityLowpassFilterConfig)
-    theta_dot_filter_config: ThetaDotLowpassFilterConfig = dataclasses.field(default_factory=ThetaDotLowpassFilterConfig)
+    theta_dot_filter_config: ThetaDotLowpassFilterConfig = dataclasses.field(
+        default_factory=ThetaDotLowpassFilterConfig)
     psi_dot_filter_config: PsiDotLowpassFilterConfig = dataclasses.field(default_factory=PsiDotLowpassFilterConfig)
     position_ekf_config: PositionEkfConfig = dataclasses.field(default_factory=PositionEkfConfig)
 
@@ -213,16 +215,18 @@ class BILBO_LL_Sample_Drive:
 
 
 class bilbo_ll_sample_sequence_struct(ctypes.Structure):
-    _fields_ = [("sequence_id", ctypes.c_uint16),
-                ("sequence_tick", ctypes.c_uint32)
-                ]
+    _fields_ = [
+        ("mode", ctypes.c_uint8),
+        ("sequence_id", ctypes.c_uint16),
+        ("sequence_tick", ctypes.c_uint32)
+    ]
 
 
 @dataclasses.dataclass
 class BILBO_LL_Sample_Sequence:
+    mode: int = 0
     sequence_id: int = 0
     sequence_tick: int = 0
-
 
 class bilbo_ll_sample_debug_struct(ctypes.Structure):
     _fields_ = [("debug1", ctypes.c_uint8),

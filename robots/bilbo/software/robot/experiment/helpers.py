@@ -81,6 +81,7 @@ def generate_random_input_trajectory(trajectory_id, time_s, frequency, gain, bia
     trajectory_input = generate_random_input(t_vector=t_vector, f_cutoff=frequency, sigma_I=gain, bias=bias)
     trajectory_inputs = generate_trajectory_inputs(trajectory_input)
 
+    from robot.experiment.definitions import BILBO_InputTrajectory
     trajectory = BILBO_InputTrajectory(
         id=trajectory_id,
         name='test',

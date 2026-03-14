@@ -3,17 +3,18 @@
 
 dynamics:
   m_b: 1.2            # [kg] Body mass
-  m_w: 0.4            # [kg] Wheel mass (each)
-  l: 0.026            # [m] Center of gravity height above wheel axis
-  d_w: 0.22           # [m] Distance between wheel centers
-  I_w: 2.0e-4         # [kg*m^2] Wheel inertia (each)
-  I_y: 0.005          # [kg*m^2] Body inertia about pitch axis
+  m_w: 0.15            # [kg] Wheel mass (each)
+  l: 0.016            # [m] Center of gravity height above wheel axis
+  d_w: 0.2           # [m] Distance between wheel centers
+  I_w: 2.0e-5         # [kg*m^2] Wheel inertia (each)
+  I_y: 0.0035          # [kg*m^2] Body inertia about pitch axis
   I_x: 0.02           # [kg*m^2] Body inertia about roll axis
   I_z: 0.03           # [kg*m^2] Body inertia about yaw axis
   c_alpha: 4.6302e-4  # [N*m*s/rad] Motor viscous drag coefficient
   r_w: 0.06           # [m] Wheel radius
   tau_theta: 0.4      # [1/s] Pitch damping coefficient
   tau_x: 0.4          # [1/s] Forward velocity damping coefficient
+  tau_psi: 0.3        # [1/s] Yaw rate damping (compensates for missing motor dynamics/friction)
 
 simulation:
   Ts: 0.01            # [s] Control loop period (100 Hz)

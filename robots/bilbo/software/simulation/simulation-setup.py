@@ -87,17 +87,22 @@ def copy_control_configs(config_dir: str, dest_dir: str):
 
 
 def copy_testbed_config(dest_dir: str):
-    """Copy the testbed config, falling back to a minimal default for simulation."""
-    src = os.path.join(SOFTWARE_ROOT, 'configs', 'testbed', 'testbed.yaml')
-    dest = os.path.join(dest_dir, 'testbed.yaml')
+    """Copy all testbed config files, falling back to a minimal default for simulation."""
+    src_dir = os.path.join(SOFTWARE_ROOT, 'configs', 'testbed')
+    dest_testbed_dir = os.path.join(dest_dir, 'testbed')
+    os.makedirs(dest_testbed_dir, exist_ok=True)
 
-    if os.path.isfile(src):
-        shutil.copy2(src, dest)
-        print(f"  Copied testbed config")
+    if os.path.isdir(src_dir):
+        count = 0
+        for f in os.listdir(src_dir):
+            if f.endswith('.yaml'):
+                shutil.copy2(os.path.join(src_dir, f), os.path.join(dest_testbed_dir, f))
+                count += 1
+        print(f"  Copied {count} testbed config(s)")
     else:
         # Minimal fallback
-        with open(dest, 'w') as f:
-            yaml.dump({'origin': None, 'size': [4.0, 4.0]}, f)
+        with open(os.path.join(dest_testbed_dir, 'default.yaml'), 'w') as f:
+            yaml.dump({'size': [4.0, 4.0]}, f)
         print(f"  Created default testbed config")
 
 

@@ -1,5 +1,5 @@
 from core.utils.files import file_exists, copyFile
-from core.utils.network import get_own_hostname
+from core.hardware.network import get_own_hostname
 from hardware.board_config import generateBoardConfig
 from robot.config import get_bilbo_config
 from robot.control.bilbo_control_config import generate_default_config
@@ -33,14 +33,8 @@ def setup():
     # 6. Generate the corresponding control config
     generate_default_config(robot_id)
 
-    # 7. Copy the testbed config file to the robot's config folder
-    testbed_file = f"{SOFTWARE_PATH}configs/testbed/testbed.yaml"
-
-    if not file_exists(testbed_file):
-        raise FileNotFoundError(f"Testbed config file not found: {testbed_file}")
-    else:
-        copyFile(testbed_file, f"{CONFIG_PATH}/testbed.yaml")
-        print(f"Testbed config file copied to {CONFIG_PATH}.")
+    # 7. Testbed configs are loaded directly from software/configs/testbed/ at runtime.
+    #    No copy needed.
 
 
 def write_id_file(id: str = None):

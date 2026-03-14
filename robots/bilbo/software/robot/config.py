@@ -4,7 +4,7 @@ import yaml
 
 from core.utils.dataclass_utils import from_dict_auto
 from core.utils.files import file_exists
-from core.utils.network import get_own_hostname
+from core.hardware.network import get_own_hostname
 from robot.paths import CONFIG_PATH
 
 

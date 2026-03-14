@@ -25,6 +25,87 @@ actions:
 **Optional fields:**
 - `timeout` - Maximum experiment duration in seconds
 - `external_input_enabled` - If true, external inputs (joystick, etc.) remain active during the experiment. Default: false.
+- `requirements` - Optional preconditions checked before the experiment starts (see below)
+
+---
+
+## Requirements
+
+The optional `requirements` field lets you define preconditions that are checked before an experiment starts. If any requirement fails, the experiment is rejected with error messages and never begins execution. Omitting a field means "don't check".
+
+```yaml
+id: navigation_experiment
+description: Navigate to waypoints
+timeout: 60.0
+
+requirements:
+  optitrack: true                    # OptiTrack must be connected
+  robot_id: "bilbo.*"               # Regex pattern, or list: ["bilbo1", "bilbo2"]
+  control_mode: "OFF"               # Required control mode before start
+  control_config: "default"         # Required control config name
+  state_ranges:                      # Dynamic state must be within bounds
+    - state: theta
+      min: -0.1
+      max: 0.1
+    - state: v
+      min: -0.05
+      max: 0.05
+
+actions:
+  - type: set_mode
+    mode: POSITION
+  # ...
+```
+
+All fields under `requirements` are optional. You can use any combination:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `optitrack` | bool | `true` = must be connected, `false` = must not be active |
+| `robot_id` | string or list | Regex pattern(s) matched against the robot's ID |
+| `control_mode` | string | Required control mode (e.g. `"OFF"`, `"BALANCING"`) |
+| `control_config` | string | Required control configuration name |
+| `state_ranges` | list | List of state field bounds to check |
+
+### State Range Entries
+
+Each entry in `state_ranges` checks a field of the robot's dynamic state:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `state` | string | State field name: `x`, `y`, `v`, `theta`, `theta_dot`, `psi`, `psi_dot` |
+| `min` | float | Minimum allowed value (optional) |
+| `max` | float | Maximum allowed value (optional) |
+
+### Examples
+
+**Require OptiTrack and robot to be nearly upright:**
+```yaml
+requirements:
+  optitrack: true
+  state_ranges:
+    - state: theta
+      min: -0.05
+      max: 0.05
+```
+
+**Restrict to specific robots:**
+```yaml
+requirements:
+  robot_id: ["bilbo1", "bilbo3"]
+```
+
+**Require robot to be stationary and in OFF mode:**
+```yaml
+requirements:
+  control_mode: "OFF"
+  state_ranges:
+    - state: v
+      max: 0.01
+    - state: theta_dot
+      min: -0.05
+      max: 0.05
+```
 
 ---
 

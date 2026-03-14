@@ -36,7 +36,7 @@ from robot.lowlevel.stm32_control import (
     bilbo_position_control_data,
 )
 from robot.lowlevel.stm32_sample import BILBO_LL_Sample
-from simulation.control import PIDConfig, FeedforwardConfig, TICConfig, VICConfig
+from simulation.control import PIDConfig, FeedforwardConfig, TICConfig, VICConfig, PSIConfig
 from simulation.firmware import SimulatedFirmware
 from simulation.position_control import PositionControlConfig
 
@@ -123,6 +123,9 @@ class SimulatedSerial:
     def readFirmwareRevision(self):
         return {'major': 99, 'minor': 0}
 
+    def readFirmwareInfo(self):
+        return {'board_revision': 4, 'model': 0, 'drive_interface': 2}
+
     def debug(self, state):
         pass
 
@@ -146,6 +149,10 @@ class SimulatedSerial:
         # === SYSTEM ===
         if address == BILBO_SystemAddresses.FIRMWARE_RESET:
             return fw.firmware_reset()
+
+        if address == BILBO_SystemAddresses.DRIVE_RESET:
+            # In simulation, drive is always OK - just acknowledge
+            return True
 
         # === CONTROL ===
         if address == BILBO_ControlAddresses.SET_MODE:
@@ -207,6 +214,18 @@ class SimulatedSerial:
 
         if address == BILBO_ControlAddresses.ENABLE_VIC:
             fw.set_vic_enabled(bool(_val(data, input_type)))
+            return True
+
+        if address == BILBO_ControlAddresses.SET_PSI_CONFIG:
+            fw.set_psi_config(_psi_config(data))
+            return True
+
+        if address == BILBO_ControlAddresses.ENABLE_PSI:
+            fw.set_psi_enabled(bool(_val(data, input_type)))
+            return True
+
+        if address == BILBO_ControlAddresses.SET_PSI_SETPOINT:
+            fw.set_psi_setpoint(float(_val(data, input_type)))
             return True
 
         # === POSITION CONTROL ===
@@ -320,13 +339,23 @@ class SimulatedSerial:
             return True
 
         if address in (BILBO_EstimationAddresses.GET_VELOCITY_LPF,
-                       BILBO_EstimationAddresses.GET_PSIDOT_LPF):
+                       BILBO_EstimationAddresses.GET_PSIDOT_LPF,
+                       BILBO_EstimationAddresses.GET_THETA_DOT_LPF):
             # Return a mock config - simulation doesn't use these filters
             return {'enable': False, 'cutoff_hz': 10.0, 'reset_on_start': False}
 
         if address in (BILBO_EstimationAddresses.SET_VELOCITY_LPF,
-                       BILBO_EstimationAddresses.SET_PSIDOT_LPF):
+                       BILBO_EstimationAddresses.SET_PSIDOT_LPF,
+                       BILBO_EstimationAddresses.SET_THETA_DOT_LPF):
             # Accept but ignore - simulation doesn't use these filters
+            return True
+
+        if address == BILBO_EstimationAddresses.GET_CONFIG:
+            # Return a mock full estimation config
+            return {}
+
+        if address == BILBO_EstimationAddresses.SET_CONFIG:
+            # Accept but ignore
             return True
 
         logger.warning(f"executeFunction: unhandled address 0x{address:02X}")
@@ -338,7 +367,8 @@ class SimulatedSerial:
 class SimulatedSPI:
     """Mock of BILBO_SPI_Interface."""
 
-    def __init__(self):
+    def __init__(self, firmware: SimulatedFirmware = None):
+        self._firmware = firmware
         self.callbacks = type('SPICallbacks', (), {
             'rx_latest_sample': CallbackContainer(),
             'rx_samples': CallbackContainer(),
@@ -351,6 +381,16 @@ class SimulatedSPI:
 
     def sendTrajectoryData(self, trajectory_length, trajectory_data_bytes):
         logger.debug(f"sendTrajectoryData: {trajectory_length} points (ignored in simulation)")
+
+    def sendPathData(self, path_length: int, path_data_bytes: bytes | bytearray):
+        """Decode path_point_t array and forward to simulated firmware."""
+        if self._firmware is None:
+            return
+        from robot.lowlevel.stm32_control import path_point_t
+        ArrayType = path_point_t * path_length
+        c_array = ArrayType.from_buffer_copy(path_data_bytes)
+        for i in range(path_length):
+            self._firmware.pc_add_path_point(float(c_array[i].x), float(c_array[i].y))
 
 
 # ─── Main SimulatedCommunication ──────────────────────────────────────────────
@@ -367,7 +407,7 @@ class SimulatedCommunication:
         self._firmware = SimulatedFirmware(model_yaml_path=model_yaml_path)
 
         self.serial = SimulatedSerial(self._firmware)
-        self.spi = SimulatedSPI()
+        self.spi = SimulatedSPI(self._firmware)
         self.wifi = BILBO_WIFI_Interface(core=self.core)
 
         self.callbacks = SimulatedCommunication_Callbacks()
@@ -550,24 +590,40 @@ def _vic_config(data) -> VICConfig:
     )
 
 
+def _psi_config(data) -> PSIConfig:
+    """Convert ctypes bilbo_psi_config_t or dict to PSIConfig."""
+    return PSIConfig(
+        enabled=bool(_get(data, 'enabled', False)),
+        Ts=float(_get(data, 'Ts', 0.01)),
+        kp=float(_get(data, 'kp', 0.0)),
+        ki=float(_get(data, 'ki', 0.0)),
+        max_torque=float(_get(data, 'max_torque', 0.0)),
+    )
+
+
 def _pos_config(data) -> PositionControlConfig:
     """Convert ctypes bilbo_position_control_config_t or dict to PositionControlConfig."""
     return PositionControlConfig(
         Ts=float(_get(data, 'Ts', 0.01)),
-        kp_angular=float(_get(data, 'kp_angular', 8.0)),
-        ki_angular=float(_get(data, 'ki_angular', 0.25)),
-        kp_linear=float(_get(data, 'kp_linear', 0.0)),
-        ki_linear=float(_get(data, 'ki_linear', 0.012)),
+        kp_angular=float(_get(data, 'kp_angular', 10.0)),
+        ki_angular=float(_get(data, 'ki_angular', 0.3)),
+        kp_angular_heading=float(_get(data, 'kp_angular_heading', 0.0)),
+        ki_angular_heading=float(_get(data, 'ki_angular_heading', 0.0)),
+        kp_linear=float(_get(data, 'kp_linear', 2.0)),
+        ki_linear=float(_get(data, 'ki_linear', 0.0)),
         kd_linear=float(_get(data, 'kd_linear', 0.5)),
-        max_speed=float(_get(data, 'max_speed', 0.6)),
+        max_speed=float(_get(data, 'max_speed', 0.5)),
         max_turn_rate=float(_get(data, 'max_turn_rate', 5.0)),
         lookahead_base=float(_get(data, 'lookahead_base', 0.15)),
         lookahead_min=float(_get(data, 'lookahead_min', 0.03)),
         arrival_tolerance=float(_get(data, 'arrival_tolerance', 0.05)),
         arrival_dwell_time=float(_get(data, 'arrival_dwell_time', 0.5)),
+        stop_dwell_time=float(_get(data, 'stop_dwell_time', 1.0)),
         reverse_enter_angle=float(_get(data, 'reverse_enter_angle', 2.1)),
         reverse_exit_angle=float(_get(data, 'reverse_exit_angle', 1.05)),
-        decel_limit=float(_get(data, 'decel_limit', 0.6)),
+        decel_limit=float(_get(data, 'decel_limit', 0.0)),
+        curvature_gain=float(_get(data, 'curvature_gain', 2.0)),
+        curvature_lookahead=float(_get(data, 'curvature_lookahead', 0.3)),
     )
 
 

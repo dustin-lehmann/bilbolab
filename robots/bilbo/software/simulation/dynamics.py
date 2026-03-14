@@ -30,6 +30,8 @@ class BilboModel:
     r_w: float = 0.06
     tau_theta: float = 0.4
     tau_x: float = 0.4
+    tau_psi: float = 0.3
+    max_pitch: float = 1.8326  # ~105 deg — floor contact angle
 
 
 @dataclasses.dataclass
@@ -67,6 +69,8 @@ class BilboDynamics3D:
         self.model = model
         self.Ts = Ts
         self.state = DynamicsState()
+        self._ground_contact: bool = False
+        self._prev_pose: dict | None = None
 
     def step(self, tau_left: float, tau_right: float) -> DynamicsState:
         """Advance one time step given motor torques. Returns the new state."""
@@ -138,7 +142,7 @@ class BilboDynamics3D:
 
         psi_dot_dot = (sin_t / V_2 * (C_31 * td * pd - C_32 * pd * v)
                        - D_33 / V_2 * pd
-                       - B_3 / V_2 * u_diff)
+                       - B_3 / V_2 * u_diff - m.tau_psi * pd)
 
         # Euler integration
         dt = self.Ts
@@ -152,7 +156,66 @@ class BilboDynamics3D:
             psi_dot=pd + psi_dot_dot * dt,
         )
 
+        self._apply_floor_constraint()
+
         return self.state
+
+    def _apply_floor_constraint(self):
+        """Clamp theta at max_pitch to simulate floor contact."""
+        max_pitch = self.model.max_pitch
+        s = self.state
+        theta = s.theta
+        theta_dot = s.theta_dot
+
+        side = 1.0 if theta >= 0.0 else -1.0
+        depth = abs(theta) - max_pitch
+        approaching = (theta_dot * side) > 0.0
+
+        # Contact detection with hysteresis
+        tol_enter = 1e-4
+        tol_exit = 2e-4
+
+        if depth > 0.0 or (abs(abs(theta) - max_pitch) <= tol_enter and approaching):
+            self._ground_contact = True
+        elif abs(abs(theta) - max_pitch) > tol_exit and not approaching:
+            self._ground_contact = False
+
+        if self._prev_pose is None:
+            self._prev_pose = {'x': s.x, 'y': s.y, 'psi': s.psi}
+
+        if self._ground_contact:
+            # Clamp to floor
+            s.theta = side * max_pitch
+
+            # Kill normal velocity
+            if approaching:
+                s.theta_dot = 0.0
+            if abs(s.theta_dot) < 5e-3:
+                s.theta_dot = 0.0
+
+            # Friction: kill translational and yaw motion
+            mu = 0.8
+            friction_decel = mu * 9.81 * self.Ts
+            if abs(s.v) < friction_decel:
+                s.v = 0.0
+                s.x = self._prev_pose['x']
+                s.y = self._prev_pose['y']
+            else:
+                s.v -= math.copysign(friction_decel, s.v)
+
+            if abs(s.psi_dot) < friction_decel:
+                s.psi_dot = 0.0
+                s.psi = self._prev_pose['psi']
+            else:
+                s.psi_dot -= math.copysign(friction_decel, s.psi_dot)
+
+        elif depth > 0.0:
+            # Penetration outside contact — resolve once
+            s.theta = side * max_pitch
+            if approaching:
+                s.theta_dot = 0.0
+
+        self._prev_pose = {'x': s.x, 'y': s.y, 'psi': s.psi}
 
     def set_state(self, **kwargs):
         """Set individual state fields."""
@@ -162,6 +225,8 @@ class BilboDynamics3D:
 
     def reset(self):
         self.state = DynamicsState()
+        self._ground_contact = False
+        self._prev_pose = None
 
     def get_wheel_speeds(self, tau_left: float, tau_right: float) -> tuple[float, float]:
         """Approximate wheel speeds from forward velocity and yaw rate."""

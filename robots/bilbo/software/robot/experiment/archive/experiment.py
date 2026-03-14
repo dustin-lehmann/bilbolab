@@ -138,6 +138,28 @@ class ExperimentActionStatus(enum.StrEnum):
 
 
 # ======================================================================================================================
+# Experiment Requirements
+# ======================================================================================================================
+
+@dataclasses.dataclass
+class StateRangeRequirement:
+    """Requirement that a dynamic state field falls within a range."""
+    state: str                    # Field name on BILBO_DynamicState (x, y, v, theta, theta_dot, psi, psi_dot)
+    min: float | None = None
+    max: float | None = None
+
+
+@dataclasses.dataclass
+class ExperimentRequirements:
+    """Optional preconditions checked before an experiment starts."""
+    optitrack: bool | None = None
+    robot_id: str | list[str] | None = None      # str (exact or regex), or list of str/regex
+    control_mode: str | None = None               # e.g. "OFF", "BALANCING"
+    control_config: str | None = None             # Control config name
+    state_ranges: list[StateRangeRequirement] | None = None
+
+
+# ======================================================================================================================
 # Action Definition
 # ======================================================================================================================
 
@@ -150,8 +172,6 @@ class ExperimentActionDefinition:
     tick: int | None = None  # absolute experiment tick
     after: str | None = None  # id of action that must finish first
     time: float | None = None  # absolute time [s] since experiment start
-
-    delay: float | None = None  # relative delay in seconds from previous action
 
     timeout: float | None = None  # per-action timeout (seconds, optional)
 
@@ -198,7 +218,7 @@ class ExperimentActionDefinition:
         action_type = d["type"]
 
         # Reserved fields that should not go into parameters
-        reserved_fields = {"id", "type", "tick", "after", "time", "delay", "timeout", "label", "meta", "parameters", "actions", "wait_before", "wait_after"}
+        reserved_fields = {"id", "type", "tick", "after", "time", "timeout", "label", "meta", "parameters", "actions", "wait_before", "wait_after"}
 
         # If 'parameters' is explicitly provided, use it; otherwise collect non-reserved fields
         if "parameters" in d:
@@ -272,7 +292,7 @@ class ExperimentActionDefinition:
             if d.get("label") is not None:
                 outer_group["label"] = d["label"]
             # Carry over scheduling fields
-            for field in ("tick", "after", "time", "delay", "timeout", "wait_before", "wait_after"):
+            for field in ("tick", "after", "time", "timeout", "wait_before", "wait_after"):
                 if d.get(field) is not None:
                     outer_group[field] = d[field]
 
@@ -299,7 +319,6 @@ class ExperimentActionDefinition:
             tick=d.get("tick"),
             after=d.get("after"),
             time=d.get("time"),
-            delay=d.get("delay"),
             timeout=d.get("timeout"),
             label=d.get("label"),
             meta=d.get("meta"),
@@ -321,8 +340,6 @@ class ExperimentActionDefinition:
             dict_out["after"] = self.after
         if self.time is not None:
             dict_out["time"] = self.time
-        if self.delay is not None:
-            dict_out["delay"] = self.delay
         if self.timeout is not None:
             dict_out["timeout"] = self.timeout
         if self.label is not None:
@@ -1543,6 +1560,7 @@ class FollowPathAction(ExperimentAction):
     allow_reverse: bool = False
     seed: int | None = None
     target_heading: float | None = None
+    heading_strength: float = 1.0
     wait: bool = True
 
     def execute(self) -> bool:
@@ -1593,6 +1611,7 @@ class FollowPathAction(ExperimentAction):
             seed=self.seed,
             blocking=False,
             target_heading=self.target_heading,
+            heading_strength=self.heading_strength,
         )
 
         if not result:
@@ -1693,6 +1712,7 @@ class FollowPathAction(ExperimentAction):
             allow_reverse=definition.parameters.get('allow_reverse', False),
             seed=definition.parameters.get('seed'),
             target_heading=cls._parse_target_heading(definition.parameters),
+            heading_strength=float(definition.parameters.get('heading_strength', 1.0)),
             wait=definition.parameters.get('wait', True),
         )
 
@@ -1802,6 +1822,7 @@ class ExperimentDefinition:
     timeout: float | None = None
     label: str | None = None  # Optional human-readable label (displayed on testbed display; falls back to id)
     external_input_enabled: bool = False  # Whether external inputs (joystick, etc.) are enabled during experiment
+    requirements: ExperimentRequirements | None = None  # Optional preconditions checked before experiment starts
     source_dict: dict | None = None  # Original definition dict before parsing/expansion (preserved for report YAML)
 
     # ----------------------------------------------------------------------
@@ -1847,6 +1868,28 @@ class ExperimentDefinition:
         }
         if self.label is not None:
             d["label"] = self.label
+        if self.requirements is not None:
+            d["requirements"] = self.requirements_to_dict()
+        return d
+
+    def requirements_to_dict(self) -> dict[str, Any] | None:
+        """Serialize requirements to a dict, omitting None fields."""
+        if self.requirements is None:
+            return None
+        d: dict[str, Any] = {}
+        if self.requirements.optitrack is not None:
+            d["optitrack"] = self.requirements.optitrack
+        if self.requirements.robot_id is not None:
+            d["robot_id"] = self.requirements.robot_id
+        if self.requirements.control_mode is not None:
+            d["control_mode"] = self.requirements.control_mode
+        if self.requirements.control_config is not None:
+            d["control_config"] = self.requirements.control_config
+        if self.requirements.state_ranges is not None:
+            d["state_ranges"] = [
+                {k: v for k, v in dataclasses.asdict(sr).items() if v is not None}
+                for sr in self.requirements.state_ranges
+            ]
         return d
 
 
@@ -2084,49 +2127,6 @@ class Experiment:
                 action_definition.tick = int(action_definition.time / LOOP_TIME)
                 if action_definition.tick < 0:
                     action_definition.tick = 0
-
-        # ----------------------------------------------------------------------
-        # 1d) Handle delay fields by inserting synthetic wait actions
-        # ----------------------------------------------------------------------
-        synthetic_actions: list[tuple[int, ExperimentActionDefinition]] = []
-
-        for index, action_definition in enumerate(self.definition.actions):
-            if action_definition.delay is not None:
-                if action_definition.delay < 0:
-                    raise ValueError(
-                        f"Action {action_definition.id} has negative delay: {action_definition.delay}"
-                    )
-
-                delay_ms = int(action_definition.delay * 1000)
-                delay_action_id = f"{action_definition.id}_delay"
-
-                # Determine what the delay action comes after
-                delay_after = action_definition.after
-                delay_tick = action_definition.tick
-
-                # If no explicit scheduling, the delay action runs after the previous action
-                if delay_after is None and delay_tick is None and index > 0:
-                    delay_after = self.definition.actions[index - 1].id
-
-                delay_action_def = ExperimentActionDefinition(
-                    id=delay_action_id,
-                    type="wait_time",
-                    tick=delay_tick,
-                    after=delay_after,
-                    parameters={"time_ms": delay_ms}
-                )
-
-                # Mark where to insert this synthetic action
-                synthetic_actions.append((index, delay_action_def))
-
-                # Update the original action to run after the delay
-                action_definition.after = delay_action_id
-                action_definition.tick = None  # Clear tick since we now use after
-                action_definition.delay = None  # Clear delay to avoid re-processing
-
-        # Insert synthetic actions (in reverse order to maintain correct indices)
-        for insert_index, delay_def in reversed(synthetic_actions):
-            self.definition.actions.insert(insert_index, delay_def)
 
         # ----------------------------------------------------------------------
         # 2) Create runtime actions + containers from normalized definitions

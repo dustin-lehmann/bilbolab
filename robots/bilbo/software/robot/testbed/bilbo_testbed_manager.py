@@ -1,4 +1,7 @@
 import dataclasses
+import os
+
+import yaml
 
 from core.communication.wifi.bilbolab_wifi_interface import (
     wifi_event_definition, WifiEventContainer, WifiEvent,
@@ -9,11 +12,14 @@ from core.utils.files import file_exists
 from core.utils.logging_utils import Logger
 from core.utils.uuid_utils import generate_uuid
 from robot.bilbo_common import BILBO_Common
+from robot.bilbo_definitions import BILBO_OriginConfig
 from robot.communication.bilbo_communication import BILBO_Communication
 from robot.control.bilbo_control import BILBO_Control
 from robot.paths import CONTROL_PATH
 from robot.testbed.obstacles import Obstacle, CircleObstacle, BoxObstacle, LimboBar, LimboBarGeometry, \
     Line, Point, Pose
+
+_TESTBED_CONFIGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'configs', 'testbed')
 
 
 @dataclasses.dataclass
@@ -32,9 +38,11 @@ class TestbedConfig:
         id: Testbed identifier (e.g. 'track', 'lab'). Used to load a matching
             control config file (<id>.yaml) from the robot's control config folder.
         size: The physical dimensions of the testbed area.
+        origin: OptiTrack origin definition for coordinate transformation.
     """
     size: TestbedSize
     id: str | None = None
+    origin: BILBO_OriginConfig | None = None
 
 
 @event_definition
@@ -51,6 +59,10 @@ class TestbedWifiEvents(WifiEventContainer):
 @dataclasses.dataclass
 class TestbedData:
     config: TestbedConfig | None = None
+    obstacles: list | None = None
+    lines: list | None = None
+    points: list | None = None
+    poses: list | None = None
 
 
 class BILBO_TestbedManager:
@@ -63,12 +75,14 @@ class BILBO_TestbedManager:
     limbo_bars: list[LimboBar]
 
     # === INIT =========================================================================================================
-    def __init__(self, common: BILBO_Common, communication: BILBO_Communication, control: BILBO_Control):
+    def __init__(self, common: BILBO_Common, communication: BILBO_Communication, control: BILBO_Control,
+                 estimation=None, testbed_id: str = 'default'):
         self.logger = Logger("Testbed Manager", "DEBUG")
 
         self.common = common
         self.communication = communication
         self.control = control
+        self.estimation = estimation
         self.events = TestbedEvents()
         self.wifi_events = TestbedWifiEvents(wifi=communication.wifi.wifi, id='testbed')
         self.obstacles = []
@@ -77,6 +91,11 @@ class BILBO_TestbedManager:
         self.poses = []
         self.limbo_bars = []
         self._register_wifi_commands()
+
+        self.testbed_config = None
+
+        # Load initial testbed config from file
+        self._load_testbed_from_file(testbed_id)
 
         # Subscribe to the SPI sample batch to check limbo bar collisions at 100 Hz
         self.communication.spi.callbacks.rx_samples.register(self._on_sample_batch)
@@ -87,16 +106,87 @@ class BILBO_TestbedManager:
             config = from_dict_auto(TestbedConfig, config)
 
         self.testbed_config = config
-        self.logger.info(f"Testbed config set to {config}")
+        origin_str = config.origin.id if config.origin else 'none'
+        self.logger.info(f"Testbed config received from host (id: {config.id}, origin: {origin_str})")
         self.events.config_received.set(data=config)
+
+        # Update origin on estimation if provided
+        if self.estimation is not None and config.origin is not None:
+            self.estimation.set_origin(config.origin)
 
         # Load testbed-specific control config if a matching file exists
         if config.id is not None:
             self._load_testbed_control_config(config.id)
 
     # ------------------------------------------------------------------------------------------------------------------
+    def load(self, data: TestbedData | dict):
+        """Load a complete testbed environment, replacing the current state.
+
+        Clears all existing obstacles, lines, points, and poses, then populates
+        from the provided data. If a config is included, it is applied (which may
+        also load a testbed-specific control config).
+
+        Args:
+            data: A TestbedData instance or a dict with optional keys:
+                  config, obstacles, lines, points, poses.
+        """
+        if isinstance(data, dict):
+            data = from_dict_auto(TestbedData, data)
+
+        # Clear current state
+        self.clear_obstacles()
+        self.clear_lines()
+        self.clear_points()
+        self.clear_poses()
+
+        # Apply config (size + id) if provided
+        if data.config is not None:
+            self.set_testbed_config(data.config)
+
+        # Populate obstacles
+        if data.obstacles:
+            for obs in data.obstacles:
+                obs_dict = obs if isinstance(obs, dict) else dataclasses.asdict(obs)
+                obs_type = obs_dict.pop('type', None)
+                # Infer type from fields if not explicit
+                if obs_type is None:
+                    obs_type = 'circle' if 'radius' in obs_dict else 'box'
+                self.add_obstacle(type=obs_type, config=obs_dict)
+
+        # Populate lines
+        if data.lines:
+            for line in data.lines:
+                line_dict = line if isinstance(line, dict) else dataclasses.asdict(line)
+                self.add_line(line_dict)
+
+        # Populate points
+        if data.points:
+            for point in data.points:
+                point_dict = point if isinstance(point, dict) else dataclasses.asdict(point)
+                self.add_point(point_dict)
+
+        # Populate poses
+        if data.poses:
+            for pose in data.poses:
+                pose_dict = pose if isinstance(pose, dict) else dataclasses.asdict(pose)
+                self.add_pose(pose_dict)
+
+        n_obs = len(self.obstacles)
+        n_lines = len(self.lines)
+        n_points = len(self.points)
+        n_poses = len(self.poses)
+        self.logger.info(f"Testbed loaded: {n_obs} obstacles, {n_lines} lines, "
+                         f"{n_points} points, {n_poses} poses")
+
+    # ------------------------------------------------------------------------------------------------------------------
     def get_data(self):
-        data = TestbedData(config=self.testbed_config)
+        data = TestbedData(
+            config=self.testbed_config,
+            obstacles=[dataclasses.asdict(obs) for obs in self.obstacles],
+            lines=[dataclasses.asdict(line) for line in self.lines],
+            points=[dataclasses.asdict(point) for point in self.points],
+            poses=[dataclasses.asdict(pose) for pose in self.poses],
+        )
         return data
 
     # --- OBSTACLES ----------------------------------------------------------------------------------------------------
@@ -309,11 +399,87 @@ class BILBO_TestbedManager:
         self.logger.info(f"Testbed control config '{testbed_id}.yaml' applied successfully")
 
     # ------------------------------------------------------------------------------------------------------------------
+    def _load_testbed_from_file(self, testbed_id: str):
+        """Load a testbed definition YAML by ID and apply it (including origin, obstacles, limbo bars).
+
+        Looks for <testbed_id>.yaml in configs/testbed/.
+        Uses the same YAML format as the host-side testbed definitions.
+        """
+        config_file = os.path.join(_TESTBED_CONFIGS_DIR, f"{testbed_id}.yaml")
+        if not os.path.isfile(config_file):
+            self.logger.warning(f"Testbed config file not found: '{config_file}'")
+            return
+
+        with open(config_file, 'r') as f:
+            data = yaml.safe_load(f) or {}
+
+        # Parse size
+        size_data = data.get('size', {})
+        size = TestbedSize(
+            x_min=size_data.get('x', [0, 0])[0],
+            x_max=size_data.get('x', [0, 0])[1],
+            y_min=size_data.get('y', [0, 0])[0],
+            y_max=size_data.get('y', [0, 0])[1],
+        )
+
+        # Build origin if present
+        origin = None
+        if 'origin' in data and data['origin'] is not None:
+            origin = from_dict_auto(BILBO_OriginConfig, data['origin'])
+
+        self.logger.info(f"Loaded testbed '{testbed_id}' "
+                         f"(origin: {origin.id if origin else 'none'})")
+
+        # Apply origin to estimation
+        if self.estimation is not None and origin is not None:
+            self.estimation.set_origin(origin)
+
+        self.testbed_config = TestbedConfig(
+            id=testbed_id,
+            size=size,
+            origin=origin,
+        )
+
+        # Load obstacles from definition
+        obstacles = data.get('obstacles', [])
+        for obs in (obstacles or []):
+            obs_type = obs.get('type', 'box')
+            obs_config = {k: v for k, v in obs.items() if k not in ('tracking',)}
+            if obs_type == 'limbo_bar':
+                # Limbo bars are tracked on the host side; robot only needs the type info
+                # Actual geometry is sent by the host via add_limbo_bar command
+                continue
+            self.add_obstacle(type=obs_type, config=obs_config)
+
+        # Load lines
+        for line in (data.get('lines') or []):
+            self.add_line(line)
+
+        # Load points
+        for point in (data.get('points') or []):
+            self.add_point(point)
+
+        # Load poses
+        for pose in (data.get('poses') or []):
+            self.add_pose(pose)
+
+        n_obs = len(self.obstacles)
+        n_lines = len(self.lines)
+        n_points = len(self.points)
+        if n_obs or n_lines or n_points:
+            self.logger.info(f"Testbed '{testbed_id}': {n_obs} obstacles, {n_lines} lines, {n_points} points")
+
+    # ------------------------------------------------------------------------------------------------------------------
     def _register_wifi_commands(self):
         self.communication.wifi.newCommand(identifier='set_testbed_config',
                                            function=self.set_testbed_config,
                                            arguments=['config'],
                                            description='Sets the testbed configuration')
+
+        self.communication.wifi.newCommand(identifier='load_testbed',
+                                           function=self.load,
+                                           arguments=['data'],
+                                           description='Load a complete testbed environment (clears existing state)')
 
         self.communication.wifi.newCommand(identifier='add_obstacle',
                                            function=self.add_obstacle,

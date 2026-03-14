@@ -40,11 +40,4 @@ class BILBO_OriginConfig:
     offset_z: float = 0.0
 
 
-@dataclasses.dataclass
-class BILBO_TestbedConfig:
-    origin: BILBO_OriginConfig | None
-    size: list
-
-
-
 

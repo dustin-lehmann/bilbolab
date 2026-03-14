@@ -1,11 +1,13 @@
 """
 Simulated firmware position control.
 
-Replicates the STM32 position control subsystem:
+1:1 replica of the STM32 bilbo_position_control.cpp:
   - Dense path following with adaptive lookahead (pure pursuit)
+  - Curvature-based speed control with exponential smoothing
   - Turn-to-heading (in-place rotation)
-  - Drive-to-point (single waypoint tracking)
+  - Drive-to-point (single waypoint tracking with reverse)
   - Stop indices with dwell time
+  - Final approach override with reverse for overshoot recovery
   - Event generation for waypoint reached / path finished / timeouts
 """
 from __future__ import annotations
@@ -13,6 +15,10 @@ from __future__ import annotations
 import dataclasses
 import enum
 import math
+
+EPSILON = 1e-6
+PROJECTION_SEARCH_WINDOW = 30
+SPEED_SMOOTH_TAU = 0.1  # [s] exponential smoothing time constant
 
 
 def _normalize_angle(a: float) -> float:
@@ -22,6 +28,10 @@ def _normalize_angle(a: float) -> float:
     while a < -math.pi:
         a += 2 * math.pi
     return a
+
+
+def _clamp(v: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, v))
 
 
 # =============================================================================
@@ -60,27 +70,46 @@ class PositionControlEvent(enum.IntEnum):
 
 
 # =============================================================================
-# Configuration
+# Configuration (defaults match firmware bilbo_position_control_config_t)
 # =============================================================================
 @dataclasses.dataclass
 class PositionControlConfig:
     Ts: float = 0.01
-    kp_angular: float = 8.0
-    ki_angular: float = 0.25
+
+    # Angular control
+    kp_angular: float = 10.0
+    ki_angular: float = 0.3
     kp_angular_heading: float = 0.0
     ki_angular_heading: float = 0.0
-    kp_linear: float = 0.0
-    ki_linear: float = 0.012
+
+    # Linear control
+    kp_linear: float = 2.0
+    ki_linear: float = 0.0
     kd_linear: float = 0.5
-    max_speed: float = 0.6
+
+    # Speed limits
+    max_speed: float = 0.5
     max_turn_rate: float = 5.0
+
+    # Lookahead
     lookahead_base: float = 0.15
     lookahead_min: float = 0.03
+
+    # Arrival
     arrival_tolerance: float = 0.05
     arrival_dwell_time: float = 0.5
+    stop_dwell_time: float = 1.0
+
+    # Reverse mode
     reverse_enter_angle: float = 2.1
     reverse_exit_angle: float = 1.05
-    decel_limit: float = 0.6
+
+    # Deceleration
+    decel_limit: float = 0.0
+
+    # Curvature-based speed (path following)
+    curvature_gain: float = 2.0
+    curvature_lookahead: float = 0.3
 
 
 # =============================================================================
@@ -112,17 +141,24 @@ class PositionControlData:
 class SimulatedPositionControl:
     """Firmware-equivalent position control with path following, turn, and drive-to-point."""
 
+    @property
+    def path_point_count(self) -> int:
+        return len(self._path)
+
     def __init__(self, config: PositionControlConfig | None = None):
         self.config = config or PositionControlConfig()
 
         # Path buffer
         self._path: list[tuple[float, float]] = []
-        self._cumulative_dist: list[float] = []
+        self._cumul_dist: list[float] = []
         self._stop_indices: list[int] = []
-        self._max_spacing: float = 0.0
+        self._path_max_speed: float = 0.0
+        self._path_max_spacing: float = 0.0
+        self._path_total_length: float = 0.0
+
+        # Path command
         self._allow_reverse: bool = False
         self._path_timeout: float = 0.0
-        self._path_max_speed: float = 0.0
 
         # State
         self.mode = PositionControlMode.IDLE
@@ -132,9 +168,16 @@ class SimulatedPositionControl:
         self._angular_integral: float = 0.0
         self._linear_integral: float = 0.0
         self._reverse_mode: bool = False
-        self._dwell_timer: float = 0.0
-        self._dwelling: bool = False
-        self._current_stop_idx: int = 0
+        self._arrival_timer: float = 0.0
+        self._v_target_smooth: float = 0.0
+
+        # Stop tracking (matches firmware _next_stop_ptr pattern)
+        self._next_stop_ptr: int = 0
+        self._stop_reached_sent: bool = False
+
+        # Carrot position
+        self._carrot_x: float = 0.0
+        self._carrot_y: float = 0.0
 
         # Turn-to-heading
         self._heading_target: float = 0.0
@@ -152,6 +195,9 @@ class SimulatedPositionControl:
         # Event queue (consumed by firmware.py)
         self.pending_events: list[tuple[PositionControlEvent, dict]] = []
 
+        # Telemetry
+        self.data = PositionControlData()
+
     def _emit(self, event: PositionControlEvent, **extra):
         self.pending_events.append((event, extra))
 
@@ -162,46 +208,75 @@ class SimulatedPositionControl:
 
     def clear_path(self):
         self._path.clear()
-        self._cumulative_dist.clear()
+        self._cumul_dist.clear()
         self._stop_indices.clear()
-        self._max_spacing = 0.0
+        self._progress = 0.0
+        self._angular_integral = 0.0
+        self._linear_integral = 0.0
+        self._arrival_timer = 0.0
+        self._reverse_mode = False
+        self._stop_reached_sent = False
+        self._next_stop_ptr = 0
+        self._path_max_speed = 0.0
+        self._path_max_spacing = 0.0
+        self._path_total_length = 0.0
+        self._v_target_smooth = 0.0
 
     def add_path_point(self, x: float, y: float):
-        if self._path:
-            px, py = self._path[-1]
-            dist = math.hypot(x - px, y - py)
-            self._cumulative_dist.append(self._cumulative_dist[-1] + dist)
-            if dist > self._max_spacing:
-                self._max_spacing = dist
-        else:
-            self._cumulative_dist.append(0.0)
         self._path.append((x, y))
 
     def add_stop_index(self, index: int):
-        if 0 <= index < len(self._path):
+        if len(self._stop_indices) < 16:
             self._stop_indices.append(index)
-            self._stop_indices.sort()
 
     def start_path(self, max_speed: float = 0.0, max_spacing: float = 0.0,
                    timeout: float = 0.0, allow_reverse: bool = False):
         if len(self._path) < 2:
             return
+        if self.mode != PositionControlMode.IDLE:
+            return
+
+        # Compute cumulative distances
+        self._compute_cumulative_distances()
+
+        # Resolve max speed
         self._path_max_speed = max_speed if max_speed > 0 else self.config.max_speed
+
+        # Resolve max spacing: auto-detect from path if not specified
         if max_spacing > 0:
-            self._max_spacing = max_spacing
+            self._path_max_spacing = max_spacing
+        else:
+            self._path_max_spacing = 0.0
+            for i in range(1, len(self._path)):
+                seg_len = self._cumul_dist[i] - self._cumul_dist[i - 1]
+                if seg_len > self._path_max_spacing:
+                    self._path_max_spacing = seg_len
+            if self._path_max_spacing < EPSILON:
+                self._path_max_spacing = 0.01
+
+        self._path_total_length = self._cumul_dist[-1] if self._cumul_dist else 0.0
+
+        # Initialize state
         self._path_timeout = timeout
         self._allow_reverse = allow_reverse
         self._progress = 0.0
         self._elapsed_time = 0.0
         self._angular_integral = 0.0
         self._linear_integral = 0.0
+        self._arrival_timer = 0.0
         self._reverse_mode = False
-        self._dwell_timer = 0.0
-        self._dwelling = False
-        self._current_stop_idx = 0
-        self.mode = PositionControlMode.FOLLOW_PATH
+        self._stop_reached_sent = False
+        self._next_stop_ptr = 0
+        self._v_target_smooth = 0.0
+
+        # Initialize carrot at first path point
+        self._carrot_x = self._path[0][0]
+        self._carrot_y = self._path[0][1]
+
         self.path_state = PathState.RUNNING
+        self.mode = PositionControlMode.FOLLOW_PATH
         self._emit(PositionControlEvent.PATH_STARTED)
+        self._emit(PositionControlEvent.MODE_CHANGED)
 
     def pause_path(self):
         if self.path_state == PathState.RUNNING:
@@ -214,26 +289,34 @@ class SimulatedPositionControl:
             self._emit(PositionControlEvent.PATH_RESUMED)
 
     def abort_path(self):
-        self.mode = PositionControlMode.IDLE
-        self.path_state = PathState.IDLE
-        self._emit(PositionControlEvent.PATH_ABORTED)
+        if self.mode == PositionControlMode.FOLLOW_PATH:
+            self._emit(PositionControlEvent.PATH_ABORTED)
+            self.path_state = PathState.IDLE
+            self.mode = PositionControlMode.IDLE
+            self._emit(PositionControlEvent.MODE_CHANGED)
 
     def turn_to_heading(self, heading: float, timeout: float = 0.0,
                         max_angular_speed: float = 0.0, cmd_id: int = 0):
+        if self.mode != PositionControlMode.IDLE:
+            return
+
         self._heading_target = heading
         self._heading_cmd_id = cmd_id
         self._heading_timeout = timeout
         self._heading_max_angular_speed = max_angular_speed if max_angular_speed > 0 else self.config.max_turn_rate
         self._elapsed_time = 0.0
         self._angular_integral = 0.0
-        self._dwell_timer = 0.0
-        self._dwelling = False
+        self._arrival_timer = 0.0
+
         self.mode = PositionControlMode.TURN_TO_HEADING
-        self.path_state = PathState.RUNNING
         self._emit(PositionControlEvent.TURN_TO_HEADING_STARTED, command_id=cmd_id)
+        self._emit(PositionControlEvent.MODE_CHANGED)
 
     def move_to_point(self, x: float, y: float, timeout: float = 0.0,
                       max_speed: float = 0.0, cmd_id: int = 0):
+        if self.mode != PositionControlMode.IDLE:
+            return
+
         self._point_target_x = x
         self._point_target_y = y
         self._point_cmd_id = cmd_id
@@ -242,12 +325,12 @@ class SimulatedPositionControl:
         self._elapsed_time = 0.0
         self._angular_integral = 0.0
         self._linear_integral = 0.0
+        self._arrival_timer = 0.0
         self._reverse_mode = False
-        self._dwell_timer = 0.0
-        self._dwelling = False
+
         self.mode = PositionControlMode.DRIVE_TO_POINT
-        self.path_state = PathState.RUNNING
         self._emit(PositionControlEvent.MOVE_TO_POINT_STARTED, command_id=cmd_id)
+        self._emit(PositionControlEvent.MODE_CHANGED)
 
     def reset(self):
         self.clear_path()
@@ -258,171 +341,228 @@ class SimulatedPositionControl:
         self._angular_integral = 0.0
         self._linear_integral = 0.0
         self._reverse_mode = False
-        self._dwell_timer = 0.0
-        self._dwelling = False
+        self._arrival_timer = 0.0
 
     # ── Main update (called at 100 Hz) ──────────────────────────────────
 
     def update(self, robot_x: float, robot_y: float, robot_psi: float,
                current_v: float) -> tuple[float, float]:
         """Returns (v_cmd, psi_dot_cmd)."""
-        Ts = self.config.Ts
-        self._elapsed_time += Ts
+        if self.mode != PositionControlMode.IDLE:
+            self._elapsed_time += self.config.Ts
 
         if self.mode == PositionControlMode.IDLE:
-            return 0.0, 0.0
-
-        if self.mode == PositionControlMode.TURN_TO_HEADING:
-            return self._update_turn_to_heading(robot_psi)
-
-        if self.mode == PositionControlMode.DRIVE_TO_POINT:
-            return self._update_drive_to_point(robot_x, robot_y, robot_psi, current_v)
-
-        if self.mode == PositionControlMode.FOLLOW_PATH:
+            out = (0.0, 0.0)
+        elif self.mode == PositionControlMode.TURN_TO_HEADING:
+            out = self._update_turn_to_heading(robot_psi)
+        elif self.mode == PositionControlMode.DRIVE_TO_POINT:
+            out = self._update_drive_to_point(robot_x, robot_y, robot_psi, current_v)
+        elif self.mode == PositionControlMode.FOLLOW_PATH:
             if self.path_state == PathState.PAUSED:
-                return 0.0, 0.0
-            return self._update_follow_path(robot_x, robot_y, robot_psi, current_v)
+                out = (0.0, 0.0)
+            else:
+                out = self._update_follow_path(robot_x, robot_y, robot_psi, current_v)
+        else:
+            out = (0.0, 0.0)
 
-        return 0.0, 0.0
+        # Update telemetry
+        self.data.mode = int(self.mode)
+        self.data.path_state = int(self.path_state)
+        self.data.buffer_capacity = 1024
+        self.data.buffer_used = len(self._path)
+        self.data.elapsed_time = self._elapsed_time
+        self.data.v_cmd = out[0]
+        self.data.psi_dot_cmd = out[1]
+
+        return out
 
     def get_data(self) -> PositionControlData:
-        return PositionControlData(
-            mode=int(self.mode),
-            path_state=int(self.path_state),
-            buffer_capacity=1024,
-            buffer_used=len(self._path),
-            path_point_count=len(self._path),
-            current_index=int(self._progress),
-            carrot_x=0.0,
-            carrot_y=0.0,
-            carrot_distance=0.0,
-            heading_error=0.0,
-            speed_limit=self.config.max_speed,
-            v_cmd=0.0,
-            psi_dot_cmd=0.0,
-            elapsed_time=self._elapsed_time,
-            remaining_path_length=0.0,
-            progress=self._progress,
-        )
+        return dataclasses.replace(self.data)
 
-    # ── Turn to heading ─────────────────────────────────────────────────
+    # ── Turn to heading (matches firmware _update_turn_to_heading) ──────
 
     def _update_turn_to_heading(self, robot_psi: float) -> tuple[float, float]:
         c = self.config
 
-        # Timeout check
-        if self._heading_timeout > 0 and self._elapsed_time > self._heading_timeout:
-            self.mode = PositionControlMode.IDLE
-            self.path_state = PathState.IDLE
-            self._emit(PositionControlEvent.TURN_TO_HEADING_TIMEOUT,
-                       command_id=self._heading_cmd_id)
-            return 0.0, 0.0
-
         heading_error = _normalize_angle(self._heading_target - robot_psi)
+        self.data.heading_error = heading_error
 
-        # Arrival check
-        if abs(heading_error) < math.radians(3):
-            if not self._dwelling:
-                self._dwelling = True
-                self._dwell_timer = 0.0
-            self._dwell_timer += c.Ts
-            if self._dwell_timer >= c.arrival_dwell_time:
-                self.mode = PositionControlMode.IDLE
-                self.path_state = PathState.IDLE
-                self._emit(PositionControlEvent.TURN_TO_HEADING_COMPLETED,
-                           command_id=self._heading_cmd_id)
-                return 0.0, 0.0
-        else:
-            self._dwelling = False
+        max_rate = self._heading_max_angular_speed
 
         # Resolve effective angular gains (heading-specific overrides, 0 = use base)
         eff_kp = c.kp_angular_heading if c.kp_angular_heading > 0 else c.kp_angular
         eff_ki = c.ki_angular_heading if c.ki_angular_heading > 0 else c.ki_angular
 
-        # PI control with anti-windup (inline with heading-specific gains)
-        max_rate = self._heading_max_angular_speed
+        # PI control
         w_p = eff_kp * heading_error
-        w_unsat = w_p + self._angular_integral
-        w_sat = max(-max_rate, min(max_rate, w_unsat))
+        w_i = self._angular_integral
+        w_unsat = w_p + w_i
+        w_sat = _clamp(w_unsat, -max_rate, max_rate)
 
-        if abs(w_unsat) <= max_rate or (w_unsat * heading_error < 0):
+        # Anti-windup
+        is_saturated = abs(w_unsat - w_sat) > EPSILON
+        would_push_further = is_saturated and (
+            (w_unsat > w_sat and heading_error > 0.0) or
+            (w_unsat < w_sat and heading_error < 0.0))
+
+        if not would_push_further:
             self._angular_integral += eff_ki * heading_error * c.Ts
-            if eff_ki > 0:
-                max_i = max_rate / eff_ki
-                self._angular_integral = max(-max_i, min(max_i, self._angular_integral))
+            max_integral = max_rate / max(eff_ki, 0.01)
+            self._angular_integral = _clamp(self._angular_integral, -max_integral, max_integral)
+
+        # Check completion
+        angle_tolerance = 0.05  # ~3 degrees
+        if abs(heading_error) < angle_tolerance:
+            self._arrival_timer += c.Ts
+            if self._arrival_timer >= c.arrival_dwell_time:
+                self._angular_integral = 0.0
+                self._arrival_timer = 0.0
+                self.mode = PositionControlMode.IDLE
+                self._emit(PositionControlEvent.TURN_TO_HEADING_COMPLETED,
+                           command_id=self._heading_cmd_id)
+                self._emit(PositionControlEvent.MODE_CHANGED)
+                return 0.0, w_sat
+        else:
+            self._arrival_timer = 0.0
+
+        # Check timeout
+        if self._heading_timeout > 0 and self._elapsed_time > self._heading_timeout:
+            self._angular_integral = 0.0
+            self._arrival_timer = 0.0
+            self.mode = PositionControlMode.IDLE
+            self._emit(PositionControlEvent.TURN_TO_HEADING_TIMEOUT,
+                       command_id=self._heading_cmd_id)
+            self._emit(PositionControlEvent.MODE_CHANGED)
 
         return 0.0, w_sat
 
-    # ── Drive to point ──────────────────────────────────────────────────
+    # ── Drive to point (matches firmware _update_drive_to_point) ────────
 
     def _update_drive_to_point(self, rx: float, ry: float, rpsi: float,
                                current_v: float) -> tuple[float, float]:
         c = self.config
 
-        # Timeout
-        if self._point_timeout > 0 and self._elapsed_time > self._point_timeout:
-            self.mode = PositionControlMode.IDLE
-            self.path_state = PathState.IDLE
-            self._emit(PositionControlEvent.MOVE_TO_POINT_TIMEOUT,
-                       command_id=self._point_cmd_id)
-            return 0.0, 0.0
-
         dx = self._point_target_x - rx
         dy = self._point_target_y - ry
-        distance = math.hypot(dx, dy)
+        dist = math.hypot(dx, dy)
 
-        # Arrival
-        if distance < c.arrival_tolerance:
-            if not self._dwelling:
-                self._dwelling = True
-                self._dwell_timer = 0.0
-            self._dwell_timer += c.Ts
-            if self._dwell_timer >= c.arrival_dwell_time:
+        # Arrival check
+        if dist < c.arrival_tolerance:
+            self._arrival_timer += c.Ts
+            if self._arrival_timer >= c.arrival_dwell_time:
+                self._angular_integral = 0.0
+                self._linear_integral = 0.0
+                self._arrival_timer = 0.0
+                self._reverse_mode = False
                 self.mode = PositionControlMode.IDLE
-                self.path_state = PathState.IDLE
                 self._emit(PositionControlEvent.MOVE_TO_POINT_COMPLETED,
                            command_id=self._point_cmd_id)
+                self._emit(PositionControlEvent.MODE_CHANGED)
                 return 0.0, 0.0
+            self.data.speed_limit = 0.0
+            self.data.remaining_path_length = dist
             return 0.0, 0.0
-        else:
-            self._dwelling = False
+        self._arrival_timer = 0.0
 
-        # Heading to target
+        # Reverse mode with hysteresis (always enabled for drive-to-point)
         angle_to_target = math.atan2(dy, dx)
-        heading_error = _normalize_angle(angle_to_target - rpsi)
+        heading_error_fwd = _normalize_angle(angle_to_target - rpsi)
+        abs_heading_error = abs(heading_error_fwd)
 
-        # Reverse mode
-        if self._allow_reverse:
-            if not self._reverse_mode and abs(heading_error) > c.reverse_enter_angle:
-                self._reverse_mode = True
-            elif self._reverse_mode and abs(heading_error) < c.reverse_exit_angle:
-                self._reverse_mode = False
+        if not self._reverse_mode and abs_heading_error > c.reverse_enter_angle:
+            self._reverse_mode = True
+            self._angular_integral = 0.0
+        elif self._reverse_mode and abs_heading_error < c.reverse_exit_angle:
+            self._reverse_mode = False
+            self._angular_integral = 0.0
+
+        # Carrot on line to target, pulled back by lookahead_base
+        lookahead = c.lookahead_base
+        carrot_x = self._point_target_x
+        carrot_y = self._point_target_y
+
+        if dist > EPSILON and lookahead > EPSILON:
+            step_back = max(0.0, dist - lookahead)
+            inv_dist = 1.0 / (dist + EPSILON)
+            carrot_x = self._point_target_x - dx * inv_dist * step_back
+            carrot_y = self._point_target_y - dy * inv_dist * step_back
+
+        # Heading toward carrot
+        dx_carrot = carrot_x - rx
+        dy_carrot = carrot_y - ry
+        psi_carrot = math.atan2(dy_carrot, dx_carrot)
+        carrot_dist = math.hypot(dx_carrot, dy_carrot)
+
+        # In reverse mode, flip heading
         if self._reverse_mode:
-            heading_error = _normalize_angle(heading_error + math.pi)
+            psi_carrot = _normalize_angle(psi_carrot + math.pi)
 
-        # Speed command
+        heading_error = _normalize_angle(psi_carrot - rpsi)
+        self.data.heading_error = heading_error
+
+        # Velocity command
         max_speed = self._point_max_speed
-        if c.decel_limit > 0:
-            v_target = min(max_speed, math.sqrt(2 * c.decel_limit * distance))
-        else:
-            v_target = min(max_speed, c.kp_linear * distance)
 
-        v_cmd = max(0.0, v_target - c.kd_linear * abs(current_v))
-        v_cmd *= math.cos(heading_error)
+        # Velocity profile: use actual distance to target
+        if c.decel_limit > 0.0 and dist > 0.0:
+            v_p = math.sqrt(2.0 * c.decel_limit * dist)
+        else:
+            v_p = c.kp_linear * dist
+
+        # Velocity damping
+        v_p = max(0.0, v_p - c.kd_linear * abs(current_v))
+
+        # PI velocity with integral on carrot_dist
+        v_i = self._linear_integral
+        v_unsat = v_p + v_i
+        v_sat = _clamp(v_unsat, 0.0, max_speed)
+
+        if abs(v_unsat - v_sat) < EPSILON:
+            self._linear_integral += c.ki_linear * carrot_dist * c.Ts
+            self._linear_integral = _clamp(self._linear_integral, 0.0, max_speed)
+
+        cos_scale = max(0.0, math.cos(heading_error))
+        v_cmd = v_sat * cos_scale
+
         if self._reverse_mode:
             v_cmd = -v_cmd
-        v_cmd = max(-max_speed, min(max_speed, v_cmd))
 
-        # Angular command
-        w = self._pi_angular(heading_error, c.max_turn_rate)
+        # Angular command - PI with anti-windup
+        w_p = c.kp_angular * heading_error
+        w_i = self._angular_integral
+        w_unsat = w_p + w_i
+        w_sat = _clamp(w_unsat, -c.max_turn_rate, c.max_turn_rate)
 
-        # Fade yaw near target
-        fade = min(1.0, distance / (2 * c.arrival_tolerance))
-        w *= fade
+        is_saturated = abs(w_unsat - w_sat) > EPSILON
+        would_push_further = is_saturated and (
+            (w_unsat > w_sat and heading_error > 0.0) or
+            (w_unsat < w_sat and heading_error < 0.0))
 
-        return v_cmd, w
+        if not would_push_further:
+            self._angular_integral += c.ki_angular * heading_error * c.Ts
+            max_integral = c.max_turn_rate / max(c.ki_angular, 0.01)
+            self._angular_integral = _clamp(self._angular_integral, -max_integral, max_integral)
 
-    # ── Path following (pure pursuit) ───────────────────────────────────
+        # Fade near goal
+        fade_radius = 2.0 * c.arrival_tolerance
+        w_fade = _clamp(dist / fade_radius, 0.0, 1.0)
+
+        psi_dot_cmd = w_sat * w_fade
+
+        # Check timeout
+        if self._point_timeout > 0 and self._elapsed_time > self._point_timeout:
+            self._angular_integral = 0.0
+            self._linear_integral = 0.0
+            self._arrival_timer = 0.0
+            self._reverse_mode = False
+            self.mode = PositionControlMode.IDLE
+            self._emit(PositionControlEvent.MOVE_TO_POINT_TIMEOUT,
+                       command_id=self._point_cmd_id)
+            self._emit(PositionControlEvent.MODE_CHANGED)
+
+        return v_cmd, psi_dot_cmd
+
+    # ── Path following (matches firmware _update_follow_path) ───────────
 
     def _update_follow_path(self, rx: float, ry: float, rpsi: float,
                             current_v: float) -> tuple[float, float]:
@@ -430,153 +570,365 @@ class SimulatedPositionControl:
         path = self._path
         N = len(path)
 
-        if N < 2:
-            self.mode = PositionControlMode.IDLE
-            self.path_state = PathState.IDLE
+        if self.path_state != PathState.RUNNING or N < 2:
             return 0.0, 0.0
 
-        # Timeout
+        # 1. Timeout check
         if self._path_timeout > 0 and self._elapsed_time > self._path_timeout:
-            self.mode = PositionControlMode.IDLE
-            self.path_state = PathState.IDLE
             self._emit(PositionControlEvent.PATH_TIMEOUT)
+            self.path_state = PathState.IDLE
+            self.mode = PositionControlMode.IDLE
+            self._emit(PositionControlEvent.MODE_CHANGED)
             return 0.0, 0.0
 
-        # Project robot onto path (monotonic forward search)
+        # 2. Project robot onto path (monotonic forward)
         self._progress = self._project_onto_path(rx, ry, self._progress)
 
-        # Find next stop (or end of path)
-        end_idx = float(N - 1)
-        next_stop_idx = end_idx
-        for si in self._stop_indices:
-            if si > self._progress + 0.5:
-                next_stop_idx = float(si)
-                break
+        # 3-4. Curvature-based speed with exponential smoothing
+        kappa = self._estimate_curvature_ahead(self._progress, c.curvature_lookahead)
+        v_target_raw = self._path_max_speed / (1.0 + c.curvature_gain * kappa)
+        v_target_raw = _clamp(v_target_raw, 0.0, self._path_max_speed)
 
-        # Local spacing for speed
-        idx = int(self._progress)
-        idx = max(0, min(idx, N - 2))
-        local_spacing = self._segment_length(idx)
+        alpha_smooth = c.Ts / (c.Ts + SPEED_SMOOTH_TAU)
+        self._v_target_smooth = alpha_smooth * v_target_raw + (1.0 - alpha_smooth) * self._v_target_smooth
+        v_target = self._v_target_smooth
 
-        # Speed from spacing
-        max_speed = self._path_max_speed
-        v_target = self._speed_from_spacing(local_spacing, max_speed)
+        # 5. Stop deceleration
+        robot_arc = self._cumul_dist_at(self._progress)
 
-        # Deceleration toward stop
-        dist_to_stop = self._distance_along_path(self._progress, next_stop_idx)
-        if c.decel_limit > 0 and dist_to_stop > 0:
-            v_brake = math.sqrt(2 * c.decel_limit * dist_to_stop)
-            v_target = min(v_target, v_brake)
-        elif c.kp_linear > 0 and dist_to_stop > 0:
-            v_target = min(v_target, c.kp_linear * dist_to_stop)
+        if self._next_stop_ptr < len(self._stop_indices):
+            stop_idx = self._stop_indices[self._next_stop_ptr]
+            d_to_stop = self._cumul_dist[stop_idx] - robot_arc
+            if d_to_stop > 0.0:
+                if c.decel_limit > 0.0:
+                    v_brake = math.sqrt(2.0 * c.decel_limit * d_to_stop)
+                else:
+                    v_brake = c.kp_linear * d_to_stop
+                v_target = min(v_target, v_brake)
 
-        # Adaptive lookahead
-        if c.kp_linear > 0:
+        # Always decelerate toward path end
+        d_to_end = self._cumul_dist[N - 1] - robot_arc if self._cumul_dist else 0.0
+        if d_to_end > 0.0:
+            if c.decel_limit > 0.0:
+                v_brake_end = math.sqrt(2.0 * c.decel_limit * d_to_end)
+            else:
+                v_brake_end = c.kp_linear * d_to_end
+            v_target = min(v_target, v_brake_end)
+        else:
+            v_target = 0.0
+
+        # 6. Compute lookahead
+        if c.kp_linear > EPSILON:
             lookahead = v_target / c.kp_linear
         else:
-            lookahead = c.lookahead_base
+            lookahead = c.lookahead_base * (v_target / max(self._path_max_speed, EPSILON))
         lookahead = max(lookahead, c.lookahead_min)
 
-        # Carrot point
+        # 7. Place carrot along path
         carrot_progress = self._advance_along_path(self._progress, lookahead)
-        carrot_progress = min(carrot_progress, next_stop_idx)
-        carrot_x, carrot_y = self._interpolate_path(carrot_progress)
 
-        dx = carrot_x - rx
-        dy = carrot_y - ry
-        carrot_dist = math.hypot(dx, dy)
-        angle_to_carrot = math.atan2(dy, dx)
-        heading_error = _normalize_angle(angle_to_carrot - rpsi)
+        # Clamp carrot at next stop index
+        if self._next_stop_ptr < len(self._stop_indices):
+            stop_idx = self._stop_indices[self._next_stop_ptr]
+            if carrot_progress > float(stop_idx):
+                carrot_progress = float(stop_idx)
 
-        # Reverse mode
+        # Clamp at path end
+        if carrot_progress > float(N - 1):
+            carrot_progress = float(N - 1)
+
+        self._carrot_x, self._carrot_y = self._interpolate_path(carrot_progress)
+
+        # Distance and angle to carrot
+        dx_carrot = self._carrot_x - rx
+        dy_carrot = self._carrot_y - ry
+        carrot_dist = math.hypot(dx_carrot, dy_carrot)
+        angle_to_carrot = math.atan2(dy_carrot, dx_carrot)
+
+        # Heading error (forward)
+        heading_error_fwd = _normalize_angle(angle_to_carrot - rpsi)
+
+        # 8. Reverse mode (if allow_reverse)
+        heading_error = heading_error_fwd
+
         if self._allow_reverse:
-            if not self._reverse_mode and abs(heading_error) > c.reverse_enter_angle:
-                self._reverse_mode = True
-            elif self._reverse_mode and abs(heading_error) < c.reverse_exit_angle:
-                self._reverse_mode = False
-        if self._reverse_mode:
-            heading_error = _normalize_angle(heading_error + math.pi)
+            abs_he = abs(heading_error_fwd)
 
-        # Speed command
-        v_cmd = max(0.0, v_target - c.kd_linear * abs(current_v))
-        v_cmd *= math.cos(heading_error)
+            if not self._reverse_mode and abs_he > c.reverse_enter_angle:
+                self._reverse_mode = True
+                self._angular_integral = 0.0
+            elif self._reverse_mode and abs_he < c.reverse_exit_angle:
+                self._reverse_mode = False
+                self._angular_integral = 0.0
+
+            if self._reverse_mode:
+                heading_error = _normalize_angle(heading_error_fwd + math.pi)
+
+        self.data.heading_error = heading_error
+        self.data.carrot_distance = carrot_dist
+        self.data.carrot_x = self._carrot_x
+        self.data.carrot_y = self._carrot_y
+
+        # 9. Speed command
+        if c.decel_limit > EPSILON:
+            # Pre-compensate for velocity damping so steady-state matches v_target
+            v_cmd = v_target * (1.0 + c.kd_linear)
+        else:
+            # Proportional fallback
+            v_cmd = min(v_target, c.kp_linear * carrot_dist)
+
+        # Velocity damping
+        v_cmd = max(0.0, v_cmd - c.kd_linear * abs(current_v))
+
+        # Scale by cos(heading_error)
+        cos_scale = max(0.0, math.cos(heading_error))
+        v_cmd *= cos_scale
+
+        # Reverse mode: negate velocity
         if self._reverse_mode:
             v_cmd = -v_cmd
-        v_cmd = max(-max_speed, min(max_speed, v_cmd))
 
-        # Angular command (PI with anti-windup)
-        w = self._pi_angular(heading_error, c.max_turn_rate)
+        self.data.speed_limit = v_target
 
-        # Fade yaw near carrot
-        fade = min(1.0, carrot_dist / (2 * c.arrival_tolerance)) if c.arrival_tolerance > 0 else 1.0
-        w *= fade
-
-        # Check arrival at stop index
-        at_stop = False
-        for si in self._stop_indices:
-            if si > self._current_stop_idx and abs(self._progress - si) < 1.5:
-                dist_to_wp = math.hypot(path[si][0] - rx, path[si][1] - ry)
-                if dist_to_wp < c.arrival_tolerance:
-                    if not self._dwelling:
-                        self._dwelling = True
-                        self._dwell_timer = 0.0
-                        self._emit(PositionControlEvent.WAYPOINT_REACHED,
-                                   waypoint_index=si)
-                    self._dwell_timer += c.Ts
-                    if self._dwell_timer >= c.arrival_dwell_time:
-                        self._emit(PositionControlEvent.WAYPOINT_COMPLETED,
-                                   waypoint_index=si)
-                        self._current_stop_idx = si
-                        self._dwelling = False
-                        self._angular_integral = 0.0
-                        self._linear_integral = 0.0
-                    at_stop = True
-                break
-
-        if at_stop and self._dwelling:
-            return 0.0, 0.0
-
-        # Check path end
-        dist_to_end = math.hypot(path[-1][0] - rx, path[-1][1] - ry)
-        if self._progress >= N - 1.5 and dist_to_end < c.arrival_tolerance:
-            if not self._dwelling:
-                self._dwelling = True
-                self._dwell_timer = 0.0
-            self._dwell_timer += c.Ts
-            if self._dwell_timer >= c.arrival_dwell_time:
-                self.mode = PositionControlMode.IDLE
-                self.path_state = PathState.IDLE
-                self._emit(PositionControlEvent.PATH_FINISHED)
-                return 0.0, 0.0
-            return 0.0, 0.0
-
-        return v_cmd, w
-
-    # ── Angular PI with anti-windup ─────────────────────────────────────
-
-    def _pi_angular(self, heading_error: float, max_rate: float) -> float:
-        c = self.config
+        # 10. Angular command - PI with anti-windup
         w_p = c.kp_angular * heading_error
-        w_unsat = w_p + self._angular_integral
-        w_sat = max(-max_rate, min(max_rate, w_unsat))
+        w_i = self._angular_integral
+        w_unsat = w_p + w_i
+        w_sat = _clamp(w_unsat, -c.max_turn_rate, c.max_turn_rate)
 
-        # Anti-windup: only integrate if not pushing further into saturation
-        if abs(w_unsat) <= max_rate or (w_unsat * heading_error < 0):
+        is_saturated = abs(w_unsat - w_sat) > EPSILON
+        would_push_further = is_saturated and (
+            (w_unsat > w_sat and heading_error > 0.0) or
+            (w_unsat < w_sat and heading_error < 0.0))
+
+        if not would_push_further:
             self._angular_integral += c.ki_angular * heading_error * c.Ts
-            if c.ki_angular > 0:
-                max_i = max_rate / c.ki_angular
-                self._angular_integral = max(-max_i, min(max_i, self._angular_integral))
+            max_integral = c.max_turn_rate / max(c.ki_angular, 0.01)
+            self._angular_integral = _clamp(self._angular_integral, -max_integral, max_integral)
 
-        return w_sat
+        # Fade yaw rate near carrot
+        fade_radius = 2.0 * c.arrival_tolerance
+        w_fade = _clamp(carrot_dist / fade_radius, 0.0, 1.0)
+
+        v_out = v_cmd
+        w_out = w_sat * w_fade
+
+        # 11. Arrival checks
+
+        # PATH END check
+        last_pt_dist = math.hypot(path[-1][0] - rx, path[-1][1] - ry)
+        progress_threshold = float(N - 1) - 1.0
+        near_end = (self._progress >= progress_threshold) and \
+                   (last_pt_dist < c.arrival_tolerance)
+
+        # STOP check
+        near_stop = False
+        current_stop_idx = 0
+        if self._next_stop_ptr < len(self._stop_indices):
+            current_stop_idx = self._stop_indices[self._next_stop_ptr]
+            stop_pt_dist = math.hypot(path[current_stop_idx][0] - rx,
+                                      path[current_stop_idx][1] - ry)
+            near_stop = (self._progress >= float(current_stop_idx) - 1.0) and \
+                        (stop_pt_dist < c.arrival_tolerance)
+
+        if near_end:
+            # PATH END arrival — output zero while dwelling
+            v_out = 0.0
+            w_out = 0.0
+            self._arrival_timer += c.Ts
+            if self._arrival_timer >= c.arrival_dwell_time:
+                self._emit(PositionControlEvent.PATH_FINISHED)
+                self.path_state = PathState.IDLE
+                self.mode = PositionControlMode.IDLE
+                self._emit(PositionControlEvent.MODE_CHANGED)
+            self._update_path_telemetry(N, d_to_end)
+            return v_out, w_out
+
+        elif near_stop:
+            # STOP point arrival — output zero while dwelling
+            if not self._stop_reached_sent:
+                self._emit(PositionControlEvent.WAYPOINT_REACHED,
+                           waypoint_index=current_stop_idx)
+                self._stop_reached_sent = True
+
+            v_out = 0.0
+            w_out = 0.0
+            self._arrival_timer += c.Ts
+            if self._arrival_timer >= c.stop_dwell_time:
+                self._emit(PositionControlEvent.WAYPOINT_COMPLETED,
+                           waypoint_index=current_stop_idx)
+                self._next_stop_ptr += 1
+                self._arrival_timer = 0.0
+                self._angular_integral = 0.0
+                self._stop_reached_sent = False
+            self._update_path_telemetry(N, d_to_end)
+            return v_out, w_out
+
+        else:
+            self._arrival_timer = 0.0
+            self._stop_reached_sent = False
+
+        # 12. Final approach — move_to_point-like override near end/stop
+        #     Allows reverse to recover from overshoot without oscillation.
+
+        # 12a. Path endpoint approach — activate within stopping distance
+        stopping_dist_end = (self._path_max_speed ** 2 / (2.0 * c.decel_limit)) \
+            if c.decel_limit > EPSILON else 0.5
+        approaching_end = (d_to_end < stopping_dist_end) or (d_to_end < 0.0)
+
+        if approaching_end and not near_end:
+            dx_last = path[-1][0] - rx
+            dy_last = path[-1][1] - ry
+            dist_last = math.hypot(dx_last, dy_last)
+            angle_to_last = math.atan2(dy_last, dx_last)
+            he_last = _normalize_angle(angle_to_last - rpsi)
+
+            # Speed: sqrt decel toward last point
+            if c.decel_limit > EPSILON:
+                v_final = math.sqrt(2.0 * c.decel_limit * dist_last)
+            else:
+                v_final = c.kp_linear * dist_last
+            v_final = max(0.0, v_final - c.kd_linear * abs(current_v))
+            v_final = min(v_final, self._path_max_speed)
+
+            # Allow reverse if overshot (heading > reverse_enter_angle)
+            reverse_last = abs(he_last) > c.reverse_enter_angle
+            if reverse_last:
+                he_last = _normalize_angle(he_last + math.pi)
+                v_out = -v_final * max(0.0, math.cos(he_last))
+            else:
+                v_out = v_final * max(0.0, math.cos(he_last))
+
+            # Angular with fade near target
+            w_last = _clamp(c.kp_angular * he_last, -c.max_turn_rate, c.max_turn_rate)
+            fade_last = _clamp(dist_last / (2.0 * c.arrival_tolerance), 0.0, 1.0)
+            w_out = w_last * fade_last
+
+        # 12b. STOP waypoint approach — move_to_point-like drive toward stop
+        if self._next_stop_ptr < len(self._stop_indices) and not near_stop:
+            stop_idx = self._stop_indices[self._next_stop_ptr]
+            stop_x, stop_y = path[stop_idx]
+            dx_stop = stop_x - rx
+            dy_stop = stop_y - ry
+            dist_stop = math.hypot(dx_stop, dy_stop)
+
+            stopping_dist = (self._path_max_speed ** 2 / (2.0 * c.decel_limit)) \
+                if c.decel_limit > EPSILON else 0.5
+
+            arc_to_stop = self._cumul_dist[stop_idx] - robot_arc
+            approaching_stop = (arc_to_stop < stopping_dist) or (arc_to_stop < 0.0)
+
+            if approaching_stop:
+                angle_to_stop = math.atan2(dy_stop, dx_stop)
+                he_stop = _normalize_angle(angle_to_stop - rpsi)
+
+                if c.decel_limit > EPSILON:
+                    v_stop = math.sqrt(2.0 * c.decel_limit * dist_stop)
+                else:
+                    v_stop = c.kp_linear * dist_stop
+                v_stop = max(0.0, v_stop - c.kd_linear * abs(current_v))
+                v_stop = min(v_stop, self._path_max_speed)
+
+                # Allow reverse if overshot
+                reverse_stop = abs(he_stop) > c.reverse_enter_angle
+                if reverse_stop:
+                    he_stop = _normalize_angle(he_stop + math.pi)
+                    v_out = -v_stop * max(0.0, math.cos(he_stop))
+                else:
+                    v_out = v_stop * max(0.0, math.cos(he_stop))
+
+                w_stop = _clamp(c.kp_angular * he_stop, -c.max_turn_rate, c.max_turn_rate)
+                fade_stop = _clamp(dist_stop / (2.0 * c.arrival_tolerance), 0.0, 1.0)
+                w_out = w_stop * fade_stop
+
+        # Update telemetry
+        self._update_path_telemetry(N, d_to_end)
+        return v_out, w_out
+
+    def _update_path_telemetry(self, N: int, d_to_end: float):
+        self.data.path_point_count = N
+        self.data.current_index = int(self._progress)
+        self.data.remaining_path_length = max(0.0, d_to_end)
+        self.data.progress = self._progress
 
     # ── Path geometry helpers ───────────────────────────────────────────
 
-    def _segment_length(self, idx: int) -> float:
-        if idx < 0 or idx >= len(self._path) - 1:
+    def _compute_cumulative_distances(self):
+        """Compute cumulative arc-length distances for the path."""
+        self._cumul_dist = [0.0]
+        for i in range(1, len(self._path)):
+            dx = self._path[i][0] - self._path[i - 1][0]
+            dy = self._path[i][1] - self._path[i - 1][1]
+            self._cumul_dist.append(self._cumul_dist[-1] + math.hypot(dx, dy))
+
+    def _cumul_dist_at(self, progress: float) -> float:
+        """Get cumulative arc length at a floating-point progress value."""
+        N = len(self._cumul_dist)
+        if N < 2:
             return 0.0
-        ax, ay = self._path[idx]
-        bx, by = self._path[idx + 1]
-        return math.hypot(bx - ax, by - ay)
+        if progress <= 0.0:
+            return self._cumul_dist[0]
+        if progress >= N - 1:
+            return self._cumul_dist[-1]
+        idx = int(progress)
+        t = progress - idx
+        return self._cumul_dist[idx] + t * (self._cumul_dist[idx + 1] - self._cumul_dist[idx])
+
+    def _estimate_curvature_ahead(self, at_progress: float, lookahead_dist: float) -> float:
+        """Estimate max path curvature in a lookahead window using Menger curvature."""
+        N = len(self._path)
+        if N < 3:
+            return 0.0
+
+        start_idx = int(at_progress)
+        if start_idx >= N - 1:
+            start_idx = N - 2
+
+        # Find end index based on lookahead distance
+        start_arc = self._cumul_dist[start_idx]
+        end_arc = start_arc + lookahead_dist
+
+        end_idx = start_idx
+        while end_idx < N - 1 and self._cumul_dist[end_idx] < end_arc:
+            end_idx += 1
+
+        # Compute stride: ~50mm chord for robust curvature estimation
+        avg_spacing = (self._path_total_length / (N - 1)) if N > 1 else 0.015
+        stride = int(0.05 / max(avg_spacing, 0.001))
+        stride = max(1, min(stride, 15))
+
+        # Need at least 2*stride points for a single curvature measurement
+        if end_idx < start_idx + 2 * stride:
+            if start_idx + 2 * stride < N:
+                end_idx = start_idx + 2 * stride
+            else:
+                return 0.0
+
+        max_kappa = 0.0
+
+        i = start_idx
+        while i + 2 * stride <= end_idx and i + 2 * stride < N:
+            ax, ay = self._path[i]
+            bx, by = self._path[i + stride]
+            cx, cy = self._path[i + 2 * stride]
+
+            abx, aby = bx - ax, by - ay
+            bcx, bcy = cx - bx, cy - by
+            acx, acy = cx - ax, cy - ay
+
+            cross_mag = abs(abx * acy - aby * acx)
+            ab_len = math.hypot(abx, aby)
+            bc_len = math.hypot(bcx, bcy)
+            ac_len = math.hypot(acx, acy)
+
+            denom = ab_len * bc_len * ac_len
+            if denom > 1e-10:
+                kappa = 2.0 * cross_mag / denom
+                if kappa > max_kappa:
+                    max_kappa = kappa
+            i += 1
+
+        return max_kappa
 
     def _project_onto_path(self, rx: float, ry: float, last_progress: float) -> float:
         """Find closest point on path ahead of last_progress (monotonic forward)."""
@@ -585,74 +937,74 @@ class SimulatedPositionControl:
         if N < 2:
             return 0.0
 
-        start_idx = max(0, int(last_progress) - 1)
-        best_progress = last_progress
-        best_dist_sq = float('inf')
+        start_seg = int(last_progress)
+        if start_seg >= N - 1:
+            start_seg = N - 2
 
-        for i in range(start_idx, min(N - 1, start_idx + 50)):
+        end_seg = min(start_seg + PROJECTION_SEARCH_WINDOW, N - 2)
+
+        best_progress = last_progress
+        best_dist_sq = 1e30
+
+        for i in range(start_seg, end_seg + 1):
             ax, ay = path[i]
             bx, by = path[i + 1]
             dx, dy = bx - ax, by - ay
             seg_len_sq = dx * dx + dy * dy
-            if seg_len_sq < 1e-12:
+
+            if seg_len_sq < EPSILON:
                 t = 0.0
             else:
                 t = ((rx - ax) * dx + (ry - ay) * dy) / seg_len_sq
-                t = max(0.0, min(1.0, t))
-            px = ax + t * dx
-            py = ay + t * dy
-            dist_sq = (rx - px) ** 2 + (ry - py) ** 2
-            prog = float(i) + t
-            if prog >= last_progress - 0.5 and dist_sq < best_dist_sq:
+                t = _clamp(t, 0.0, 1.0)
+
+            proj_x = ax + t * dx
+            proj_y = ay + t * dy
+            dist_sq = (rx - proj_x) ** 2 + (ry - proj_y) ** 2
+
+            candidate = float(i) + t
+
+            # Only accept if monotonically forward
+            if candidate >= last_progress and dist_sq < best_dist_sq:
                 best_dist_sq = dist_sq
-                best_progress = prog
+                best_progress = candidate
 
         return best_progress
 
-    def _advance_along_path(self, start_progress: float, distance: float) -> float:
-        """Advance along the path by a given arc distance from start_progress."""
-        path = self._path
-        N = len(path)
-        idx = int(start_progress)
-        frac = start_progress - idx
-        remaining = distance
-
-        # Remaining distance in current segment
-        if idx < N - 1:
-            seg_len = self._segment_length(idx)
-            remaining_in_seg = (1.0 - frac) * seg_len
-            if remaining <= remaining_in_seg:
-                if seg_len > 1e-9:
-                    return start_progress + remaining / seg_len
-                else:
-                    return start_progress
-            remaining -= remaining_in_seg
-            idx += 1
-
-        while idx < N - 1 and remaining > 0:
-            seg_len = self._segment_length(idx)
-            if remaining <= seg_len and seg_len > 1e-9:
-                return float(idx) + remaining / seg_len
-            remaining -= seg_len
-            idx += 1
-
-        return float(N - 1)
-
-    def _distance_along_path(self, from_progress: float, to_progress: float) -> float:
-        if to_progress <= from_progress:
-            return 0.0
-        N = len(self._cumulative_dist)
+    def _advance_along_path(self, from_progress: float, distance: float) -> float:
+        """Advance along path by arc distance. Uses binary search like firmware."""
+        N = len(self._path)
         if N < 2:
+            return from_progress
+
+        current_arc = self._cumul_dist_at(from_progress)
+        target_arc = current_arc + distance
+
+        # Clamp to path end
+        if target_arc >= self._cumul_dist[-1]:
+            return float(N - 1)
+        if target_arc <= 0.0:
             return 0.0
 
-        # Interpolate cumulative distance at both progress values
-        def _interp_cum(p):
-            i = int(p)
-            f = p - i
-            i = max(0, min(i, N - 2))
-            return self._cumulative_dist[i] + f * (self._cumulative_dist[min(i + 1, N - 1)] - self._cumulative_dist[i])
+        # Binary search for segment containing target_arc
+        lo, hi = 0, N - 1
+        while lo < hi - 1:
+            mid = (lo + hi) // 2
+            if self._cumul_dist[mid] <= target_arc:
+                lo = mid
+            else:
+                hi = mid
 
-        return _interp_cum(to_progress) - _interp_cum(from_progress)
+        # Interpolate within segment [lo, lo+1]
+        seg_start = self._cumul_dist[lo]
+        seg_end = self._cumul_dist[lo + 1]
+        seg_len = seg_end - seg_start
+
+        t = 0.0
+        if seg_len > EPSILON:
+            t = _clamp((target_arc - seg_start) / seg_len, 0.0, 1.0)
+
+        return float(lo) + t
 
     def _interpolate_path(self, progress: float) -> tuple[float, float]:
         path = self._path
@@ -668,7 +1020,3 @@ class SimulatedPositionControl:
         ax, ay = path[idx]
         bx, by = path[min(idx + 1, N - 1)]
         return ax + frac * (bx - ax), ay + frac * (by - ay)
-
-    def _speed_from_spacing(self, local_spacing: float, max_speed: float) -> float:
-        """Legacy: with uniform resampling, spacing is constant so just return max_speed."""
-        return max_speed

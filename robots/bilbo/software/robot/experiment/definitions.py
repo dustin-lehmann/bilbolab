@@ -148,7 +148,7 @@ class BILBO_ModelVector:
 
     def to_lifted_matrix(self) -> np.ndarray:
         """Convert the m-vector to a lifted lower-triangular Toeplitz matrix."""
-        from core.utils.control.lib_control.lifted_systems import vec2liftedMatrix
+        from core.utils.control_lib.lib_control.lifted_systems import vec2liftedMatrix
         return vec2liftedMatrix(self.to_array())
 
     @classmethod
@@ -158,7 +158,7 @@ class BILBO_ModelVector:
     @classmethod
     def from_lifted_matrix(cls, matrix: np.ndarray, name: str, id: int, dt: float = None) -> BILBO_ModelVector:
         """Create a BILBO_ModelVector from a lifted lower-triangular Toeplitz matrix."""
-        from core.utils.control.lib_control.lifted_systems import liftedMatrix2Vec
+        from core.utils.control_lib.lib_control.lifted_systems import liftedMatrix2Vec
         vec = liftedMatrix2Vec(matrix)
         return cls.from_vector(vec, name=name, id=id, dt=dt)
 
@@ -244,7 +244,7 @@ class BILBO_ModelVectorFileData:
 
     def to_lifted_matrix(self) -> np.ndarray:
         """Convert the stored m-vector to a lifted lower-triangular Toeplitz matrix."""
-        from core.utils.control.lib_control.lifted_systems import vec2liftedMatrix
+        from core.utils.control_lib.lib_control.lifted_systems import vec2liftedMatrix
         return vec2liftedMatrix(self.to_array())
 
     def to_model_vector(self, name: str = '', model_id: int = 0) -> BILBO_ModelVector:

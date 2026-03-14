@@ -411,6 +411,10 @@ class ExperimentParser:
             if self.debug:
                 self.logger.debug(f"Parsed action {i}: type={action_def.type}, params={action_def.parameters}")
 
+        requirements = None
+        if "requirements" in data:
+            requirements = self._parse_requirements(data["requirements"])
+
         return ExperimentDefinition(
             id=data["id"],
             description=data["description"],
@@ -418,6 +422,7 @@ class ExperimentParser:
             timeout=data.get("timeout"),
             label=data.get("label"),
             external_input_enabled=data.get("external_input_enabled", False),
+            requirements=requirements,
             source_dict=copy.deepcopy(data),
         )
 
@@ -448,6 +453,33 @@ class ExperimentParser:
         """Parse an experiment definition from a JSON string."""
         data = json.loads(json_str)
         return self.from_dict(data)
+
+    def _parse_requirements(self, data: dict):
+        """Parse an ExperimentRequirements from a dict.
+
+        Args:
+            data: Dict with optional keys: optitrack, robot_id, control_mode,
+                  control_config, state_ranges.
+
+        Returns:
+            ExperimentRequirements instance.
+        """
+        from core.utils.dataclass_utils import from_dict_auto
+        from robot.experiment.experiment import ExperimentRequirements, StateRangeRequirement
+
+        state_ranges = None
+        if "state_ranges" in data:
+            state_ranges = [
+                from_dict_auto(StateRangeRequirement, sr) for sr in data["state_ranges"]
+            ]
+
+        return ExperimentRequirements(
+            optitrack=data.get("optitrack"),
+            robot_id=data.get("robot_id"),
+            control_mode=data.get("control_mode"),
+            control_config=data.get("control_config"),
+            state_ranges=state_ranges,
+        )
 
 
 # ======================================================================================================================

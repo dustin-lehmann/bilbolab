@@ -1,0 +1,29 @@
+id: track
+
+origin:
+  id: "origin-track"
+  points: [ 1, 2, 3, 4, 5 ]
+  x_start: 5
+  x_end: 4
+  y_start: 5
+  y_end: 1
+  offset_x: 0.01
+  offset_y: 0.01
+  offset_z: 0.02
+  marker_size: 0.01
+
+size:
+  x: [ 0, 3 ]
+  y: [ 0, 1 ]
+
+obstacles:
+  - id: limbo-bar
+    type: limbo_bar
+    tracking:
+      id: "limbo-marker"
+      points: [ 1, 2, 3, 4 ]
+      x_start: 3
+      x_end: 1
+      y_start: 2
+      y_end: 4
+      limbo_direction: -1.57
