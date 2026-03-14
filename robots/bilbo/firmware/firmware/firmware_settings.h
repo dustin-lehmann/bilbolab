@@ -20,8 +20,8 @@
 #define BOARD_REV_4
 
 // Robot model (sets wheel diameter and wheel distance in bilbo_model.h)
-//#define BILBO_MODEL_NORMAL
-#define BILBO_MODEL_SMALL
+#define BILBO_MODEL_NORMAL
+//#define BILBO_MODEL_SMALL
 //#define BILBO_MODEL_BIG
 
 /* ================================================================
@@ -69,6 +69,15 @@
 // to survive the time between motor init and the first drive task cycle.
 // Default 100 → 6.4s.
 #define BILBO_DRIVE_WATCHDOG_INITIAL 100
+
+/* ================================================================
+ * LED STRIP — select external LED strip driver
+ * ================================================================ */
+
+// LED_STRIP_I2C:   WS2812 strip driven via I2C extender (default, rev3/rev4)
+// LED_STRIP_APA102: APA102 strip driven via SPI (direct from STM32)
+//#define LED_STRIP_APA102
+#define LED_STRIP_I2C
 
 /* ================================================================
  * CONTROL LOOP
