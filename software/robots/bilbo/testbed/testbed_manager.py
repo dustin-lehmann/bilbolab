@@ -153,6 +153,7 @@ class TestbedManager:
                  ):
 
         self.logger = Logger('BILBO Testbed Manager', 'DEBUG')
+        Logger.section('Testbed Manager Loads')
 
         if isinstance(settings, dict):
             settings = from_dict_auto(TestbedManagerSettings, settings)
@@ -207,6 +208,7 @@ class TestbedManager:
 
     # === METHODS ======================================================================================================
     def init(self):
+        Logger.section('Testbed Manager Initializing')
         self._register_events()
         self.robot_manager.init()
         self.virtual_testbed.init()
@@ -219,13 +221,22 @@ class TestbedManager:
 
     # ------------------------------------------------------------------------------------------------------------------
     def start(self):
+        Logger.section('Robot Manager')
         self.robot_manager.start()
         self.virtual_testbed.start()
+
+        Logger.section('OptiTrack')
         if self.tracker is not None:
             self.tracker.start()
+        else:
+            self.logger.info("Tracker disabled")
+
         if self.timecode_server is not None:
+            Logger.section('Timecode')
             self.timecode_server.start()
+
         if self.extensions is not None:
+            Logger.section('Testbed Extensions')
             self.extensions.start()
 
         self._running = True
@@ -282,7 +293,8 @@ class TestbedManager:
 
         # Listen for experiment events to show status on testbed display
         listeners = [
-            robot.experiment_handler.events.experiment_started.on(self._on_experiment_started, discard_match_data=False),
+            robot.experiment_handler.events.experiment_started.on(self._on_experiment_started,
+                                                                  discard_match_data=False),
             robot.experiment_handler.events.experiment_finished.on(self._on_experiment_finished),
             robot.experiment_handler.events.experiment_error.on(self._on_experiment_finished),
             robot.experiment_handler.events.experiment_timeout.on(self._on_experiment_finished),

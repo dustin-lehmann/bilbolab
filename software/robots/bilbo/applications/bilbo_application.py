@@ -13,12 +13,12 @@ top_level_module = os.path.abspath(os.path.join(current_dir, '..', '..'))  # adj
 if top_level_module not in sys.path:
     sys.path.insert(0, top_level_module)
 
-
 # === CUSTOM MODULES ===================================================================================================
 from robots.bilbo.gui.bilbo_gui import BILBO_Application_GUI
 from extensions.tools.cli.cli import CLI
 from core.utils.exit import register_exit_callback, exit_program
 from core.utils.logging_utils import setLoggerLevel, Logger
+from core.utils import colors
 from core.utils.exit import infinite_loop
 from core.utils.sound.sound import speak, SoundSystem
 from robots.bilbo.testbed.testbed_manager import TestbedManager
@@ -30,13 +30,13 @@ from robots.bilbo.settings import ApplicationSettings, load_settings
 ENABLE_SPEECH_OUTPUT = True
 
 
-
 # ======================================================================================================================
 class BILBO_Application:
     manager: TestbedManager
     soundsystem: SoundSystem
     joystick_control: BILBO_JoystickControl | None
 
+    # === INIT =========================================================================================================
     def __init__(self, settings: ApplicationSettings):
 
         self.settings = settings
@@ -51,7 +51,8 @@ class BILBO_Application:
             self.logger.error("No valid IP address for the server")
             exit_program()
 
-
+        Logger.banner([f"BILBO Application — {ip}"])
+        time.sleep(0.01)
         self.manager = TestbedManager(settings=settings.testbed_manager_settings)
 
         # CLI
@@ -91,9 +92,13 @@ class BILBO_Application:
 
         self.manager.init()
 
+        Logger.section("Joystick")
         if self.joystick_control is not None:
             self.joystick_control.init()
+        else:
+            self.logger.info("Joystick disabled")
 
+        Logger.section("CLI")
         self.cli.root.addChild(self.manager.robot_manager.cli)
         self.cli.root.addChild(self.manager.cli)
         if self.joystick_control is not None:
@@ -101,16 +106,21 @@ class BILBO_Application:
 
     # ------------------------------------------------------------------------------------------------------------------
     def start(self):
-        self.logger.info('Starting Bilbo application')
         speak('Start Bilbo application')
+
         self.manager.start()
+
         if self.joystick_control is not None:
+            Logger.section("Joystick")
             self.joystick_control.start()
+
+        Logger.section("GUI")
         self.gui.start()
 
-        # Start network monitor as subprocess (separate process avoids eventlet conflicts)
+        Logger.section("Network Monitor")
         software_dir = os.path.abspath(os.path.join(top_level_module, '..'))
-        network_monitor_script = os.path.join(software_dir, 'extensions', 'apps', 'network_monitor', 'network_monitor_app.py')
+        network_monitor_script = os.path.join(software_dir, 'extensions', 'apps', 'network_monitor',
+                                              'network_monitor_app.py')
         self._network_monitor_proc = subprocess.Popen(
             [sys.executable, network_monitor_script],
             cwd=software_dir,
@@ -118,10 +128,12 @@ class BILBO_Application:
             stderr=subprocess.DEVNULL,
         )
 
+        Logger.banner(["BILBO Application Running"])
+
     # ------------------------------------------------------------------------------------------------------------------
     def close(self, *args, **kwargs):
+        Logger.banner(["Shutting down BILBO Application"], color=colors.MEDIUM_ORANGE)
         speak('Stop Bilbo application')
-        self.logger.info('Closing Bilbo application')
         if self.joystick_control is not None:
             self.joystick_control.close()
         if self._network_monitor_proc and self._network_monitor_proc.poll() is None:
