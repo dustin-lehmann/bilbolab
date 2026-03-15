@@ -478,13 +478,6 @@ class Logger:
 
     # === STATIC FORMATTING HELPERS (for startup banners, phase separators, etc.) ====
     @staticmethod
-    def _print_stderr(text: str):
-        """Print to stderr (same stream as logging) to guarantee correct ordering with log messages."""
-        import sys
-        sys.stderr.write(text + '\n')
-        sys.stderr.flush()
-
-    @staticmethod
     def section(title: str, width: int = 70):
         """Print a section separator line with a title, e.g. '── Communication ──────'"""
         fill = width - len(title) - 4  # 4 = '── ' + ' '
@@ -492,7 +485,7 @@ class Logger:
             fill = 2
         line = f"\u2500\u2500 {title} " + "\u2500" * fill
         colored = f"{string_utils.escapeCode(colors.GREY)}{line}{string_utils.reset}"
-        Logger._print_stderr(colored)
+        print(colored)
 
     @staticmethod
     def banner(lines: list[str], width: int = 60, color=colors.MEDIUM_GREEN):
@@ -500,21 +493,20 @@ class Logger:
         esc = string_utils.escapeCode(color)
         rst = string_utils.reset
         border = "\u2550" * width
-        parts = [f"{esc}\u2554{border}\u2557{rst}"]
+        print(f"{esc}\u2554{border}\u2557{rst}")
         for text in lines:
             padding = width - len(text) - 2
             if padding < 0:
                 padding = 0
-            parts.append(f"{esc}\u2551  {text}{' ' * padding}\u2551{rst}")
-        parts.append(f"{esc}\u255a{border}\u255d{rst}")
-        Logger._print_stderr('\n'.join(parts))
+            print(f"{esc}\u2551  {text}{' ' * padding}\u2551{rst}")
+        print(f"{esc}\u255a{border}\u255d{rst}")
 
     @staticmethod
     def divider(width: int = 70, color=colors.GREY):
         """Print a simple horizontal divider line."""
         esc = string_utils.escapeCode(color)
         rst = string_utils.reset
-        Logger._print_stderr(f"{esc}{'\u2500' * width}{rst}")
+        print(f"{esc}{'\u2500' * width}{rst}")
 
     def switchLoggingLevel(self, level_from, level_to):
         """

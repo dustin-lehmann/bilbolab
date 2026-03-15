@@ -1431,7 +1431,7 @@ class BILBO_PositionControl:
     # ------------------------------------------------------------------------------------------------------------------
     def move_to_pose(self, x: float, y: float, heading: float,
                      max_speed: float = 0.0,
-                     max_angular_speed: float = 1.0,
+                     max_angular_speed: float = 3.0,
                      position_tolerance: float = 0.0,
                      max_corrections: int = 3,
                      timeout: float = 0.0,

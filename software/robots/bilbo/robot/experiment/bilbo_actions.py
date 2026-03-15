@@ -306,7 +306,7 @@ class MoveToPoseAction(ActionBase):
         psi: float = 0.0  # [rad]
         psi_deg: float = None  # [deg], alternative to psi
         max_speed: float = 0.0  # 0 = use default
-        max_angular_speed: float = 1.0  # [rad/s]
+        max_angular_speed: float = 3.0  # [rad/s]
         position_tolerance: float = 0.0  # 0 = use config arrival_tolerance
         max_corrections: int = 3
         timeout: float = 0.0  # 0 = no timeout

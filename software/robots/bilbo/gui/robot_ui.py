@@ -65,7 +65,7 @@ class RobotUI:
         self.joystick_control = joystick_control
 
         self.pages: Dict[str, Page] = {}
-        self.category = Category(id=robot.id, icon='🤖')
+        self.category = Category(id=robot.id, icon='🤖', bottom_group_size=[3, 3])
         self.gui.categories['robots'].addCategory(self.category)
 
         self._additional_map_objects: list[MapObject] = []
@@ -124,6 +124,30 @@ class RobotUI:
         page_exp = Page(id='experiment', name='🚀 Experiment', icon='🚀')
         self.build_experiment_page(page_exp)
         self.category.addPage(page_exp)
+
+        # Mode widget in category bottom group (visible on all pages)
+        self.bottom_mode_widget = BilboModeWidget(widget_id='bottom_mode',
+                                                   current_mode=self.robot.control.mode.name)
+
+        def update_bottom_mode(mode: BILBO_Control_Mode, *args, **kwargs):
+            self.bottom_mode_widget.current_mode = mode.name
+
+        def bottom_mode_clicked(mode_id, *args, **kwargs):
+            match mode_id:
+                case 'OFF':
+                    self.robot.control.setControlMode(BILBO_Control_Mode.OFF)
+                case 'DIRECT':
+                    self.robot.control.setControlMode(BILBO_Control_Mode.DIRECT)
+                case 'BALANCING':
+                    self.robot.control.setControlMode(BILBO_Control_Mode.BALANCING)
+                case 'VELOCITY':
+                    self.robot.control.setControlMode(BILBO_Control_Mode.VELOCITY)
+                case 'POSITION':
+                    self.robot.control.setControlMode(BILBO_Control_Mode.POSITION)
+
+        self.bottom_mode_widget.callbacks.mode_clicked.register(bottom_mode_clicked)
+        self.robot.control.events.mode_changed.on(update_bottom_mode)
+        self.category.bottom_group.addWidget(self.bottom_mode_widget, row=3, column=1, width=3, height=1)
 
         self._built = True
 

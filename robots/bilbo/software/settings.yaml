@@ -12,7 +12,7 @@ joystick:
   enabled: true
 
 sound:
-  volume: 1.0
+  volume: 0.25
   voice: robot  # female, male, or robot
 
 paths:

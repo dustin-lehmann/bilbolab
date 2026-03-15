@@ -36,7 +36,7 @@ model:
   depth: 0.085                     # meters
   distance_wheels: 0.16           # meters between wheels
   l_cg: 0.00                      # center of gravity distance (m)
-  theta_offset: 0.075             # radians
+  theta_offset: 0.06             # radians
   trajectory_delta: 0.0           # Asymmetric torque split: left = u*(0.5+delta), right = u*(0.5-delta)
 
 electronics:

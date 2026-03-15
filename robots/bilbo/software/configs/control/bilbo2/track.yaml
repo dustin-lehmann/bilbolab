@@ -1,0 +1,14 @@
+name: 'bilbo2 track control'
+description: 'For the track'
+velocity_control:
+  v:
+    pid:
+      Kp: -0.0
+      Ki: -0.04
+    feedforward:
+      Ka: -0.01
+      Kv: -0.235
+
+position_control:
+  kd_linear: 0.3
+  decel_limit: 0.3
