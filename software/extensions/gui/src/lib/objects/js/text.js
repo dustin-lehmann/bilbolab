@@ -99,6 +99,7 @@ export class StatusWidget extends Widget {
             const el = this._elements[key];
 
             el.name.textContent = conf.label;
+            el.name.style.color = getColor(conf.label_color);
             el.value.textContent = conf.status;
             el.value.style.color = getColor(conf.status_color);
 

@@ -374,6 +374,86 @@ export class Map {
             }
         });
 
+        // Double-tap (touch) detection — fires on_double_click for two quick taps
+        this._lastTapTime = 0;
+        this._lastTapX = 0;
+        this._lastTapY = 0;
+        const DOUBLE_TAP_MS = 300;
+        const DOUBLE_TAP_DISTANCE = 30; // px
+
+        // Long-press (touch) listener — fires after 500 ms hold without moving
+        this._longPressTimer = null;
+        this._longPressFired = false;
+        const LONG_PRESS_MS = 500;
+        const LONG_PRESS_MOVE_THRESHOLD = 10; // px
+
+        this.canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length !== 1) return;
+            const touch = e.touches[0];
+            this._longPressStartX = touch.clientX;
+            this._longPressStartY = touch.clientY;
+            this._longPressFired = false;
+
+            this._longPressTimer = setTimeout(() => {
+                const rect = this.canvas.getBoundingClientRect();
+                const sx = this._longPressStartX - rect.left;
+                const sy = this._longPressStartY - rect.top;
+                const worldPos = this.canvasPointToWorld(sx, sy);
+                this._longPressFired = true;
+                this.on_long_press(worldPos.x, worldPos.y);
+            }, LONG_PRESS_MS);
+        }, {passive: true});
+
+        this.canvas.addEventListener('touchmove', (e) => {
+            if (this._longPressTimer && e.touches.length === 1) {
+                const touch = e.touches[0];
+                const dx = touch.clientX - this._longPressStartX;
+                const dy = touch.clientY - this._longPressStartY;
+                if (Math.sqrt(dx * dx + dy * dy) > LONG_PRESS_MOVE_THRESHOLD) {
+                    clearTimeout(this._longPressTimer);
+                    this._longPressTimer = null;
+                }
+            }
+        }, {passive: true});
+
+        this.canvas.addEventListener('touchend', (e) => {
+            if (this._longPressTimer) {
+                clearTimeout(this._longPressTimer);
+                this._longPressTimer = null;
+            }
+
+            // Double-tap detection (skip if long-press already fired)
+            if (!this._longPressFired && e.changedTouches.length === 1) {
+                const touch = e.changedTouches[0];
+                const now = Date.now();
+                const dx = touch.clientX - this._lastTapX;
+                const dy = touch.clientY - this._lastTapY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (now - this._lastTapTime < DOUBLE_TAP_MS && dist < DOUBLE_TAP_DISTANCE) {
+                    // Double tap detected
+                    e.preventDefault();
+                    const rect = this.canvas.getBoundingClientRect();
+                    const sx = touch.clientX - rect.left;
+                    const sy = touch.clientY - rect.top;
+                    const worldPos = this.canvasPointToWorld(sx, sy);
+                    this.on_double_click(worldPos.x, worldPos.y);
+                    this._lastTapTime = 0; // reset to avoid triple-tap
+                } else {
+                    this._lastTapTime = now;
+                    this._lastTapX = touch.clientX;
+                    this._lastTapY = touch.clientY;
+                }
+            }
+        });
+
+        this.canvas.addEventListener('touchcancel', () => {
+            if (this._longPressTimer) {
+                clearTimeout(this._longPressTimer);
+                this._longPressTimer = null;
+            }
+        });
+
         // Mouse move listener for cursor position tracking
         this.canvas.addEventListener('mousemove', (e) => {
             const rect = this.canvas.getBoundingClientRect();
@@ -423,6 +503,24 @@ export class Map {
             type: 'event',
             data: {
                 type: 'double_click',
+                x: x,
+                y: y,
+            },
+        }
+        this.websocket.send(message);
+    }
+
+    /* -------------------------------------------------------------------------------------------------------------- */
+    /**
+     * Called on a long-press (touch hold). Override this method or use it as a callback.
+     * @param {number} x - World x coordinate of the long-press
+     * @param {number} y - World y coordinate of the long-press
+     */
+    on_long_press(x, y) {
+        const message = {
+            type: 'event',
+            data: {
+                type: 'long_press',
                 x: x,
                 y: y,
             },

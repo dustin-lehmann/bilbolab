@@ -1,6 +1,8 @@
+import base64
 import copy
 import dataclasses
 import math
+import os
 import threading
 import time
 from typing import Dict
@@ -30,17 +32,20 @@ from extensions.gui.src.lib.objects.python.indicators import (
 )
 from extensions.gui.src.lib.objects.python.joystick import JoystickWidget
 from extensions.gui.src.lib.objects.python.number import DigitalNumberWidget
+from extensions.gui.src.lib.objects.python.select import MultiSelectWidget
 from extensions.gui.src.lib.objects.python.table import Table, TextColumn, TextInputColumn, TableGroup
-from extensions.gui.src.lib.objects.python.text import TextWidget, StatusWidget, StatusWidgetElement
+from extensions.gui.src.lib.objects.python.text import TextWidget, StatusWidget, StatusWidgetElement, LineScrollWidget
 from extensions.gui.src.lib.objects.python.text_input import InputWidget
 from extensions.gui.src.lib.plot.realtime.rt_plot import TimeSeries, RT_Plot_Widget
 from robots.bilbo.gui.applications.dilc_app import DILC_APP
+from robots.bilbo.gui.applications.dilc_page import DILC_ExperimentPage
 from robots.bilbo.gui.applications.limbobar_dilc_app import LimboBar_DILC_APP
 from robots.bilbo.robot.bilbo import BILBO
 from robots.bilbo.robot.bilbo_data import BILBO_Sample
 from robots.bilbo.robot.bilbo_definitions import BILBO_Control_Mode, BILBO_ControlConfig
 from robots.bilbo.robot.bilbo_position_control import MoveToPointCommand, TurnToHeadingCommand, PathData
 from robots.bilbo.robot.bilbo_utilities import CONTROL_MODE_COLORS
+from core.utils.experiments.types import ExperimentStatus
 from robots.bilbo.testbed.objects import BoxObstacle
 from robots.bilbo.testbed.testbed_manager import TestbedManager
 
@@ -71,7 +76,17 @@ class RobotUI:
         self._additional_map_objects: list[MapObject] = []
         self._obstacle_map_objects: dict[str, MapObject] = {}  # obstacle_id -> map object
 
-        self.folder = Folder(folder_id=robot.id)
+        # Load robot image for folder buttons if available
+        self._robot_image_uri = None
+        assets_dir = os.path.join(os.path.dirname(__file__), 'assets', 'robots')
+        image_path = os.path.join(assets_dir, f'{robot.id}.png')
+        if os.path.isfile(image_path):
+            with open(image_path, 'rb') as f:
+                img_b64 = base64.b64encode(f.read()).decode()
+            self._robot_image_uri = f'data:image/png;base64,{img_b64}'
+
+        folder_kwargs = {'image': self._robot_image_uri, 'image_opacity': 0.7, 'text_position': 'top'} if self._robot_image_uri else {}
+        self.folder = Folder(folder_id=robot.id, **folder_kwargs)
 
         self.robot.core.events.stream.on(self.on_robot_stream)
         if self.manager.tracker is not None:
@@ -79,20 +94,19 @@ class RobotUI:
         self.logger = Logger(f"Category {self.robot.id}")
 
         # Register DILC experiment events (via experiment_handler, which owns the event)
-        self.robot.experiment_handler.events.dilc_experiment_initialized.on(
-            self.on_dilc_experiment_initialized, spawn_new_threads=True)
-
-        # Register LimboBar DILC experiment events
-        self.robot.experiment_handler.events.limbobar_dilc_experiment_initialized.on(
-            self.on_limbobar_dilc_experiment_initialized, spawn_new_threads=True)
-
-        # Register experiment progress events
-        self.robot.experiment_handler.events.experiment_started.on(self._on_experiment_started)
-        self.robot.experiment_handler.events.experiment_finished.on(self._on_experiment_finished)
-        self.robot.experiment_handler.events.experiment_error.on(self._on_experiment_finished)
-        self.robot.experiment_handler.events.experiment_timeout.on(self._on_experiment_finished)
-        self.robot.experiment_handler.events.action_started.on(self._on_action_started)
-        self.robot.experiment_handler.events.action_finished.on(self._on_action_finished)
+        # Save listener handles so they can be stopped in close()
+        self._event_listeners = [
+            self.robot.experiment_handler.events.dilc_experiment_initialized.on(
+                self.on_dilc_experiment_initialized, spawn_new_threads=True),
+            self.robot.experiment_handler.events.limbobar_dilc_experiment_initialized.on(
+                self.on_limbobar_dilc_experiment_initialized, spawn_new_threads=True),
+            self.robot.experiment_handler.events.experiment_started.on(self._on_experiment_started),
+            self.robot.experiment_handler.events.experiment_finished.on(lambda *a, **kw: self._on_experiment_finished(*a, status=ExperimentStatus.FINISHED, **kw)),
+            self.robot.experiment_handler.events.experiment_error.on(lambda *a, **kw: self._on_experiment_finished(*a, status=ExperimentStatus.ERROR, **kw)),
+            self.robot.experiment_handler.events.experiment_timeout.on(lambda *a, **kw: self._on_experiment_finished(*a, status=ExperimentStatus.TIMEOUT, **kw)),
+            self.robot.experiment_handler.events.action_started.on(self._on_action_started),
+            self.robot.experiment_handler.events.action_finished.on(self._on_action_finished),
+        ]
 
         self.robot.device.callbacks.disconnected.register(self.close)
         # Handle Mode changes
@@ -1772,15 +1786,15 @@ class RobotUI:
         page.addWidget(self.experiment_designer, row=1, column=1, width=50, height=18)
 
     # ------------------------------------------------------------------------------------------------------------------
-    def on_experiment_play(self, yaml: str = None, *args, **kwargs):
+    def on_experiment_play(self, yaml: str = None, file_path: str = None, *args, **kwargs):
         yaml_string = yaml
         try:
             definition = yaml_module.safe_load(yaml_string)
         except Exception as e:
             self.logger.error(f"Failed to parse experiment YAML: {e}")
             return
-        # Use the designer's tracked file path if available
-        designer_file = self.experiment_designer.current_file_path
+        # Use per-tab file path from frontend, fall back to Python-tracked path
+        designer_file = file_path or self.experiment_designer.current_file_path
         if designer_file:
             self._show_experiment_popup(definition, source='file', file_path=designer_file,
                                         yaml_string=yaml_string)
@@ -1793,13 +1807,497 @@ class RobotUI:
 
     # ------------------------------------------------------------------------------------------------------------------
     def build_folder(self):
-        self.app_folder = Folder(folder_id=self.robot.id, rows=3, columns=8)
-        self.app_folder.addPage(FolderPage(
-            page_id='control',
-            rows=2, columns=8
-        ))
+        folder_kwargs = {'image': self._robot_image_uri, 'image_opacity': 0.7, 'text_position': 'top'} if self._robot_image_uri else {}
+        self.app_folder = Folder(folder_id=self.robot.id, rows=4, columns=8, **folder_kwargs)
 
-        # Test Joystick Widget
+        # ==============================================================================================================
+        # PAGE 1: MAIN STATUS/CONTROL (uses auto-created page at position 0)
+        # ==============================================================================================================
+
+        # --- Row 1: Mode widget + Battery + Connection ---
+        self.app_bilbo_mode_widget = BilboModeWidget(widget_id='app_mode_widget',
+                                                     current_mode=self.robot.control.mode.name)
+
+        def app_update_mode_widget(mode: BILBO_Control_Mode, *args, **kwargs):
+            self.app_bilbo_mode_widget.current_mode = mode.name
+
+        def app_mode_widget_click(mode_id, *args, **kwargs):
+            match mode_id:
+                case 'OFF':
+                    self.robot.control.setControlMode(BILBO_Control_Mode.OFF)
+                case 'DIRECT':
+                    self.robot.control.setControlMode(BILBO_Control_Mode.DIRECT)
+                case 'BALANCING':
+                    self.robot.control.setControlMode(BILBO_Control_Mode.BALANCING)
+                case 'VELOCITY':
+                    self.robot.control.setControlMode(BILBO_Control_Mode.VELOCITY)
+                case 'POSITION':
+                    self.robot.control.setControlMode(BILBO_Control_Mode.POSITION)
+
+        self.app_bilbo_mode_widget.callbacks.mode_clicked.register(app_mode_widget_click)
+        self.robot.control.events.mode_changed.on(app_update_mode_widget)
+        self.app_folder.addObject(self.app_bilbo_mode_widget, row=1, column=1, width=4, height=1)
+
+        self.app_battery_indicator = BatteryIndicatorWidget(
+            widget_id='app_battery', label_position='center', show='voltage',
+        )
+        self.app_folder.addObject(self.app_battery_indicator, row=1, column=5, width=1, height=1)
+
+        self.app_connection_indicator = ConnectionIndicator(widget_id='app_connection')
+        self.app_folder.addObject(self.app_connection_indicator, row=1, column=6, width=1, height=1)
+
+        self.app_temp_widget = StatusWidget(
+            widget_id='app_temp_status',
+            elements={
+                'temp': StatusWidgetElement(label='Temp', color=[0.5, 0.5, 0.5], status='--'),
+            },
+            font_size=9,
+        )
+        self.app_folder.addObject(self.app_temp_widget, row=1, column=7, width=1, height=1)
+
+        self.app_joystick_indicator = JoystickIndicator(widget_id='app_joystick')
+        self.app_joystick_indicator.setValue(False)
+        self.app_folder.addObject(self.app_joystick_indicator, row=1, column=8, width=1, height=1)
+
+        # --- Row 2: Status widget (mode, TIC, VIC, PSI, static, experiment) ---
+        _white = [1, 1, 1]
+        self.app_status_widget = StatusWidget(
+            widget_id='app_status_widget',
+            title='Status',
+            elements={
+                'mode': StatusWidgetElement(
+                    label='Mode',
+                    color=CONTROL_MODE_COLORS[self.robot.control.mode],
+                    status=self.robot.control.mode.name,
+                    label_color=_white, status_color=_white,
+                ),
+                'tic': StatusWidgetElement(
+                    label='TIC',
+                    color=[0.5, 0.5, 0.5] if not self.robot.core.data.control.tic_enabled else [0, 0.5, 0],
+                    status='disabled' if not self.robot.core.data.control.tic_enabled else 'enabled',
+                    label_color=_white, status_color=_white,
+                ),
+                'vic': StatusWidgetElement(
+                    label='VIC',
+                    color=[0.5, 0.5, 0.5] if not self.robot.core.data.control.vic_enabled else [0, 0.5, 0],
+                    status='disabled' if not self.robot.core.data.control.vic_enabled else 'enabled',
+                    label_color=_white, status_color=_white,
+                ),
+                'psi': StatusWidgetElement(
+                    label='PSI',
+                    color=[0.5, 0.5, 0.5] if not self.robot.core.data.control.psi_enabled else [0, 0.5, 0],
+                    status='disabled' if not self.robot.core.data.control.psi_enabled else 'enabled',
+                    label_color=_white, status_color=_white,
+                ),
+                'static': StatusWidgetElement(
+                    label='Static',
+                    color=[0.5, 0.5, 0.5],
+                    status='false',
+                    label_color=_white, status_color=_white,
+                ),
+                'experiment': StatusWidgetElement(
+                    label='Experiment',
+                    color=[0.5, 0.5, 0.5],
+                    status='Idle',
+                    label_color=_white, status_color=_white,
+                ),
+            }
+        )
+        self.app_folder.addObject(self.app_status_widget, row=2, column=1, width=4, height=1)
+
+        # --- Rows 2-4, columns 7-8: Digital numbers group ---
+        app_numbers_group = Widget_Group(
+            group_id='app_numbers', rows=5, columns=1,
+            background_color='transparent', border_width=0, fill_empty=False,
+        )
+        self.app_x_number = DigitalNumberWidget(
+            widget_id='app_x_number', title='X',
+            min_value=-99, max_value=99, increment=0.01,
+        )
+        app_numbers_group.addWidget(self.app_x_number, row=1, column=1, width=1, height=1)
+
+        self.app_y_number = DigitalNumberWidget(
+            widget_id='app_y_number', title='Y',
+            min_value=-99, max_value=99, increment=0.01,
+        )
+        app_numbers_group.addWidget(self.app_y_number, row=2, column=1, width=1, height=1)
+
+        self.app_v_number_main = DigitalNumberWidget(
+            widget_id='app_v_number_main', title='V',
+            min_value=-9, max_value=9, increment=0.01,
+            color_ranges=[{'min': -0.05, 'max': 0.05, 'color': [0, 0.8, 0]}]
+        )
+        app_numbers_group.addWidget(self.app_v_number_main, row=3, column=1, width=1, height=1)
+
+        self.app_theta_number = DigitalNumberWidget(
+            widget_id='app_theta_number', title='Theta',
+            min_value=-999, max_value=999, increment=0.1,
+            color_ranges=[{'min': -0.15, 'max': 0.15, 'color': [0, 0.8, 0]}]
+        )
+        app_numbers_group.addWidget(self.app_theta_number, row=4, column=1, width=1, height=1)
+
+        self.app_psi_number = DigitalNumberWidget(
+            widget_id='app_psi_number', title='Psi',
+            min_value=-999, max_value=999, increment=0.1,
+        )
+        app_numbers_group.addWidget(self.app_psi_number, row=5, column=1, width=1, height=1)
+
+        self.app_folder.addObject(app_numbers_group, row=2, column=7, width=2, height=3)
+
+        # --- Rows 2-4, columns 1-6: Buttons ---
+        # Row 3
+        app_start_button = Button(widget_id='app_start_btn', text='Start', color=[0.0, 0.4, 0.0])
+        app_start_button.callbacks.click.register(self.robot.core.set_start_event_robot, discard_inputs=True)
+        self.app_folder.addObject(app_start_button, row=3, column=1, width=1, height=1)
+
+        app_stop_button = Button(widget_id='app_stop_btn', text='Stop', color=[0.4, 0, 0])
+        app_stop_button.callbacks.click.register(self.robot.core.set_stop_event_robot, discard_inputs=True)
+        self.app_folder.addObject(app_stop_button, row=3, column=2, width=1, height=1)
+
+        app_resume_button = Button(widget_id='app_resume_btn', text='Resume', color=[75 / 255, 82 / 255, 56 / 255])
+        app_resume_button.callbacks.click.register(self.robot.core.set_resume_event_robot, discard_inputs=True)
+        self.app_folder.addObject(app_resume_button, row=3, column=3, width=1, height=1)
+
+        app_revert_button = Button(widget_id='app_revert_btn', text='Revert', color=[59 / 255, 20 / 255, 120 / 255])
+        app_revert_button.callbacks.click.register(self.robot.core.set_repeat_event_robot, discard_inputs=True)
+        self.app_folder.addObject(app_revert_button, row=3, column=4, width=1, height=1)
+
+        app_fall_forward_button = Button(widget_id='app_fall_fwd_btn', text='Fall ↑', color=[0.6, 0.2, 0.1])
+        app_fall_forward_button.callbacks.click.register(
+            lambda *args, **kwargs: self.robot.control.fall_down('forward'))
+        self.app_folder.addObject(app_fall_forward_button, row=3, column=5, width=1, height=1)
+
+        app_fall_backward_button = Button(widget_id='app_fall_bwd_btn', text='Fall ↓', color=[0.6, 0.2, 0.1])
+        app_fall_backward_button.callbacks.click.register(
+            lambda *args, **kwargs: self.robot.control.fall_down('backward'))
+        self.app_folder.addObject(app_fall_backward_button, row=3, column=6, width=1, height=1)
+
+        # --- Row 4: TIC + PSI toggles (1 col each) ---
+        app_tic_button = MultiStateButton(
+            id='app_tic_button', title='TIC',
+            states=['OFF', 'ON'],
+            current_state=self.robot.core.data.control.tic_enabled,
+            color=[[0.5, 0.5, 0.5], [0, 0.3, 0]],
+        )
+
+        def app_tic_clicked(state: str, *args, **kwargs):
+            match state:
+                case 'ON':
+                    self.robot.control.enableTIC(False)
+                case 'OFF':
+                    self.robot.control.enableTIC(True)
+
+        app_tic_button.callbacks.click.register(app_tic_clicked)
+        self.robot.control.events.tic_mode_changed.on(
+            lambda enabled, *a, **kw: setattr(app_tic_button, 'state', 'ON' if enabled else 'OFF'))
+        self.app_folder.addObject(app_tic_button, row=4, column=1, width=1, height=1)
+
+        app_psi_button = MultiStateButton(
+            id='app_psi_button', title='PSI',
+            states=['OFF', 'ON'],
+            current_state=self.robot.core.data.control.psi_enabled,
+            color=[[0.5, 0.5, 0.5], [0, 0.3, 0]],
+        )
+
+        def app_psi_clicked(state: str, *args, **kwargs):
+            match state:
+                case 'ON':
+                    self.robot.control.enablePSI(False)
+                case 'OFF':
+                    self.robot.control.enablePSI(True)
+
+        app_psi_button.callbacks.click.register(app_psi_clicked)
+        self.robot.control.events.psi_mode_changed.on(
+            lambda enabled, *a, **kw: setattr(app_psi_button, 'state', 'ON' if enabled else 'OFF'))
+        self.app_folder.addObject(app_psi_button, row=4, column=2, width=1, height=1)
+
+        app_go_to_pose_button = Button(widget_id='app_go_to_pose_btn', text='Default', color=[0.3, 0.3, 0.5])
+
+        def on_default_pose_clicked(*args, **kwargs):
+            pose = self.manager.testbed.poses.get('default')
+            if pose is None:
+                self.logger.warning("Pose 'default' not found in testbed")
+                return
+            self.robot.position_control.move_to_pose(x=pose.x, y=pose.y, heading=pose.psi)
+
+        app_go_to_pose_button.callbacks.click.register(on_default_pose_clicked)
+        self.app_folder.addObject(app_go_to_pose_button, row=4, column=3, width=1, height=1)
+
+        # ==============================================================================================================
+        # PAGE 2: MAP
+        # ==============================================================================================================
+        map_page = FolderPage(page_id='map', name='Map', rows=5, columns=8)
+        self.app_folder.addPage(map_page)
+
+        testbed_size = self.manager.testbed_definition.size
+        self.app_map_widget = MapWidget(
+            widget_id='app_map_widget',
+            title='Map',
+            limits={"x": [testbed_size['x'][0], testbed_size['x'][1]],
+                    "y": [testbed_size['y'][0], testbed_size['y'][1]]},
+            initial_display_center=[(testbed_size['x'][0] + testbed_size['x'][1]) / 2,
+                                    (testbed_size['y'][0] + testbed_size['y'][1]) / 2],
+            tiles=True,
+            tile_size=0.5,
+            show_grid=False,
+        )
+
+        self.app_map_agent = Agent(
+            id="app_map_agent", x=0, y=0, psi=0,
+            size=0.1, arrow_length=0.25, arrow_width=0.05,
+            color=[0.6, 0.2, 0.2],
+            show_name=False
+        )
+        self.app_map_widget.map.addObject(self.app_map_agent)
+        map_page.addObject(self.app_map_widget, row=1, column=1, width=8, height=4)
+
+        # Double-tap on app map → move_to (direct)
+        def app_map_double_tap(data, *args, **kwargs):
+            x = data['x']
+            y = data['y']
+            if testbed_size['x'][0] < x < testbed_size['x'][1] and testbed_size['y'][0] < y < testbed_size['y'][1]:
+                self.robot.position_control.move_to(x, y)
+            else:
+                self.logger.warning(f"Position out of bounds: {x}, {y}")
+
+        # Long-press on app map → navigate (plan_and_follow)
+        def app_map_long_press(data, *args, **kwargs):
+            x = data['x']
+            y = data['y']
+            if testbed_size['x'][0] < x < testbed_size['x'][1] and testbed_size['y'][0] < y < testbed_size['y'][1]:
+                self.robot.position_control.plan_and_follow(target=(x, y))
+            else:
+                self.logger.warning(f"Position out of bounds: {x}, {y}")
+
+        self.app_map_widget.map.events.double_click.on(app_map_double_tap)
+        self.app_map_widget.map.events.long_press.on(app_map_long_press)
+
+        # --- App map: position control visualization (mirrors desktop GUI) ---
+        self._app_map_objects: list[MapObject] = []
+
+        APP_MOVE_TO_COLOR = [0.9, 0.3, 0.9, 1.0]
+        APP_HEADING_COLOR = [0.2, 0.9, 0.5, 0.8]
+        APP_DIM_ALPHA = 0.3
+
+        def _app_clear_map_objects():
+            for obj in self._app_map_objects:
+                try:
+                    if obj.id in self.app_map_widget.map.objects:
+                        self.app_map_widget.map.removeObject(obj)
+                except Exception:
+                    pass
+            self._app_map_objects = []
+
+        def _app_on_move_to_started(command: MoveToPointCommand, *args, **kwargs):
+            if command is None:
+                return
+            point = Point(
+                id=f"app_move_target_{generate_uuid()[:8]}",
+                x=command.x, y=command.y,
+                size=0.07,
+                color=APP_MOVE_TO_COLOR,
+                border_color=[1, 1, 1, 0.9],
+                border_width=2,
+                shape='circle',
+                show_name=False,
+            )
+            self.app_map_widget.map.addObject(point)
+            self._app_map_objects.append(point)
+
+        def _app_on_move_to_completed(*args, **kwargs):
+            for obj in reversed(self._app_map_objects):
+                if isinstance(obj, Point) and obj.id.startswith('app_move_target_'):
+                    dimmed = obj.config.get('color', APP_MOVE_TO_COLOR)[:3] + [APP_DIM_ALPHA]
+                    obj.updateConfig(color=dimmed)
+                    break
+
+        def _app_on_turn_to_started(command: TurnToHeadingCommand, *args, **kwargs):
+            if command is None:
+                return
+            robot_x = self.app_map_agent.data.get('x', 0)
+            robot_y = self.app_map_agent.data.get('y', 0)
+            line_length = 0.3
+            end_x = robot_x + line_length * math.cos(command.heading)
+            end_y = robot_y + line_length * math.sin(command.heading)
+
+            start_pt = Point(
+                id=f"app_heading_start_{generate_uuid()[:8]}",
+                x=robot_x, y=robot_y, size=0.02,
+                color=APP_HEADING_COLOR, show_name=False,
+            )
+            self.app_map_widget.map.addObject(start_pt)
+            self._app_map_objects.append(start_pt)
+
+            end_pt = Point(
+                id=f"app_heading_end_{generate_uuid()[:8]}",
+                x=end_x, y=end_y, size=0.04,
+                color=APP_HEADING_COLOR,
+                border_color=[1, 1, 1, 0.8], border_width=1,
+                shape='triangle', show_name=False,
+            )
+            self.app_map_widget.map.addObject(end_pt)
+            self._app_map_objects.append(end_pt)
+
+            line = Line(
+                id=f"app_heading_line_{generate_uuid()[:8]}",
+                start=start_pt, end=end_pt,
+                color=APP_HEADING_COLOR, width=2, style='solid',
+                show_name=False,
+            )
+            self.app_map_widget.map.addObject(line)
+            self._app_map_objects.append(line)
+
+        def _app_on_turn_to_completed(*args, **kwargs):
+            for obj in self._app_map_objects:
+                if isinstance(obj, (Point, Line)) and 'app_heading_' in obj.id:
+                    dimmed = obj.config.get('color', APP_HEADING_COLOR)[:3] + [APP_DIM_ALPHA]
+                    obj.updateConfig(color=dimmed)
+
+        def _app_on_position_mode_changed(*args, **kwargs):
+            _app_clear_map_objects()
+
+        # --- App map: planned path visualization ---
+        self._app_planned_path_objects: list[MapObject] = []
+
+        APP_PATH_COLOR = [0.4, 0.8, 1.0, 0.5]
+        APP_PATH_POINT_SIZE = 0.015
+        APP_PATH_LINE_WIDTH = 2
+        APP_PATH_TARGET_COLOR = [0.2, 1.0, 0.4, 0.9]
+        APP_PATH_TARGET_SIZE = 0.04
+        APP_PATH_SUBSAMPLE = 5
+        APP_WP_PASS_COLOR = [1.0, 0.8, 0.2, 0.9]
+        APP_WP_STOP_COLOR = [1.0, 0.3, 0.3, 0.9]
+        APP_WP_SIZE = 0.035
+        APP_WP_BORDER = [1.0, 1.0, 1.0, 0.9]
+
+        def _app_clear_planned_path():
+            for obj in self._app_planned_path_objects:
+                try:
+                    if obj.id in self.app_map_widget.map.objects:
+                        self.app_map_widget.map.removeObject(obj)
+                except Exception:
+                    pass
+            self._app_planned_path_objects = []
+
+        def _app_draw_planned_path(path_data: PathData):
+            _app_clear_planned_path()
+            points = path_data.path_points
+            if not points or len(points) < 2:
+                return
+
+            vis_indices = list(range(0, len(points), APP_PATH_SUBSAMPLE))
+            if vis_indices[-1] != len(points) - 1:
+                vis_indices.append(len(points) - 1)
+
+            prev_pt_obj = None
+            for i, idx in enumerate(vis_indices):
+                x, y = points[idx]
+                is_last = (idx == len(points) - 1)
+                pt = Point(
+                    id=f"app_path_pt_{generate_uuid()[:8]}",
+                    x=x, y=y,
+                    size=APP_PATH_TARGET_SIZE if is_last else APP_PATH_POINT_SIZE,
+                    color=APP_PATH_TARGET_COLOR if is_last else APP_PATH_COLOR,
+                    border_color=[1, 1, 1, 0.8] if is_last else [0, 0, 0, 0],
+                    border_width=2 if is_last else 0,
+                    shape='circle', show_name=False,
+                )
+                self.app_map_widget.map.addObject(pt)
+                self._app_planned_path_objects.append(pt)
+
+                if prev_pt_obj is not None:
+                    ln = Line(
+                        id=f"app_path_ln_{generate_uuid()[:8]}",
+                        start=prev_pt_obj, end=pt,
+                        color=APP_PATH_COLOR, width=APP_PATH_LINE_WIDTH,
+                        style='solid', show_name=False,
+                    )
+                    self.app_map_widget.map.addObject(ln)
+                    self._app_planned_path_objects.append(ln)
+                prev_pt_obj = pt
+
+            if path_data.waypoints:
+                for wp in path_data.waypoints:
+                    wx, wy = wp.get('x', 0), wp.get('y', 0)
+                    is_stop = wp.get('type', 'PASS').upper() == 'STOP'
+                    wp_pt = Point(
+                        id=f"app_path_wp_{generate_uuid()[:8]}",
+                        x=wx, y=wy,
+                        size=APP_WP_SIZE,
+                        color=APP_WP_STOP_COLOR if is_stop else APP_WP_PASS_COLOR,
+                        border_color=APP_WP_BORDER, border_width=2,
+                        shape='diamond', show_name=False,
+                    )
+                    self.app_map_widget.map.addObject(wp_pt)
+                    self._app_planned_path_objects.append(wp_pt)
+
+        def _app_on_path_planned(path_data: PathData, *args, **kwargs):
+            if not path_data or path_data.path_point_count == 0:
+                return
+            _app_draw_planned_path(path_data)
+
+        def _app_on_path_loaded(path_data: PathData, *args, **kwargs):
+            if not path_data or not path_data.path_points:
+                return
+            _app_draw_planned_path(path_data)
+
+        self.robot.position_control.events.move_to_point_started.on(_app_on_move_to_started)
+        self.robot.position_control.events.move_to_point_completed.on(_app_on_move_to_completed)
+        self.robot.position_control.events.move_to_point_timeout.on(_app_on_move_to_completed)
+        self.robot.position_control.events.turn_to_heading_started.on(_app_on_turn_to_started)
+        self.robot.position_control.events.turn_to_heading_completed.on(_app_on_turn_to_completed)
+        self.robot.position_control.events.turn_to_heading_timeout.on(_app_on_turn_to_completed)
+        self.robot.position_control.events.mode_changed.on(_app_on_position_mode_changed)
+        self.robot.position_control.events.path_planned.on(_app_on_path_planned)
+        self.robot.position_control.events.path_loaded.on(_app_on_path_loaded)
+        self.robot.position_control.events.path_finished.on(lambda *a, **kw: (_app_clear_map_objects(), _app_clear_planned_path()))
+        self.robot.position_control.events.path_aborted.on(lambda *a, **kw: (_app_clear_map_objects(), _app_clear_planned_path()))
+        self.robot.position_control.events.path_timeout.on(lambda *a, **kw: (_app_clear_map_objects(), _app_clear_planned_path()))
+        self.robot.position_control.events.path_cleared.on(lambda *a, **kw: _app_clear_planned_path())
+
+        # --- Row 5: Pose dropdown + Go button ---
+        pose_options = {pid: {'label': pid} for pid in self.manager.testbed.poses}
+        if not pose_options:
+            pose_options = {'default': {'label': 'default'}}
+        first_pose = next(iter(pose_options))
+
+        self.app_pose_select = MultiSelectWidget(
+            widget_id='app_pose_select',
+            options=pose_options,
+            value=first_pose,
+            title='Pose',
+            title_position='left',
+        )
+        map_page.addObject(self.app_pose_select, row=5, column=1, width=2, height=1)
+
+        app_go_pose_button = Button(widget_id='app_go_pose_btn', text='Go', color=[0.3, 0.5, 0.3])
+
+        def on_go_pose_clicked(*args, **kwargs):
+            pose_id = self.app_pose_select.value
+            if pose_id:
+                pose = self.manager.testbed.poses.get(pose_id)
+                if pose is None:
+                    self.logger.warning(f"Pose '{pose_id}' not found in testbed")
+                    return
+                self.robot.position_control.move_to_pose(x=pose.x, y=pose.y, heading=pose.psi)
+
+        app_go_pose_button.callbacks.click.register(on_go_pose_clicked)
+        map_page.addObject(app_go_pose_button, row=5, column=3, width=1, height=1)
+
+        app_psi_zero_button = Button(widget_id='app_psi_zero_btn', text='Ψ=0', color=[0.4, 0.4, 0.4])
+        app_psi_zero_button.callbacks.click.register(lambda *args, **kwargs: self.robot.position_control.turn_to(0))
+        map_page.addObject(app_psi_zero_button, row=5, column=4, width=1, height=1)
+
+        app_build_prm_button = Button(widget_id='app_build_prm_btn', text='Build PRM', color=[0.4, 0.4, 0.4])
+        app_build_prm_button.callbacks.click.register(lambda *args, **kwargs: self.robot.position_control.build_prm())
+        map_page.addObject(app_build_prm_button, row=5, column=5, width=2, height=1)
+
+        # ==============================================================================================================
+        # PAGE 3: DRIVE (virtual joysticks)
+        # ==============================================================================================================
+        drive_page = FolderPage(page_id='drive', name='Drive', rows=3, columns=8)
+        self.app_folder.addPage(drive_page)
+
         joystick_forward = JoystickWidget(
             widget_id='joystick_forward',
             title='Forward',
@@ -1810,12 +2308,7 @@ class RobotUI:
             show_values=True,
             deadzone=0.05,
         )
-
-        # def on_joystick_position_changed(x, y):
-        #     self.logger.info(f"Joystick position: x={x:.2f}, y={y:.2f}")
-        #
-        # joystick_forward.callbacks.position_changed.register(on_joystick_position_changed)
-        self.app_folder.addObject(joystick_forward, width=3, height=3, column=1, row=1)
+        drive_page.addObject(joystick_forward, row=1, column=1, width=3, height=3)
 
         joystick_turn = JoystickWidget(
             widget_id='joystick_turn',
@@ -1827,39 +2320,12 @@ class RobotUI:
             show_values=True,
             deadzone=0.05,
         )
-
-        # joystick_turn.callbacks.position_changed.register(on_joystick_position_changed)
-        self.app_folder.addObject(joystick_turn, width=3, height=3, column=6, row=1)
-
-        self.app_bilbo_mode_widget = BilboModeWidget(widget_id='bilbo_mode_widget',
-                                                     title='Bilbo Mode',
-                                                     current_mode=self.robot.control.mode.name)
-        self.app_folder.addObject(self.app_bilbo_mode_widget, width=2, height=1, column=4, row=1)
-
-        def update_mode_widget(mode: BILBO_Control_Mode, *args, **kwargs):
-            self.app_bilbo_mode_widget.current_mode = mode.name
-
-        def mode_widget_click_callback(mode_id, *args, **kwargs):
-            match mode_id:
-                case 'OFF':
-                    self.robot.control.setControlMode(BILBO_Control_Mode.OFF)
-                case 'DIRECT':
-                    self.robot.control.setControlMode(BILBO_Control_Mode.DIRECT)
-                case 'POSITION':
-                    self.robot.control.setControlMode(BILBO_Control_Mode.POSITION)
-                case 'VELOCITY':
-                    self.robot.control.setControlMode(BILBO_Control_Mode.VELOCITY)
-                case 'BALANCING':
-                    self.robot.control.setControlMode(BILBO_Control_Mode.BALANCING)
-
-        self.app_bilbo_mode_widget.callbacks.mode_clicked.register(mode_widget_click_callback)
-        self.robot.control.events.mode_changed.on(update_mode_widget)
+        drive_page.addObject(joystick_turn, row=1, column=6, width=3, height=3)
 
         joystick_forward.disable()
         joystick_turn.disable()
 
         def joystick_enable_clicked(*args, **kwargs):
-
             if self.robot.interfaces.app_joystick_widgets is not None:
                 joystick_forward.disable()
                 joystick_turn.disable()
@@ -1878,10 +2344,106 @@ class RobotUI:
                                         text='Enable Joysticks',
                                         color=[0.5, 0.3, 0.2],
                                         callback=joystick_enable_clicked)
+        drive_page.addObject(joystick_enable_button, row=1, column=4, width=2, height=1)
 
-        self.app_folder.addObject(joystick_enable_button, width=1, height=1, column=4)
+        # ==============================================================================================================
+        # PAGE 4: EXPERIMENT (shown automatically when an experiment is loaded)
+        # ==============================================================================================================
+        self.app_experiment_page = FolderPage(page_id='experiment', name='Experiment', rows=4, columns=8)
+        self.app_folder.addPage(self.app_experiment_page)
+
+        # Row 1: Experiment status (ID + status in compact widget)
+        self.app_exp_status_widget = StatusWidget(
+            widget_id='app_exp_status_widget',
+            elements={
+                'id': StatusWidgetElement(label='Experiment', color=[0.5, 0.5, 0.5], status='—'),
+                'status': StatusWidgetElement(label='Status', color=[0.5, 0.5, 0.5], status='Idle'),
+            },
+            font_size=9,
+        )
+        self.app_experiment_page.addObject(self.app_exp_status_widget, row=1, column=1, width=4, height=1)
+
+        # Row 2-3: Message scroll log
+        self.app_exp_message_scroll = LineScrollWidget(
+            widget_id='app_exp_message_scroll',
+            font_size=8,
+            include_time_stamp=True,
+        )
+        self.app_experiment_page.addObject(self.app_exp_message_scroll, row=2, column=1, width=4, height=2)
+
+        # Row 4: Interaction buttons
+        exp_start_button = Button(widget_id='app_exp_start_btn', text='Start', color=[0.0, 0.4, 0.0])
+        exp_start_button.callbacks.click.register(self.robot.core.set_start_event_robot, discard_inputs=True)
+        self.app_experiment_page.addObject(exp_start_button, row=4, column=1, width=1, height=1)
+
+        exp_stop_button = Button(widget_id='app_exp_stop_btn', text='Stop', color=[0.4, 0, 0])
+        exp_stop_button.callbacks.click.register(self.robot.core.set_stop_event_robot, discard_inputs=True)
+        self.app_experiment_page.addObject(exp_stop_button, row=4, column=2, width=1, height=1)
+
+        exp_resume_button = Button(widget_id='app_exp_resume_btn', text='Resume', color=[75 / 255, 82 / 255, 56 / 255])
+        exp_resume_button.callbacks.click.register(self.robot.core.set_resume_event_robot, discard_inputs=True)
+        self.app_experiment_page.addObject(exp_resume_button, row=4, column=3, width=1, height=1)
+
+        exp_repeat_button = Button(widget_id='app_exp_repeat_btn', text='Repeat', color=[59 / 255, 20 / 255, 120 / 255])
+        exp_repeat_button.callbacks.click.register(self.robot.core.set_repeat_event_robot, discard_inputs=True)
+        self.app_experiment_page.addObject(exp_repeat_button, row=4, column=4, width=1, height=1)
+
+        # ==============================================================================================================
+        # PAGE 5: DILC EXPERIMENT (shown when a DILC or LimboBar DILC experiment is initialized)
+        # ==============================================================================================================
+        self.dilc_page = DILC_ExperimentPage(robot=self.robot)
+        self.app_folder.addPage(self.dilc_page.page)
 
         self.app.addFolder(self.app_folder)
+
+        # Navigate to experiment page when an experiment is loaded on the robot
+        self._event_listeners.append(
+            self.robot.experiment_handler.events.experiment_loaded.on(self._on_experiment_loaded_app))
+        self._event_listeners.append(
+            self.robot.experiment_handler.events.experiment_message.on(self._on_experiment_message))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _on_experiment_loaded_app(self, data=None, *args, **kwargs):
+        """Switch the mobile app to the experiment page when an experiment is loaded."""
+        exp_id = ''
+        if isinstance(data, dict):
+            exp_id = data.get('experiment_id', '')
+        elif self.robot.experiment_handler.current_experiment_definition:
+            exp_id = self.robot.experiment_handler.current_experiment_definition.get('id', '')
+
+        # Update status widgets
+        self.app_status_widget.elements['experiment'].status = ExperimentStatus.LOADED.value.capitalize()
+        self.app_status_widget.elements['experiment'].color = [0.7, 0.5, 0.1]
+        self.app_status_widget.updateConfig()
+
+        self.exp_status_text.text = f"Loaded: {exp_id}"
+        self.exp_status_text.updateConfig()
+
+        # Update experiment page
+        self.app_exp_status_widget.elements['id'].status = exp_id or '—'
+        self.app_exp_status_widget.elements['id'].color = [0.7, 0.5, 0.1]
+        self.app_exp_status_widget.elements['status'].status = ExperimentStatus.LOADED.value.capitalize()
+        self.app_exp_status_widget.elements['status'].color = [0.7, 0.5, 0.1]
+        self.app_exp_status_widget.updateConfig()
+
+        # Navigate to experiment page
+        if hasattr(self, 'app_experiment_page') and self.app_experiment_page.folder is not None:
+            self.app.function('setPage', [self.app_experiment_page.uid])
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _on_experiment_message(self, data=None, *args, **kwargs):
+        """Update experiment page with a message from the running experiment."""
+        if not data:
+            return
+        text = data.get('text', '')
+        level = data.get('level', 'info')
+
+        message_colors = {
+            'info': [0.8, 0.8, 0.8, 1],
+            'warning': [0.8, 0.6, 0.1, 1],
+            'error': [0.8, 0.2, 0.2, 1],
+        }
+        self.app_exp_message_scroll.addLine(text, color=message_colors.get(level, [0.8, 0.8, 0.8, 1]))
 
     # ------------------------------------------------------------------------------------------------------------------
     def on_robot_stream(self, sample: BILBO_Sample, *args, **kwargs):
@@ -1898,6 +2460,23 @@ class RobotUI:
                 self.control_status_widget.elements['static'].status = 'false'
                 self.control_status_widget.elements['static'].color = [0.6, 0.4, 0.0]
             self.control_status_widget.updateConfig()
+
+            # --- App status widget updates ---
+            self.app_status_widget.elements['mode'].status = self.robot.control.mode.name
+            self.app_status_widget.elements['mode'].color = CONTROL_MODE_COLORS[self.robot.control.mode]
+            self.app_status_widget.elements['tic'].status = 'enabled' if sample.control.tic_enabled else 'disabled'
+            self.app_status_widget.elements['tic'].color = [0, 0.5, 0] if sample.control.tic_enabled else [0.5, 0.5, 0.5]
+            self.app_status_widget.elements['vic'].status = 'enabled' if sample.control.vic_enabled else 'disabled'
+            self.app_status_widget.elements['vic'].color = [0, 0.5, 0] if sample.control.vic_enabled else [0.5, 0.5, 0.5]
+            self.app_status_widget.elements['psi'].status = 'enabled' if sample.control.psi_enabled else 'disabled'
+            self.app_status_widget.elements['psi'].color = [0, 0.5, 0] if sample.control.psi_enabled else [0.5, 0.5, 0.5]
+            if robot_is_static:
+                self.app_status_widget.elements['static'].status = 'true'
+                self.app_status_widget.elements['static'].color = [0, 0.6, 0]
+            else:
+                self.app_status_widget.elements['static'].status = 'false'
+                self.app_status_widget.elements['static'].color = [0.6, 0.4, 0.0]
+            self.app_status_widget.updateConfig()
 
             if sample.control.vic_enabled:
                 self.control_status_widget.elements['vic'].status = 'enabled'
@@ -1973,10 +2552,41 @@ class RobotUI:
             else:
                 self.joystick_indicator.setValue(False)
 
-        # Update the states digital numbers
+            # --- App battery + connection + temp + joystick ---
+            self.app_battery_indicator.setValue(percentage=lipo_soc(voltage=voltage, cells=cells), voltage=voltage)
+            self.app_connection_indicator.setValue(
+                'high' if sample.general.connection_strength > 85 else
+                'medium' if sample.general.connection_strength > 30 else
+                'low'
+            )
+
+            if temp > 0:
+                self.app_temp_widget.elements['temp'].status = f"{temp:.0f} °C"
+                if temp >= 80:
+                    self.app_temp_widget.elements['temp'].color = [0.7, 0.1, 0.1]
+                elif temp >= 70:
+                    self.app_temp_widget.elements['temp'].color = [0.7, 0.5, 0.0]
+                else:
+                    self.app_temp_widget.elements['temp'].color = [0, 0.5, 0]
+                self.app_temp_widget.updateConfig()
+
+            if self.joystick_control is not None:
+                self.app_joystick_indicator.setValue(self.joystick_control.robotIsAssigned(self.robot) is not None)
+            else:
+                self.app_joystick_indicator.setValue(False)
+
+        # Update the states digital numbers (desktop GUI)
         self.x_digital_number.value = sample.estimation.state.x
         self.y_digital_number.value = sample.estimation.state.y
         self.v_digital_number.value = sample.estimation.state.v
+
+        # Update app digital numbers (guard: build_folder may still be running)
+        if hasattr(self, 'app_psi_number'):
+            self.app_v_number_main.value = sample.estimation.state.v
+            self.app_x_number.value = sample.estimation.state.x
+            self.app_y_number.value = sample.estimation.state.y
+            self.app_theta_number.value = np.rad2deg(sample.estimation.state.theta)
+            self.app_psi_number.value = np.rad2deg(sample.estimation.state.psi)
 
         self.theta_digital_number.value = np.rad2deg(sample.estimation.state.theta) if self.overview_page_data[
                                                                                            'theta_digital_number_format'] == 'grad' else sample.estimation.state.theta
@@ -2022,6 +2632,15 @@ class RobotUI:
             is_tracked = not sample.estimation.is_dead_reckoning
             color = [0.2, 0.6, 0.2] if is_tracked else [0.6, 0.2, 0.2]
             self.robot_map_agent.updateConfig(color=color)
+
+            # Update app map agent
+            if hasattr(self, 'app_map_agent'):
+                self.app_map_agent.update(
+                    x=sample.estimation.state.x,
+                    y=sample.estimation.state.y,
+                    psi=sample.estimation.state.psi
+                )
+                self.app_map_agent.updateConfig(color=color)
 
     # ------------------------------------------------------------------------------------------------------------------
     def on_new_tracker_sample(self, sample, *args, **kwargs):
@@ -2079,6 +2698,16 @@ class RobotUI:
         self.exp_status_text.updateConfig()
         self.exp_action_text.updateConfig()
 
+        # Update app experiment status
+        self.app_status_widget.elements['experiment'].status = ExperimentStatus.RUNNING.value.capitalize()
+        self.app_status_widget.elements['experiment'].color = [0.2, 0.5, 0.8]
+        self.app_status_widget.updateConfig()
+
+        # Update experiment page status
+        self.app_exp_status_widget.elements['status'].status = ExperimentStatus.RUNNING.value.capitalize()
+        self.app_exp_status_widget.elements['status'].color = [0.2, 0.5, 0.8]
+        self.app_exp_status_widget.updateConfig()
+
         # Enter playback mode in the designer and dim all actions
         if hasattr(self, 'experiment_designer'):
             actions = self.robot.experiment_handler.experiment_actions
@@ -2087,12 +2716,28 @@ class RobotUI:
             self.experiment_designer.set_action_states({aid: 'dimmed' for aid in action_ids})
 
     # ------------------------------------------------------------------------------------------------------------------
-    def _on_experiment_finished(self, data, *args, **kwargs):
+    def _on_experiment_finished(self, data=None, *args, status=ExperimentStatus.FINISHED, **kwargs):
         """Event callback: experiment finished, errored, or timed out."""
         self.exp_status_text.text = 'Idle'
         self.exp_action_text.text = ''
         self.exp_status_text.updateConfig()
         self.exp_action_text.updateConfig()
+
+        # Update app experiment status
+        self.app_status_widget.elements['experiment'].status = 'Idle'
+        self.app_status_widget.elements['experiment'].color = [0.5, 0.5, 0.5]
+        self.app_status_widget.updateConfig()
+
+        # Update experiment page status
+        status_colors = {
+            ExperimentStatus.FINISHED: [0.2, 0.8, 0.2],
+            ExperimentStatus.ERROR: [0.8, 0.2, 0.2],
+            ExperimentStatus.TIMEOUT: [0.8, 0.5, 0.1],
+            ExperimentStatus.ABORTED: [0.8, 0.5, 0.1],
+        }
+        self.app_exp_status_widget.elements['status'].status = status.value.capitalize()
+        self.app_exp_status_widget.elements['status'].color = status_colors.get(status, [0.5, 0.5, 0.5])
+        self.app_exp_status_widget.updateConfig()
 
         # Exit playback mode in the designer
         if hasattr(self, 'experiment_designer'):
@@ -2368,6 +3013,11 @@ class RobotUI:
         )
         self.dilc_app.open(self.gui)
 
+        # Bind and navigate to DILC page in the app
+        if hasattr(self, 'dilc_page'):
+            self.dilc_page.bind_experiment(dilc_experiment)
+            self.app.function('setPage', [self.dilc_page.page.uid])
+
     # ------------------------------------------------------------------------------------------------------------------
     def on_limbobar_dilc_experiment_initialized(self, data, *args, **kwargs):
         self.logger.info("LimboBar DILC experiment initialized — opening LimboBar DILC app")
@@ -2381,6 +3031,11 @@ class RobotUI:
             experiment=experiment,
         )
         self.limbobar_dilc_app.open(self.gui)
+
+        # Bind and navigate to DILC page in the app
+        if hasattr(self, 'dilc_page'):
+            self.dilc_page.bind_experiment(experiment)
+            self.app.function('setPage', [self.dilc_page.page.uid])
 
     # ------------------------------------------------------------------------------------------------------------------
     def _initialize_control_table_from_config(self):
@@ -2614,6 +3269,14 @@ class RobotUI:
 
     # ------------------------------------------------------------------------------------------------------------------
     def close(self, *args, **kwargs):
+        # Stop all event listeners to prevent duplicate callbacks on reconnect
+        for listener in getattr(self, '_event_listeners', []):
+            try:
+                listener.stop()
+            except Exception:
+                pass
+        self._event_listeners = []
+
         try:
             self.gui.categories['robots'].removeCategory(self.category)
         except Exception:

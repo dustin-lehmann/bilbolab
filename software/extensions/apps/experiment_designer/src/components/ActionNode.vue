@@ -202,6 +202,9 @@ function onInPortMouseDown(e) {
       <!-- Trigger badge (non-transition triggers) -->
       <div v-if="triggerLabel" class="trigger-bar">{{ triggerLabel }}</div>
 
+      <!-- Message before bar -->
+      <div v-if="node.message_before" class="message-bar">{{ node.message_before }}</div>
+
       <!-- Wait before bar -->
       <div v-if="node.wait_before" class="wait-bar">{{ node.wait_before }}s before</div>
 
@@ -218,6 +221,9 @@ function onInPortMouseDown(e) {
 
       <!-- Wait after bar -->
       <div v-if="node.wait_after" class="wait-bar">{{ node.wait_after }}s after</div>
+
+      <!-- Message after bar -->
+      <div v-if="node.message_after" class="message-bar">{{ node.message_after }}</div>
 
       <!-- Output port labels (inside node body) — vertical: bottom row, horizontal: right column -->
       <div v-if="outPorts.length > 0" class="node-ports-labels" :style="isHorizontal ? { position: 'absolute', right: '2px', top: '28px', bottom: '4px', width: 'auto', height: 'auto', padding: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-around', alignItems: 'flex-end' } : {}">
@@ -373,6 +379,21 @@ function onInPortMouseDown(e) {
   color: #f7b731;
   background: #f7b73118;
   border-left: 2px solid #f7b731;
+}
+
+/* Message bar */
+.message-bar {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 9px;
+  color: #a0c8ff;
+  background: #a0c8ff14;
+  border-left: 2px solid #a0c8ff80;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Port labels section */

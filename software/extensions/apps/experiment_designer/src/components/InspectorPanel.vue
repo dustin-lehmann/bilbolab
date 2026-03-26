@@ -350,6 +350,12 @@ function onWaitChange(field, value) {
   updateNodeField(selectedNode.value.id, field, parsed || null)
 }
 
+function onMessageChange(field, value) {
+  if (!selectedNode.value) return
+  snapshot()
+  updateNodeField(selectedNode.value.id, field, value || null)
+}
+
 // Commit input on blur — dispatches a 'change' event if the value differs from last committed
 function commitOnBlur(e) {
   e.target.dispatchEvent(new Event('change'))
@@ -825,6 +831,35 @@ function onMetaChange(field, value) {
               step="0.1"
             />
             <span class="field-hint">Delay after action completes</span>
+          </label>
+        </div>
+
+        <!-- Messages before / after -->
+        <div class="section">
+          <div class="section-title">Messages</div>
+          <label class="field">
+            <span class="field-label">Message before</span>
+            <input
+              type="text"
+              :value="selectedNode.message_before ?? ''"
+              @change="onMessageChange('message_before', $event.target.value)"
+              @blur="commitOnBlur"
+              class="field-input"
+              placeholder="none"
+            />
+            <span class="field-hint">User-facing message emitted before action executes</span>
+          </label>
+          <label class="field">
+            <span class="field-label">Message after</span>
+            <input
+              type="text"
+              :value="selectedNode.message_after ?? ''"
+              @change="onMessageChange('message_after', $event.target.value)"
+              @blur="commitOnBlur"
+              class="field-input"
+              placeholder="none"
+            />
+            <span class="field-hint">User-facing message emitted after action completes</span>
           </label>
         </div>
 

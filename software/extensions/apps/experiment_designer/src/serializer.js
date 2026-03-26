@@ -393,6 +393,8 @@ function serializeCanonicalAction(node, allNodes, outgoing, incoming, indent, re
   // Wait delays
   if (node.wait_before) lines.push(`${pad}  wait_before: ${node.wait_before}`)
   if (node.wait_after) lines.push(`${pad}  wait_after: ${node.wait_after}`)
+  if (node.message_before) lines.push(`${pad}  message_before: "${node.message_before.replace(/"/g, '\\"')}"`)
+  if (node.message_after) lines.push(`${pad}  message_after: "${node.message_after.replace(/"/g, '\\"')}"`)
 
   // Parameters
   if (isCompare) {
@@ -535,6 +537,8 @@ function serializeAction(node, indent) {
   // Wait delays
   if (node.wait_before) lines.push(`${pad}  wait_before: ${node.wait_before}`)
   if (node.wait_after) lines.push(`${pad}  wait_after: ${node.wait_after}`)
+  if (node.message_before) lines.push(`${pad}  message_before: "${node.message_before.replace(/"/g, '\\"')}"`)
+  if (node.message_after) lines.push(`${pad}  message_after: "${node.message_after.replace(/"/g, '\\"')}"`)
 
   // Parameters
   if (isCompare) {
@@ -849,8 +853,9 @@ const START_GAP = 80      // gap between start node and first action
 /**
  * Estimate node height based on params and wait bars.
  */
-function estimateNodeHeight(type, params, wait_before, wait_after) {
+function estimateNodeHeight(type, params, wait_before, wait_after, message_before, message_after) {
   let h = 28   // header
+  if (message_before) h += 18
   if (wait_before) h += 18
   const summaryText = getSummary({ type, params }) || ''
   if (summaryText) {
@@ -860,6 +865,7 @@ function estimateNodeHeight(type, params, wait_before, wait_after) {
     if (lineCount > 0) h += lineCount * 15 + 4
   }
   if (wait_after) h += 18
+  if (message_after) h += 18
   h += 20 + 4   // port section + padding
   return h
 }
@@ -1015,6 +1021,7 @@ function buildGraph(rawActions, meta, rawRequirements = [], rawGuards = [], rawS
       const structural = new Set([
         'type', 'id', 'trigger', 'transitions', 'actions', 'sub_actions',
         'then', 'else', 'params', 'wait_before', 'wait_after',
+        'message_before', 'message_after',
       ])
       const params = raw.params ? { ...raw.params } : {}
       for (const [k, v] of Object.entries(raw)) {
@@ -1046,6 +1053,8 @@ function buildGraph(rawActions, meta, rawRequirements = [], rawGuards = [], rawS
           trigger: parseTriggerValue(raw.trigger),
           wait_before: raw.wait_before || null,
           wait_after: raw.wait_after || null,
+          message_before: raw.message_before || null,
+          message_after: raw.message_after || null,
           _summaryText: summaryText, _paramLineCount: paramLineCount,
           _outPorts: outPorts,
           width: containerW, height: 300,
@@ -1167,12 +1176,14 @@ function buildGraph(rawActions, meta, rawRequirements = [], rawGuards = [], rawS
           trigger: parseTriggerValue(raw.trigger),
           wait_before: raw.wait_before || null,
           wait_after: raw.wait_after || null,
+          message_before: raw.message_before || null,
+          message_after: raw.message_after || null,
           _summaryText: summaryText, _paramLineCount: paramLineCount,
           _outPorts: outPorts,
         }
         nodes.push(node)
 
-        const nodeH = estimateNodeHeight(raw.type, params, raw.wait_before, raw.wait_after)
+        const nodeH = estimateNodeHeight(raw.type, params, raw.wait_before, raw.wait_after, raw.message_before, raw.message_after)
         y += nodeH + GAP_Y
         createdIds.push(nodeId)
       }
@@ -1372,7 +1383,7 @@ function buildGraph(rawActions, meta, rawRequirements = [], rawGuards = [], rawS
         for (const node of chainNodes) {
           node.x = colX
           node.y = y
-          const nodeH = estimateNodeHeight(node.type, node.params, node.wait_before, node.wait_after)
+          const nodeH = estimateNodeHeight(node.type, node.params, node.wait_before, node.wait_after, node.message_before, node.message_after)
           y += nodeH + GAP_Y
         }
       }
@@ -1402,7 +1413,7 @@ function buildGraph(rawActions, meta, rawRequirements = [], rawGuards = [], rawS
     const groupNode = {
       id: groupId, type: groupType, x: baseX, y: groupY,
       parentId: null, params: {},
-      trigger: null, wait_before: null, wait_after: null,
+      trigger: null, wait_before: null, wait_after: null, message_before: null, message_after: null,
       _summaryText: '', _paramLineCount: 0,
       _outPorts: [],
       width: containerW, height: 300,

@@ -38,9 +38,10 @@ export const REQUIREMENT_HEIGHT = 48
 export const GUARD_WIDTH = 200
 export const GUARD_HEIGHT = 48
 
-// Wait bar / trigger bar dimensions
+// Wait bar / trigger bar / message bar dimensions
 export const WAIT_BAR_HEIGHT = 18
 export const TRIGGER_BAR_HEIGHT = 18
+export const MESSAGE_BAR_HEIGHT = 18
 
 /**
  * Compute the total height of an action node.
@@ -53,6 +54,7 @@ export function getNodeHeight(node) {
   const isH = layoutDirection.value === 'horizontal'
   let h = NODE_HEADER_HEIGHT
   if (node.trigger && node.trigger.type !== 'transition') h += TRIGGER_BAR_HEIGHT
+  if (node.message_before) h += MESSAGE_BAR_HEIGHT
   if (node.wait_before) h += WAIT_BAR_HEIGHT
   // Compute summary/param lines on the fly to avoid stale cached values
   const summaryText = getSummary(node)
@@ -63,6 +65,7 @@ export function getNodeHeight(node) {
     if (plc > 0) h += plc * NODE_PARAM_LINE_HEIGHT + NODE_PARAM_PADDING
   }
   if (node.wait_after) h += WAIT_BAR_HEIGHT
+  if (node.message_after) h += MESSAGE_BAR_HEIGHT
   // In horizontal mode, port labels are absolutely positioned on the right side,
   // so they don't contribute to the node's height.
   if (!isH) {

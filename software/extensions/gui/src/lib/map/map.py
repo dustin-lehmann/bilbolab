@@ -92,6 +92,7 @@ MAP_DEFAULT_CONFIG = {
 class MapEvents:
     click: Event
     double_click: Event
+    long_press: Event
     right_click: Event
     middle_click: Event
 
@@ -352,6 +353,11 @@ class Map:
                 })
             case 'double_click':
                 self.events.double_click.set({
+                    'x': event['x'],
+                    'y': event['y']
+                })
+            case 'long_press':
+                self.events.long_press.set({
                     'x': event['x'],
                     'y': event['y']
                 })

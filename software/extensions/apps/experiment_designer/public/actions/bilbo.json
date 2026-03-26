@@ -162,13 +162,18 @@
     },
     "load_control_config": {
       "category": "control",
-      "description": "Load a named control configuration (e.g. 'default', 'lab').",
+      "description": "Load a control configuration by name or from a file relative to the experiment YAML.",
       "transitionPorts": [
         "done"
       ],
       "params": {
         "name": {
-          "required": true,
+          "required": false,
+          "default": null,
+          "type": "str"
+        },
+        "file": {
+          "required": false,
           "default": null,
           "type": "str"
         }
@@ -466,7 +471,7 @@
         },
         "max_angular_speed": {
           "required": false,
-          "default": 1.0,
+          "default": 3.0,
           "type": "float"
         },
         "position_tolerance": {
@@ -1273,15 +1278,27 @@
       "description": "Enable psi (yaw/heading) control on setup, disable on teardown",
       "params": {}
     },
-    "resume": {
+    "start": {
       "category": "guards",
-      "description": "Wait for resume event before starting experiment actions",
+      "description": "Wait for start event before starting experiment actions",
       "params": {
         "timeout": {
           "required": false,
           "default": 60.0,
           "type": "float",
-          "description": "Seconds to wait for resume before failing"
+          "description": "Seconds to wait for start before failing"
+        }
+      }
+    },
+    "timecode": {
+      "category": "guards",
+      "description": "Require timecode connection before starting experiment",
+      "params": {
+        "timeout": {
+          "required": false,
+          "default": 10.0,
+          "type": "float",
+          "description": "Seconds to wait for timecode sync before failing"
         }
       }
     }

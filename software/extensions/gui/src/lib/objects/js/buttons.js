@@ -26,6 +26,7 @@ export class ButtonWidget extends Widget {
             image: null,                // background image (URL/base64)
             image_width: '100%',        // max width of the bg image relative to the button
             image_height: '100%',       // max height of the bg image relative to the button
+            image_opacity: 1.0,         // opacity of the background image (0..1)
         };
 
         this.configuration = {...default_configuration, ...this.configuration};
@@ -86,6 +87,7 @@ export class ButtonWidget extends Widget {
             image,
             image_width,
             image_height,
+            image_opacity,
         } = this.configuration;
 
         // Set inline styles for colors, font, border
@@ -118,8 +120,9 @@ export class ButtonWidget extends Widget {
         // Background image layer (non-interactive, behind content)
         if (image) {
             const esc = this._escapeAttr(image);
+            const opStyle = image_opacity < 1 ? ` style="opacity:${image_opacity}"` : '';
             html += `
-                <div class="buttonBg" aria-hidden="true">
+                <div class="buttonBg" aria-hidden="true"${opStyle}>
                     <img class="buttonBgImg" src="${esc}" alt="">
                 </div>
             `;

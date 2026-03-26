@@ -56,6 +56,20 @@ export function setCurrentFileName(name) {
   }
 }
 
+/** Set the full OS file path for the current tab (used in delegated/Python mode). */
+export function setCurrentFilePath(path) {
+  if (activeExperimentTabId.value && path) {
+    const tab = experimentTabs.value.find(t => t.id === activeExperimentTabId.value)
+    if (tab) tab.filePath = path
+  }
+}
+
+/** Get the full OS file path for the current tab. */
+export function getCurrentFilePath() {
+  const tab = experimentTabs.value.find(t => t.id === activeExperimentTabId.value)
+  return tab?.filePath || null
+}
+
 /** Get the filename for the current tab (from handle or manually set). */
 export function getCurrentFileName() {
   const handle = getCurrentFileHandle()
@@ -427,6 +441,7 @@ function persistTabsSync() {
     id: t.id,
     label: t.label,
     fileName: t.fileName || null,
+    filePath: t.filePath || null,
     fileNotFound: !!t.fileNotFound,
     dirty: t.dirty,
     stateSnapshot: t.stateSnapshot,
@@ -454,6 +469,7 @@ async function persistTabs() {
     id: t.id,
     label: t.label,
     fileName: t.fileName || null,
+    filePath: t.filePath || null,
     fileNotFound: !!t.fileNotFound,
     dirty: t.dirty,
     stateSnapshot: t.stateSnapshot,

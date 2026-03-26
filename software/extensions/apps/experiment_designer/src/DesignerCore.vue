@@ -26,6 +26,7 @@ import { snapToGrid, NODE_WIDTH } from './utils/geometry.js'
 import {
   newExperimentTab, markCurrentTabDirty, markCurrentTabClean, openTemplateTab,
   getCurrentFileHandle, setCurrentFileHandle, setCurrentFileName, getCurrentFileName,
+  getCurrentFilePath, setCurrentFilePath,
   switchToExistingFile, hasOpenExperiment,
 } from './experimentTabs.js'
 import { addRecentFile } from './recentFiles.js'
@@ -150,8 +151,9 @@ function onOpenFile(e) {
 async function handleSave() {
   updateYaml()
   if (props.delegateFileOps) {
+    const filePath = getCurrentFilePath()
     window.dispatchEvent(new CustomEvent('designer-send-event', {
-      detail: { event: 'file_save', data: { yaml: yamlOutput.value } }
+      detail: { event: 'file_save', data: { yaml: yamlOutput.value, file_path: filePath } }
     }))
     return
   }
@@ -177,8 +179,9 @@ async function handleSaveAs() {
   const filename = getCurrentFileName() || `${meta.id || 'experiment'}.yaml`
 
   if (props.delegateFileOps) {
+    const filePath = getCurrentFilePath()
     window.dispatchEvent(new CustomEvent('designer-send-event', {
-      detail: { event: 'file_save_as', data: { yaml: yamlOutput.value, suggestedName: filename } }
+      detail: { event: 'file_save_as', data: { yaml: yamlOutput.value, suggestedName: filename, file_path: filePath } }
     }))
     return
   }
@@ -480,15 +483,17 @@ function loadExperiment(yamlString) {
   }
 }
 
-function loadFileContent(yaml, filename) {
+function loadFileContent(yaml, filename, filePath) {
   const label = filename.replace(/\.(yaml|yml)$/, '')
   openTemplateTab(yaml, label)
   setCurrentFileName(filename)
+  if (filePath) setCurrentFilePath(filePath)
   markCurrentTabClean()
 }
 
-function notifyFileSaved(filename) {
+function notifyFileSaved(filename, filePath) {
   setCurrentFileName(filename)
+  if (filePath) setCurrentFilePath(filePath)
   markCurrentTabClean()
 }
 

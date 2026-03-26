@@ -12,7 +12,7 @@ from extensions.gui.src.lib.objects.objects import Widget, Widget_Callbacks
 from extensions.gui.src.lib.objects.python.experiment_graph import ExperimentGraph
 
 # Path to the experiment_designer public/templates directory
-_TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'experiment_designer', 'public', 'templates')
+_TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'apps', 'experiment_designer', 'public', 'templates')
 _TEMPLATES_DIR = os.path.normpath(_TEMPLATES_DIR)
 
 _logger = Logger('TemplateManager')
@@ -153,8 +153,9 @@ class ExperimentDesignerWidget(Widget):
 
         if event == 'play':
             yaml = data.get('yaml', '')
+            file_path = data.get('file_path')
             for callback in self.callbacks.play:
-                callback(widget=self, yaml=yaml)
+                callback(widget=self, yaml=yaml, file_path=file_path)
         elif event == 'stop':
             for callback in self.callbacks.stop:
                 callback(widget=self)
@@ -480,36 +481,40 @@ class ExperimentDesignerWidget(Widget):
 
         self._current_file_path = os.path.abspath(path)
         filename = os.path.basename(path)
-        self.sendUpdate({'file_content': {'yaml': yaml_content, 'filename': filename}})
+        self.sendUpdate({'file_content': {'yaml': yaml_content, 'filename': filename, 'file_path': self._current_file_path}})
 
     def _handle_file_save(self, data: dict):
         """Write YAML to the tracked file path, or fall back to save-as."""
         yaml_content = data.get('yaml', '')
 
+        # Use file_path from frontend (per-tab) if available, fall back to Python-tracked path
+        save_path = data.get('file_path') or self._current_file_path
+
         # Safety: refuse to overwrite an existing file with empty/trivial content.
         # This prevents data loss when the widget is recreated with stale tab state.
-        if self._current_file_path and os.path.isfile(self._current_file_path):
+        if save_path and os.path.isfile(save_path):
             stripped = yaml_content.strip()
             if not stripped or 'actions:' not in stripped:
                 self.logger.warning(
-                    f"Refusing to save empty experiment to '{self._current_file_path}' — "
+                    f"Refusing to save empty experiment to '{save_path}' — "
                     f"content has no actions. Use Save As to explicitly create a new file."
                 )
                 return
 
-        if not self._current_file_path:
+        if not save_path:
             self._handle_file_save_as(data)
             return
 
         try:
-            with open(self._current_file_path, 'w') as f:
+            with open(save_path, 'w') as f:
                 f.write(yaml_content)
         except Exception as e:
             self.logger.error(f"Failed to save file: {e}")
             return
 
-        filename = os.path.basename(self._current_file_path)
-        self.sendUpdate({'file_saved': {'filename': filename}})
+        self._current_file_path = save_path
+        filename = os.path.basename(save_path)
+        self.sendUpdate({'file_saved': {'filename': filename, 'file_path': save_path}})
 
     def _handle_file_save_as(self, data: dict):
         """Open a native save dialog and write the YAML."""
@@ -517,7 +522,10 @@ class ExperimentDesignerWidget(Widget):
 
         yaml_content = data.get('yaml', '')
         suggested_name = data.get('suggestedName', 'experiment.yaml')
-        initial_dir = os.path.dirname(self._current_file_path) if self._current_file_path else None
+        # Use frontend-provided file_path for initial directory, fall back to Python-tracked path
+        frontend_path = data.get('file_path')
+        ref_path = frontend_path or self._current_file_path
+        initial_dir = os.path.dirname(ref_path) if ref_path else None
 
         path = save_file(
             title="Save Experiment",
@@ -541,7 +549,7 @@ class ExperimentDesignerWidget(Widget):
 
         self._current_file_path = os.path.abspath(path)
         filename = os.path.basename(path)
-        self.sendUpdate({'file_saved': {'filename': filename}})
+        self.sendUpdate({'file_saved': {'filename': filename, 'file_path': self._current_file_path}})
 
     # === TEMPLATE MANAGEMENT ==========================================================================================
 

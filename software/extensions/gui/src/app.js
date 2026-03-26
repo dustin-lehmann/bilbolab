@@ -7,7 +7,7 @@ import {ClassicSliderWidget, RotaryDialWidget, SliderWidget} from "./lib/objects
 import {MultiSelectWidget} from "./lib/objects/js/select.js";
 import {DigitalNumberWidget} from "./lib/objects/js/text.js";
 import {Websocket} from "./lib/websocket.js";
-import {Callbacks, getColor, isObject, splitPath} from "./lib/helpers.js";
+import {Callbacks, getColor, isObject, splitPath, writeToLocalStorage, getFromLocalStorage} from "./lib/helpers.js";
 import {WidgetGroup} from "./lib/objects/group.js";
 
 const DEFAULT_APP_WEBSOCKET_PORT = 8595
@@ -1111,13 +1111,27 @@ export class App {
             this.root_folder.parent = this;
             this.root_folder.callbacks.get('event').register(this.onEvent.bind(this));
 
-            // Set the first page of the root folder as starting page
-            const firstPage = this.root_folder.getPageByPosition(0);
-            if (firstPage) {
-                this.setPage(firstPage);
-            } else {
-                console.warn('No pages found in the root folder.');
+            // Restore the last active page from localStorage, or fall back to first page
+            const savedPageId = getFromLocalStorage(`${this.id}_active_page`);
+            let restored = false;
+            if (savedPageId) {
+                const savedPage = this._getObjectByUID(savedPageId);
+                if (savedPage) {
+                    this.setPage(savedPage);
+                    restored = true;
+                }
             }
+            if (!restored) {
+                const firstPage = this.root_folder.getPageByPosition(0);
+                if (firstPage) {
+                    this.setPage(firstPage);
+                } else {
+                    console.warn('No pages found in the root folder.');
+                }
+            }
+
+            // Ensure back button state matches the restored folder
+            this.updateBackButtonState();
         }
     }
 
@@ -1434,6 +1448,15 @@ export class App {
 
     // -----------------------------------------------------------------------------------------------------------------
     setPage(page) {
+        // Accept a string UID and resolve it to a page object
+        if (typeof page === 'string') {
+            page = this._getObjectByUID(page);
+            if (!page) {
+                console.warn(`Page with UID "${page}" not found.`);
+                return;
+            }
+        }
+
         // Make the current page not visible
         if (this.current_page) {
             this.current_page.visible(false);
@@ -1451,6 +1474,11 @@ export class App {
 
         this.updatePageIndicators();
         this.pathbar_content.textContent = `Path: ${this.current_folder.id}`;
+
+        // Persist active page so it survives page reloads
+        if (this.id && page.id) {
+            writeToLocalStorage(`${this.id}_active_page`, page.id);
+        }
     }
 
     // -----------------------------------------------------------------------------------------------------------------

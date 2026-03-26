@@ -251,6 +251,18 @@ export const ACTIONS = {
     summary: a => `"${(a.params.message || '').slice(0, 20)}"`,
   },
 
+  message: {
+    category: 'logging',
+    description: 'Emit a user-facing message (displayed on experiment page)',
+    transitionPorts: ['done'],
+    params: {
+      text:  { type: 'str', default: '', required: true, description: 'Message text (supports ${expr})' },
+      level: { type: 'str', default: 'info', description: 'Message level', options: ['info', 'warning', 'error'] },
+    },
+    dataDefs: {},
+    summary: a => `"${(a.params.text || '').slice(0, 20)}"`,
+  },
+
   // ── Comparison (designer-friendly condition) ──
 
   compare: {

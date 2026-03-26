@@ -295,6 +295,8 @@ export function addNode(type, x, y, parentId = null) {
     trigger: null,  // determined by connections: immediate if from __start__, transition if from another action
     wait_before: null,
     wait_after: null,
+    message_before: null,
+    message_after: null,
     _summaryText: getSummary({ type, params }),
     _paramLineCount: getSummary({ type, params }) ? 0 : getParamLines({ type, params }).length,
     _outPorts: outPorts,

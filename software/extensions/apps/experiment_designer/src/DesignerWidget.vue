@@ -12,7 +12,7 @@ import {
   addEvent, removeEvent, loadStateFromMutation,
 } from './graphState.js'
 import { initBridge, applyRemoteMutation } from './mutationBridge.js'
-import { initTabs, experimentTabs, activeExperimentTabId, withSuppressedDirty, restoreTabsSync } from './experimentTabs.js'
+import { initTabs, experimentTabs, activeExperimentTabId, withSuppressedDirty, restoreTabsSync, getCurrentFilePath } from './experimentTabs.js'
 import { toYaml, fromYaml } from './serializer.js'
 
 const props = defineProps({
@@ -87,8 +87,9 @@ onMounted(() => {
 // ── Play/Stop ──────────────────────────────────────────────────────────────
 function onPlayClick() {
   const yaml = coreRef.value?.getYaml() || ''
-  if (props.onPlay) props.onPlay(yaml)
-  else emit('play', yaml)
+  const filePath = getCurrentFilePath()
+  if (props.onPlay) props.onPlay(yaml, filePath)
+  else emit('play', yaml, filePath)
 }
 
 function onStopClick() {
@@ -148,12 +149,12 @@ function applyFullState(stateData) {
   loadStateFromMutation(stateData)
 }
 
-function loadFileContentFn(yaml, filename) {
-  coreRef.value?.loadFileContent(yaml, filename)
+function loadFileContentFn(yaml, filename, filePath) {
+  coreRef.value?.loadFileContent(yaml, filename, filePath)
 }
 
-function notifyFileSavedFn(filename) {
-  coreRef.value?.notifyFileSaved(filename)
+function notifyFileSavedFn(filename, filePath) {
+  coreRef.value?.notifyFileSaved(filename, filePath)
 }
 
 defineExpose({

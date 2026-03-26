@@ -102,8 +102,8 @@ export class ExperimentDesignerWidget extends Widget {
             actionLibrary,
             transparent: !!this.configuration.transparent,
             instanceId: this._instanceId,
-            onPlay(yaml) {
-                self._sendEvent('play', { yaml });
+            onPlay(yaml, filePath) {
+                self._sendEvent('play', { yaml, file_path: filePath || null });
             },
             onStop() {
                 self._sendEvent('stop', {});
@@ -213,7 +213,7 @@ export class ExperimentDesignerWidget extends Widget {
 
         switch (msg.type) {
             case 'play':
-                this._sendEvent('play', { yaml: msg.yaml });
+                this._sendEvent('play', { yaml: msg.yaml, file_path: msg.file_path || null });
                 break;
             case 'stop':
                 this._sendEvent('stop', {});
@@ -317,10 +317,10 @@ export class ExperimentDesignerWidget extends Widget {
 
         // File operation responses from Python backend
         if (data.file_content) {
-            this._vueInstance.loadFileContent(data.file_content.yaml, data.file_content.filename);
+            this._vueInstance.loadFileContent(data.file_content.yaml, data.file_content.filename, data.file_content.file_path);
         }
         if (data.file_saved) {
-            this._vueInstance.notifyFileSaved(data.file_saved.filename);
+            this._vueInstance.notifyFileSaved(data.file_saved.filename, data.file_saved.file_path);
         }
 
         // Forward all updates to popup window if open
