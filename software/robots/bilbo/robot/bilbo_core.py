@@ -118,30 +118,40 @@ class BILBO_Core:
         self.logger.info("Resetting drive")
         self.device.executeFunction(function_name='reset_drive', arguments={})
 
-    # ------------------------------------------------------------------------------------------------------------------
-    def setResumeEvent(self):
-        self.logger.info(f"Set Resume Event")
-        self.interface_events.resume.set()
+    # # ------------------------------------------------------------------------------------------------------------------
+    # def setResumeEvent(self):
+    #     self.logger.info(f"Set Resume Event")
+    #     self.interface_events.resume.set()
 
     # ------------------------------------------------------------------------------------------------------------------
     def set_resume_event_robot(self):
         self.logger.info(f"Set Resume Event Robot")
         self.device.executeFunction(function_name='resume', arguments={})
 
-    # ------------------------------------------------------------------------------------------------------------------
-    def setRevertEvent(self):
-        self.logger.info(f"Set Revert Event")
-        self.interface_events.revert.set()
+    # # ----------------------------------------------------------------------------------------------------------------
+    # def setRevertEvent(self):
+    #     self.logger.info(f"Set Revert Event")
+    #     self.interface_events.revert.set()
 
     # ------------------------------------------------------------------------------------------------------------------
-    def set_revert_event_robot(self):
-        self.logger.info(f"Set Revert Event Robot")
-        self.device.executeFunction(function_name='revert', arguments={})
+    def set_start_event_robot(self):
+        self.logger.info(f"Set Start Event Robot")
+        self.device.executeFunction(function_name='start', arguments={})
 
     # ------------------------------------------------------------------------------------------------------------------
-    def setStopEvent(self):
-        self.logger.info(f"Set Stop Event")
-        self.interface_events.stop.set()
+    def set_stop_event_robot(self):
+        self.logger.info(f"Set Stop Event Robot")
+        self.device.executeFunction(function_name='stop', arguments={})
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def set_repeat_event_robot(self):
+        self.logger.info(f"Set repeat Event Robot")
+        self.device.executeFunction(function_name='repeat', arguments={})
+
+    # # ------------------------------------------------------------------------------------------------------------------
+    # def setStopEvent(self):
+    #     self.logger.info(f"Set Stop Event")
+    #     self.interface_events.stop.set()
 
     # ------------------------------------------------------------------------------------------------------------------
     def set_stop_event_robot(self):

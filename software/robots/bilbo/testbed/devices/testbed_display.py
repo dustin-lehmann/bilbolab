@@ -92,6 +92,20 @@ class IconState:
 
 
 @dataclass
+class WallClockState:
+    visible: bool = False
+    color: Tuple[int, int, int] = DEFAULT_CLOCK_COLOR
+    size: int = 60
+
+    def to_dict(self, *, json_ready: bool = False) -> Dict[str, Any]:
+        return {
+            "visible": self.visible,
+            "color": list(self.color) if json_ready else tuple(self.color),
+            "size": int(self.size),
+        }
+
+
+@dataclass
 class ClockState:
     running: bool = False
     mode: str = "overlay"
@@ -145,6 +159,7 @@ class DisplayState:
     image_path: Optional[str] = None
 
     clock: ClockState = field(default_factory=ClockState)
+    wall_clock: WallClockState = field(default_factory=WallClockState)
 
     # Track last command sent (useful for debugging / GUI)
     last_payload: Optional[Dict[str, Any]] = None
@@ -164,6 +179,7 @@ class DisplayState:
             "icon": self.icon.to_dict(),
             "image_path": self.image_path,
             "clock": self.clock.to_dict(json_ready=json_ready, include_elapsed=include_elapsed),
+            "wall_clock": self.wall_clock.to_dict(json_ready=json_ready),
             "last_payload": copy.deepcopy(self.last_payload),
             "last_sent_epoch_s": self.last_sent_epoch_s,
             "last_send_error": self.last_send_error,
@@ -419,6 +435,7 @@ class TestbedDisplayClient:
 
         # Stop clock locally and reset timing
         self._stop_clock_locally(reset=True)
+        self._state.wall_clock.visible = False
 
         self._send({"command": "clear"})
 
@@ -496,6 +513,32 @@ class TestbedDisplayClient:
         self._send(msg)
 
     # ------------------------------------------------------------------------------------------------------------------
+    def show_wall_clock(self, color: Optional[ColorType] = None, size: Optional[int] = None) -> None:
+        """
+        Show the current time of day below the elapsed clock.
+        """
+        self._state.wall_clock.visible = True
+        if color is not None:
+            self._state.wall_clock.color = self._normalize_color_tuple(color)
+        if size is not None:
+            self._state.wall_clock.size = int(size)
+
+        msg: Dict[str, Any] = {"command": "show_wall_clock"}
+        if color is not None:
+            msg["color"] = self._serialize_color(self._state.wall_clock.color)
+        if size is not None:
+            msg["size"] = int(size)
+        self._send(msg)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def hide_wall_clock(self) -> None:
+        """
+        Hide the wall clock.
+        """
+        self._state.wall_clock.visible = False
+        self._send({"command": "hide_wall_clock"})
+
+    # ------------------------------------------------------------------------------------------------------------------
     def set_background_color(self, color: ColorType = DEFAULT_BACKGROUND_COLOR) -> None:
         """
         Set the solid background color.
@@ -531,6 +574,7 @@ class TestbedDisplayClient:
         icon: Optional[Dict[str, Any]] = None,
         image: Optional[str] = None,
         clock: Optional[Dict[str, Any]] = None,
+        wall_clock: Optional[Dict[str, Any]] = None,
         text_color: Optional[ColorType] = None,
         title_color: Optional[ColorType] = None,
         clock_color: Optional[ColorType] = None,
@@ -622,6 +666,19 @@ class TestbedDisplayClient:
 
             msg["clock"] = c
 
+        if wall_clock is not None:
+            wc = dict(wall_clock)
+            if "color" in wc and wc["color"] is not None:
+                wcc = self._normalize_color_tuple(wc["color"])
+                self._state.wall_clock.color = wcc
+                wc["color"] = self._serialize_color(wcc)
+            if "size" in wc and wc["size"] is not None:
+                self._state.wall_clock.size = int(wc["size"])
+            show = wc.get("show", wc.get("visible"))
+            if show is not None:
+                self._state.wall_clock.visible = bool(show)
+            msg["wall_clock"] = wc
+
         if text_color is not None:
             tc = self._normalize_color_tuple(text_color)
             self._state.text_color = tc
@@ -647,6 +704,7 @@ class TestbedDisplayClient:
             self._state.icon.icon = None
             self._state.image_path = None
             self._stop_clock_locally(reset=True)
+            self._state.wall_clock.visible = False
             msg["clear"] = True
 
         if quit:

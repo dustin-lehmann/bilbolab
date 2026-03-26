@@ -64,7 +64,8 @@ class BILBO_Application:
 
         # Joystick Control
         if settings.extensions.joystick:
-            self.joystick_control = BILBO_JoystickControl(self.manager.robot_manager)
+            self.joystick_control = BILBO_JoystickControl(self.manager.robot_manager,
+                                                             auto_assign=settings.extensions.joystick_auto_assign)
         else:
             self.joystick_control = None
 

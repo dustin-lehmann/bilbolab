@@ -260,6 +260,7 @@ class TestbedLimboIndicator:
     def _websocket_connected_callback(self, *args, **kwargs):
         self.connected = True
         self._last_send_error = None
+        self.blinkGreen()
 
     # ------------------------------------------------------------------------------------------------------------------
     def _websocket_disconnected_callback(self, *args, **kwargs):
@@ -281,7 +282,8 @@ if __name__ == '__main__':
     #
     # time.sleep(1)
     #
-    # height_indicator.setHeight(200)
+    height_indicator.setHeight(200)
+    time.sleep(3)
     #
     # # Example: read local state snapshot
     # print(height_indicator.get_state_dict())
@@ -289,7 +291,8 @@ if __name__ == '__main__':
     # time.sleep(3)
 
     while True:
-        height_indicator.blinkRed()
-        time.sleep(30)
+
+        # height_indicator.blinkRed()
+        # time.sleep(30)
     #     height_indicator.blinkGreen()
-    #     time.sleep(3)
+        time.sleep(3)

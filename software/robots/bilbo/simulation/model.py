@@ -128,7 +128,7 @@ class BILBO_Dynamics_2D_Linear:
     # === INIT =========================================================================================================
     def __init__(self, model: BilboModel, Ts=DEFAULT_SAMPLE_TIME, x0=None):
         if x0 is not None:
-            self.x0 = x0
+            self.x0 = BILBO_2D_State.as_state(x0)
 
         self.model = model
         self.Ts = Ts
@@ -158,7 +158,7 @@ class BILBO_Dynamics_2D_Linear:
         self.state = BILBO_2D_State.as_state(state)
 
     # ------------------------------------------------------------------------------------------------------------------
-    def simulate(self, input: list[BILBO_2D_Input],
+    def simulate(self, input: list[BILBO_2D_Input] | list | np.ndarray,
                  reset: bool = True,
                  x0: BILBO_2D_State = None,
                  include_zero_step: bool = True) -> list[BILBO_2D_State]:
@@ -183,6 +183,7 @@ class BILBO_Dynamics_2D_Linear:
     # ------------------------------------------------------------------------------------------------------------------
     def step(self, input: BILBO_2D_Input):
         self.state = self._dynamics(self.state, input)
+        pass
 
     # ------------------------------------------------------------------------------------------------------------------
     def reset(self):
@@ -242,9 +243,9 @@ class BILBO_Dynamics_2D:
     Ts: float
 
     # === INIT =========================================================================================================
-    def __init__(self, model: BilboModel, Ts=DEFAULT_SAMPLE_TIME, x0: BILBO_2D_State = None):
+    def __init__(self, model: BilboModel, Ts=DEFAULT_SAMPLE_TIME, x0: BILBO_2D_State | np.ndarray = None):
         if x0 is not None:
-            self.x0 = x0
+            self.x0 = BILBO_2D_State.as_state(x0)
 
         self.model = model
         self.Ts = Ts
@@ -258,6 +259,7 @@ class BILBO_Dynamics_2D:
     # ------------------------------------------------------------------------------------------------------------------
     def step(self, input: BILBO_2D_Input):
         self.state = self._dynamics(self.state, input)
+        pass
 
     # ------------------------------------------------------------------------------------------------------------------
     def setStateFeedbackControl(self, K: np.ndarray):
@@ -971,6 +973,8 @@ class BILBO_DynamicAgent(Agent):
 
 # ======================================================================================================================
 def example_2D():
+    model = DEFAULT_BILBO_MODEL
+    model.tau_x = 0.5
     dynamics_2d_linear = BILBO_Dynamics_2D_Linear(model=DEFAULT_BILBO_MODEL, Ts=DEFAULT_SAMPLE_TIME)
     dynamics_2d_linear.polePlacement(poles=BILBO_2D_POLES)
 
@@ -1029,4 +1033,4 @@ def example_3D():
 
 
 if __name__ == '__main__':
-    example_3D()
+    example_2D()

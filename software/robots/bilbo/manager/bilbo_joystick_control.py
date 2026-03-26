@@ -48,11 +48,13 @@ class BILBO_JoystickControl:
     callbacks: BILBOJoystickControlCallbacks
 
     # ==================================================================================================================
-    def __init__(self, bilbo_manager: BILBO_Manager):
+    def __init__(self, bilbo_manager: BILBO_Manager, auto_assign: bool = False):
         self.bilbo_manager = bilbo_manager
+        self.auto_assign = auto_assign
 
         self.joystick_manager = JoystickManager()
 
+        self.bilbo_manager.callbacks.new_robot.register(self._newRobot_callback)
         self.bilbo_manager.callbacks.robot_disconnected.register(self._robotDisconnected_callback)
         self.joystick_manager.callbacks.new_joystick.register(self._newJoystick_callback)
         self.joystick_manager.callbacks.joystick_disconnected.register(self._joystickDisconnected_callback)
@@ -162,6 +164,29 @@ class BILBO_JoystickControl:
         self.limits['speed']['turn'] = LIMIT_SPEED_TURN_DEFAULT
 
     # ------------------------------------------------------------------------------------------------------------------
+    def _getFirstFreeJoystick(self):
+        for joystick in self.joystick_manager.joysticks.values():
+            if joystick.id not in self.assignments:
+                return joystick
+        return None
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _getFirstUnassignedRobot(self):
+        assigned_robot_ids = {a.robot.id for a in self.assignments.values()}
+        for robot in self.bilbo_manager.robots.values():
+            if robot.id not in assigned_robot_ids:
+                return robot
+        return None
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _newRobot_callback(self, robot, *args, **kwargs):
+        if self.auto_assign:
+            joystick = self._getFirstFreeJoystick()
+            if joystick is not None:
+                logger.info(f"Auto-assigning joystick {joystick.id} to new robot {robot.id}")
+                self.assignJoystick(joystick, robot)
+
+    # ------------------------------------------------------------------------------------------------------------------
     def _robotDisconnected_callback(self, robot, *args, **kwargs):
         for assignment in self.assignments.values():
             if assignment.robot == robot:
@@ -170,6 +195,12 @@ class BILBO_JoystickControl:
 
     # ------------------------------------------------------------------------------------------------------------------
     def _newJoystick_callback(self, joystick, *args, **kwargs):
+        if self.auto_assign:
+            robot = self._getFirstUnassignedRobot()
+            if robot is not None:
+                logger.info(f"Auto-assigning new joystick {joystick.id} to robot {robot.id}")
+                self.assignJoystick(joystick, robot)
+
         for callback in self.callbacks.new_joystick:
             callback(joystick)
 

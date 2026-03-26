@@ -10,9 +10,10 @@ robots:
 
 extensions:
   display: true
-  limbobar: false
+  limbobar: true
   timecode: true
   joystick: true
+  joystick_auto_assign: true
 
 simulation:
   enabled: true

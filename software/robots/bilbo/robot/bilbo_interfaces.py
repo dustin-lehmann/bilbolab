@@ -130,12 +130,12 @@ class BILBO_Interfaces:
             self.joystick.buttons['DPAD_DOWN'].callbacks.pressed.register(
                 self.control.enableTIC, state=False)
             self.joystick.buttons['DPAD_RIGHT'].callbacks.pressed.register(self.core.set_resume_event_robot)
-            self.joystick.buttons['DPAD_LEFT'].callbacks.pressed.register(self.core.set_revert_event_robot)
+            self.joystick.buttons['DPAD_LEFT'].callbacks.pressed.register(self.core.set_repeat_event_robot)
 
         self.joystick.hat['up'].callbacks.pressed.register(self.control.enableTIC, state=True)
         self.joystick.hat['down'].callbacks.pressed.register(self.control.enableTIC, state=False)
         self.joystick.hat['right'].callbacks.pressed.register(self.core.set_resume_event_robot)
-        self.joystick.hat['left'].callbacks.pressed.register(self.core.set_revert_event_robot)
+        self.joystick.hat['left'].callbacks.pressed.register(self.core.set_repeat_event_robot)
 
         self.set_input_source('WIFI_JOYSTICK')
         self._start_joystick_thread()
@@ -544,6 +544,21 @@ class BILBO_CLI_CommandSet(CommandSet):
                                 default=None),
             ])
 
+        limbobar_dilc_command = Command(
+            name='limbobar_dilc',
+            function=self._run_limbobar_dilc,
+            description='Run a LimboBar DILC experiment from a YAML config file. Opens native file picker if no file specified.',
+            allow_positionals=True,
+            execute_in_thread=True,
+            arguments=[
+                CommandArgument(name='file',
+                                short_name='f',
+                                type=str,
+                                description='Path to LimboBar DILC experiment YAML file. Opens native picker if not specified.',
+                                optional=True,
+                                default=None),
+            ])
+
         plot_last_experiment_command = Command(name='plot',
                                                function=self.experiments.plot_last_experiment)
 
@@ -564,6 +579,7 @@ class BILBO_CLI_CommandSet(CommandSet):
                                             commands=[test_trajectory_command,
                                                       plot_last_experiment_command,
                                                       dilc_command,
+                                                      limbobar_dilc_command,
                                                       test_experiment_command,
                                                       stop_experiment_command])
 
@@ -959,6 +975,25 @@ class BILBO_CLI_CommandSet(CommandSet):
                 self.core.logger.info("File selection cancelled.")
                 return
         self.experiments.run_dilc_from_file(file)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _run_limbobar_dilc(self, file: str | None = None):
+        """CLI handler for LimboBar DILC command. Opens file picker if no file given."""
+        if not file:
+            self.core.logger.info("No file specified, opening native file picker...")
+            try:
+                from core.utils.filepicker import pick_file
+                file = pick_file(
+                    title='Select LimboBar DILC Experiment File',
+                    allowed_extensions=['yaml', 'yml']
+                )
+            except Exception as e:
+                self.core.logger.error(f"File picker failed: {e}. Use -f <path> to specify a file.")
+                return
+            if not file:
+                self.core.logger.info("File selection cancelled.")
+                return
+        self.experiments.run_limbobar_dilc_from_file(file)
 
     # ------------------------------------------------------------------------------------------------------------------
     def _run_experiment(self, file: str | None = None, output: str | None = None):

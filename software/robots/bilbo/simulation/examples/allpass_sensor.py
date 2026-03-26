@@ -35,6 +35,9 @@ from robots.bilbo.simulation.model import (
     BILBO_2D_Input,
 )
 
+# H(z) = c * (z^{-1} - a) / (1 - b * z^{-1})
+
+
 
 class AllpassFilter:
     """First-order unity-gain allpass filter (discrete-time).

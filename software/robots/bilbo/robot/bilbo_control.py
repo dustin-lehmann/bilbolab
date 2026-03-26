@@ -192,6 +192,10 @@ class BILBO_Control:
                                     arguments={'K': K})
 
     # ------------------------------------------------------------------------------------------------------------------
+    def fall_down(self, direction: str = 'forward'):
+        self.device.executeFunction('fall_down', arguments={'direction': direction})
+
+    # ------------------------------------------------------------------------------------------------------------------
     def set_position_control_config(self, config: PositionControl_Config):
         self.device.executeFunction('set_position_control_config',
                                     arguments={'config': dataclasses.asdict(config)})

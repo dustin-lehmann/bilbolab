@@ -24,7 +24,7 @@ DEFAULT_TITLE_COLOR = (200, 200, 200)  # light gray
 DEFAULT_CLOCK_COLOR = DEFAULT_TITLE_COLOR  # separate, but same default as title for now
 
 # Font sizes (already increased earlier)
-DEFAULT_TEXT_SIZE = 150
+DEFAULT_TEXT_SIZE = 130
 DEFAULT_TITLE_SIZE = 120
 DEFAULT_ICON_SIZE = 160
 
@@ -150,6 +150,11 @@ class TestbedDisplay:
         # mode: "overlay" (draw at bottom, keep text) or "replace_text" (centered, instead of text)
         self.clock_mode: str = "overlay"
         self.clock_color = DEFAULT_CLOCK_COLOR
+
+        # wall clock (real time of day, shown below the elapsed clock)
+        self.wall_clock_visible = False
+        self.wall_clock_color = DEFAULT_TEXT_COLOR
+        self.wall_clock_size: int = 80
 
         # font cache (kind -> size -> font)
         # kind is "normal", "emoji", or "mono"
@@ -363,6 +368,7 @@ class TestbedDisplay:
         self.image_surface = None
         self.clock_running = False
         self.clock_elapsed_ms = 0
+        self.wall_clock_visible = False
 
     # ------------------------------------------------------------------------------------------------------------------
     def start_clock(self, mode: str = "overlay"):
@@ -391,6 +397,24 @@ class TestbedDisplay:
         Stop the clock (time is frozen until started again).
         """
         self.clock_running = False
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def show_wall_clock(self, color=None, size: int = None):
+        """
+        Show the current time of day below the elapsed clock.
+        """
+        self.wall_clock_visible = True
+        if color is not None:
+            self.wall_clock_color = self._parse_color(color)
+        if size is not None:
+            self.wall_clock_size = int(size)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def hide_wall_clock(self):
+        """
+        Hide the wall clock.
+        """
+        self.wall_clock_visible = False
 
     # ------------------------------------------------------------------------------------------------------------------
     def set_clock_color(self, color):
@@ -502,6 +526,13 @@ class TestbedDisplay:
             elif cmd == "set_clock_color":
                 if "color" in msg:
                     self.set_clock_color(msg["color"])
+            elif cmd == "show_wall_clock":
+                self.show_wall_clock(
+                    color=msg.get("color"),
+                    size=msg.get("size"),
+                )
+            elif cmd == "hide_wall_clock":
+                self.hide_wall_clock()
             elif cmd == "set_background_color":
                 self.set_background_color(msg.get("color", self.background_color))
             elif cmd == "quit":
@@ -569,6 +600,23 @@ class TestbedDisplay:
                     self.start_clock()
                 elif clock_cfg.lower() == "stop":
                     self.stop_clock()
+
+        # wall clock
+        if "wall_clock" in msg:
+            wc_cfg = msg["wall_clock"]
+            if isinstance(wc_cfg, dict):
+                if wc_cfg.get("show", wc_cfg.get("visible", False)):
+                    self.show_wall_clock(
+                        color=wc_cfg.get("color"),
+                        size=wc_cfg.get("size"),
+                    )
+                else:
+                    self.hide_wall_clock()
+            elif isinstance(wc_cfg, bool):
+                if wc_cfg:
+                    self.show_wall_clock()
+                else:
+                    self.hide_wall_clock()
 
         # direct color-only updates
         if "text_color" in msg:
@@ -659,6 +707,7 @@ class TestbedDisplay:
             self.screen.blit(text_surface, text_rect)
 
         # 6) Clock – using monospace font so it doesn't jump horizontally
+        clock_rect = None
         if self.clock_running:
             clock_str = self._format_clock_time(self.clock_elapsed_ms)
 
@@ -681,6 +730,23 @@ class TestbedDisplay:
                 clock_rect = clock_surface.get_rect()
                 clock_rect.midbottom = (center_x, self.window_height - margin)
                 self.screen.blit(clock_surface, clock_rect)
+
+        # 7) Wall clock (real time of day) below the elapsed clock
+        if self.wall_clock_visible:
+            from datetime import datetime
+            wall_str = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
+            wall_surface = self._render_text(
+                wall_str,
+                self.wall_clock_size,
+                self.wall_clock_color,
+                mono=True,
+            )
+            wall_rect = wall_surface.get_rect()
+            if clock_rect is not None:
+                wall_rect.midtop = (center_x, clock_rect.bottom + 4)
+            else:
+                wall_rect.midbottom = (center_x, self.window_height - margin)
+            self.screen.blit(wall_surface, wall_rect)
 
         pygame.display.flip()
 

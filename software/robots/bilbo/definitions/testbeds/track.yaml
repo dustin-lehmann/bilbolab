@@ -15,6 +15,14 @@ poses:
     x: 0.48
     y: 0.5
     psi: 0
+  - id: start_exp_1
+    x: 1.15
+    y: 0.5
+    psi: 0
+  - id: start_exp_1_mini
+    x: 1.00
+    y: 0.5
+    psi: 0
 
 obstacles:
   - id: limbo-bar
