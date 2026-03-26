@@ -165,17 +165,39 @@ class ResetControlAction(ActionBase):
 
 @dataclass
 class LoadControlConfigAction(ActionBase):
-    """Load a named control configuration (e.g. 'default', 'lab')."""
+    """Load a control configuration by name or from a file.
+
+    Use ``name`` to load from configs/control/ (deep-merged on top of default).
+    Use ``file`` to reference a YAML file relative to the experiment YAML on the
+    host — the host resolves and inlines it as ``config`` before sending.
+    """
     type_id: ClassVar[str] = 'load_control_config'
 
     @dataclass
     class Params:
-        name: str  # Config name (matches filename in configs/control/)
+        name: str = None    # Config name (matches filename in configs/control/)
+        file: str = None    # Relative path to YAML file (resolved by host, arrives as 'config')
+        config: dict = None  # Inlined config dict (set by host after resolving 'file')
 
     def execute(self, context: ActionContext) -> ActionResult:
+        from robot.control.bilbo_control_config import load_config_from_dict
+
         params = self.get_params(context)
         robot = _get_robot(context)
-        robot.control.load_config(params.name)
+
+        if params.config is not None:
+            config = load_config_from_dict(params.config)
+        elif params.name is not None:
+            config = robot.control.load_config(params.name)
+        else:
+            context.fail("Either 'name' or 'file' must be specified")
+            return ActionResult.ERROR
+
+        if config is None:
+            context.fail("Failed to load control config")
+            return ActionResult.ERROR
+
+        robot.control.set_config(config)
         context.complete()
         return ActionResult.COMPLETED
 
@@ -328,8 +350,8 @@ class MoveToAction(ActionBase):
 
         robot.control.position_control.move_to_point(
             x=params.x, y=params.y,
-            max_speed=params.max_speed or None,
-            timeout=params.timeout or None,
+            max_speed=params.max_speed,
+            timeout=params.timeout,
         )
 
         if not params.wait:
@@ -379,8 +401,8 @@ class TurnToAction(ActionBase):
 
         robot.control.position_control.turn_to_heading(
             heading=heading,
-            max_angular_speed=params.max_angular_speed or None,
-            timeout=params.timeout or None,
+            max_angular_speed=params.max_angular_speed,
+            timeout=params.timeout,
         )
 
         if not params.wait:
@@ -520,8 +542,8 @@ class FollowPathAction(ActionBase):
         robot.control.position_control.follow_path(
             target_x=params.target_x, target_y=params.target_y,
             waypoints=params.waypoints or [],
-            max_speed=params.max_speed or None,
-            timeout=params.timeout or None,
+            max_speed=params.max_speed,
+            timeout=params.timeout,
             allow_reverse=params.allow_reverse,
             seed=params.seed,
             target_heading=target_heading,
@@ -826,7 +848,7 @@ class EnableTrackingAction(ActionBase):
     def execute(self, context: ActionContext) -> ActionResult:
         params = self.get_params(context)
         robot = _get_robot(context)
-        robot.estimation.enable_tracker_updates(params.enabled)
+        robot.estimation.set_tracker_updates_enabled(params.enabled)
         context.complete()
         return ActionResult.COMPLETED
 
@@ -1010,7 +1032,7 @@ class WaitForExternalEventAction(ActionBase):
     Examples:
       event: "*:resume"              — interaction resume (DPAD right)
       event: "*:repeat"              — interaction repeat/revert (DPAD left)
-      event: "*:abort"               — interaction abort
+      event: "*:stop"               — interaction stop
       event: "*:control_mode_change" — control mode changed
       event: "*:error"               — robot error
     """
@@ -1505,14 +1527,14 @@ class PsiControlGuard(GuardBase):
 
 
 @dataclass
-class ResumeGuard(GuardBase):
-    """Block experiment start until the resume interaction event is received.
+class StartGuard(GuardBase):
+    """Block experiment start until the start interaction event is received.
 
-    Waits for the robot's interaction resume event (triggered by WiFi 'resume'
-    command or DPAD_RIGHT button press) before allowing actions to execute.
-    If the timeout expires without a resume signal, the experiment fails.
+    Waits for the robot's interaction start event before allowing actions to execute.
+    If the timeout expires without a start signal, the experiment fails.
     """
-    type_id: ClassVar[str] = 'resume'
+    type_id: ClassVar[str] = 'start'
+    default_message_before: ClassVar[str] = 'Waiting for start event...'
 
     @dataclass
     class Params:
@@ -1523,11 +1545,41 @@ class ResumeGuard(GuardBase):
         robot: BILBO = context.get_object('robot')
         if robot is None:
             raise RuntimeError("No 'robot' context object registered")
-        self.logger.info(f"Waiting for resume event (timeout={params.timeout}s)...")
-        data, match = wait_for_events(robot.common.interaction_events.resume, timeout=params.timeout)
+        self.logger.info(f"Waiting for start event (timeout={params.timeout}s)...")
+        data, match = wait_for_events(robot.common.interaction_events.start, timeout=params.timeout)
         if data is EV_TIMEOUT:
-            raise RuntimeError(f"Resume guard timed out after {params.timeout}s")
-        self.logger.info("Resume event received, proceeding")
+            raise RuntimeError(f"Start guard timed out after {params.timeout}s")
+        self.logger.info("Start event received, proceeding")
+
+    def teardown(self, context: GuardContext):
+        pass  # No cleanup needed
+
+
+@dataclass
+class TimecodeGuard(GuardBase):
+    """Require a timecode connection before allowing the experiment to start.
+
+    Waits until the robot's timecode client has received at least one sync,
+    or fails after the configured timeout.
+    """
+    type_id: ClassVar[str] = 'timecode'
+    default_message_before: ClassVar[str] = 'Waiting for timecode...'
+
+    @dataclass
+    class Params:
+        timeout: float = 10.0
+
+    def setup(self, context: GuardContext):
+        params = self.get_params_raw()
+        robot: BILBO = context.get_object('robot')
+        if robot is None:
+            raise RuntimeError("No 'robot' context object registered")
+        deadline = time.monotonic() + params.timeout
+        while robot.common.get_timecode() is None:
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"Timecode guard timed out after {params.timeout}s — no timecode received")
+            time.sleep(0.1)
+        self.logger.info("Timecode connected, proceeding")
 
     def teardown(self, context: GuardContext):
         pass  # No cleanup needed
@@ -1538,7 +1590,8 @@ ALL_BILBO_GUARDS = [
     ZeroInputGuard,
     RestoreControlConfigGuard,
     PsiControlGuard,
-    ResumeGuard,
+    StartGuard,
+    TimecodeGuard,
 ]
 
 

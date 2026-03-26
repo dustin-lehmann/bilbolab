@@ -450,7 +450,7 @@ class SimulatedFirmware:
             pc_events = list(self.position_control.pending_events)
             self.position_control.pending_events.clear()
 
-            # Reset velocity control on path finish/timeout/abort
+            # Reset velocity control on path finish/timeout/stop
             # (mirrors firmware _on_position_command_finished callback —
             #  only registered for path events, NOT move_to_point or turn_to_heading)
             _vel_reset_events = {

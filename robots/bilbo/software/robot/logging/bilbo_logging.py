@@ -417,6 +417,9 @@ class BILBO_Logging(LoggingProvider):
                 sample_dict['general']['tick'] = ll_tick
                 self.tick = ll_tick + 10
 
+                # Update tick-time sync anchor: last sample in batch (index 9) is the most recent
+                self.common.update_tick_sync(tick=ll_tick + 9, monotonic_time=time.monotonic())
+
                 # Append the sample to the lowlevel logger
                 t0 = time.perf_counter()
 
@@ -436,8 +439,8 @@ class BILBO_Logging(LoggingProvider):
 
                 # Log slow batch processing to identify bottleneck
                 total = t4 - t0
-                if total > 0.05:
-                    self.logger.warning(
+                if total > 0.2:
+                    self.logger.debug(
                         f"Slow batch ({total * 1000:.0f}ms)")
 
                 # if 290 <= self.tick <= 320:

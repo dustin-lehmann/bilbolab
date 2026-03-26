@@ -1527,7 +1527,7 @@ Each action also tracks its individual status:
 | `finished` | Action completed successfully |
 | `error` | Action failed with an error |
 | `timeout` | Action timed out |
-| `skipped` | Action was skipped due to experiment abort |
+| `skipped` | Action was skipped due to experiment stop |
 
 ### Action Data Structure
 

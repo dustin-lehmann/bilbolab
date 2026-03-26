@@ -21,10 +21,29 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return merged
 
 
-def load_config_from_file(file: str):
+def load_config_from_file(file: str, merge_with_default: bool = True):
+    """Load a control config from a YAML file.
+
+    Args:
+        file: Path to the YAML file.
+        merge_with_default: If True, treat the file as a partial override on top
+            of the default config (same behaviour as named non-default configs).
+    """
     file = str(Path(file).expanduser())
     yaml_data = load_yaml(file)
+    if merge_with_default:
+        return load_config_from_dict(yaml_data)
     return from_dict_auto(BILBO_ControlConfig, yaml_data)
+
+
+def load_config_from_dict(data: dict):
+    """Create a control config from a (possibly partial) dict, merged on top of default.yaml."""
+    default_file = f"{CONTROL_PATH}default.yaml"
+    if file_exists(default_file):
+        base_data = load_yaml(str(Path(default_file).expanduser()))
+        merged = _deep_merge(base_data, data)
+        return from_dict_auto(BILBO_ControlConfig, merged)
+    return from_dict_auto(BILBO_ControlConfig, data)
 
 
 def load_config_by_name(name: str):

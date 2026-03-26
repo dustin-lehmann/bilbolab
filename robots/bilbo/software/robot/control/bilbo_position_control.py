@@ -34,6 +34,7 @@ from core.utils.logging_utils import Logger
 from robot.bilbo_common import BILBO_Common
 from robot.communication.bilbo_communication import BILBO_Communication
 from robot.control.bilbo_control_definitions import PositionControl_Config, PlanningConfig, BILBO_Control_Mode
+from robot.estimation.bilbo_estimation import BILBO_Estimation
 from robot.lowlevel.stm32_general import LOOP_TIME_CONTROL
 from robot.lowlevel.stm32_addresses import BILBO_AddressTables, BILBO_PositionControlAddresses
 from robot.lowlevel.stm32_control import (
@@ -283,10 +284,14 @@ class BILBO_PositionControl:
     from inter-point spacing and pure-pursuit tracking.
     """
 
-    def __init__(self, common: BILBO_Common, communication: BILBO_Communication):
+    def __init__(self, common: BILBO_Common,
+                 estimation: BILBO_Estimation,
+                 communication: BILBO_Communication):
+
         self.logger = Logger("POS_CTRL", "DEBUG")
         self.common = common
         self.communication = communication
+        self.estimation = estimation
 
         # Events and callbacks
         self.events = PositionControlEvents()
@@ -300,6 +305,7 @@ class BILBO_PositionControl:
 
         # Local state (mirrors STM32)
         self._mode = PositionControlMode.IDLE
+        self._mode_event_time: float = 0.0  # timestamp of last event-driven mode change
         self._path_state = PathState.IDLE
         self._path_point_count: int = 0
         self._current_index: int = 0
@@ -324,7 +330,6 @@ class BILBO_PositionControl:
         self._current_path_data: dict | list | None = None
         self._current_path_settings: dict = {}
         self._current_path_waypoints: list[dict] | None = None
-
 
         # Testbed manager reference (set after construction via set_testbed_manager)
         self.testbed_manager = None
@@ -372,6 +377,12 @@ class BILBO_PositionControl:
     def is_busy(self) -> bool:
         """True if executing any command"""
         return self._mode != PositionControlMode.IDLE
+
+    def _set_mode(self, mode: PositionControlMode):
+        """Set mode from an authoritative source (event handler, control mode change).
+        Stamps a timestamp so the sample callback won't overwrite with stale data."""
+        self._mode = mode
+        self._mode_event_time = time.time()
 
     @property
     def is_path_running(self) -> bool:
@@ -522,12 +533,14 @@ class BILBO_PositionControl:
         self.logger.debug(f"  smoothing: {cfg.smoothing:.2f}")
         if cfg.method == 'rrt':
             self.logger.debug(f"  rrt_star: {cfg.rrt.rrt_star}, max_iterations: {cfg.rrt.max_iterations}")
-            self.logger.debug(f"  step_size: {cfg.rrt.step_size}, goal_bias: {cfg.rrt.goal_bias}, rewire_radius: {cfg.rrt.rewire_radius}")
+            self.logger.debug(
+                f"  step_size: {cfg.rrt.step_size}, goal_bias: {cfg.rrt.goal_bias}, rewire_radius: {cfg.rrt.rewire_radius}")
         else:
             self.logger.debug(f"  prm n_samples: {cfg.prm.n_samples}, k_neighbors: {cfg.prm.k_neighbors}")
         self.logger.debug(f"  safety_margin: {cfg.safety_margin}")
         if cfg.clearance_weight > 0:
-            self.logger.debug(f"  clearance_weight: {cfg.clearance_weight}, clearance_threshold: {cfg.clearance_threshold}")
+            self.logger.debug(
+                f"  clearance_weight: {cfg.clearance_weight}, clearance_threshold: {cfg.clearance_threshold}")
         self.logger.debug(f"--- end planner inputs ---")
 
     # =========================================================================
@@ -698,7 +711,7 @@ class BILBO_PositionControl:
     def abort_path(self) -> bool:
         """Abort path execution"""
         if self._mode != PositionControlMode.FOLLOW_PATH:
-            self.logger.warning("Cannot abort: not following path")
+            self.logger.warning("Cannot stop: not following path")
             return False
 
         result = self.communication.serial.executeFunction(
@@ -711,7 +724,7 @@ class BILBO_PositionControl:
         if result:
             self.logger.info("Path aborted")
         else:
-            self.logger.error("Failed to abort path")
+            self.logger.error("Failed to stop path")
 
         return result or False
 
@@ -1032,7 +1045,8 @@ class BILBO_PositionControl:
             return False
 
         if not dense_points or len(dense_points) < 2:
-            self.logger.error(f"Motion planner returned insufficient points ({len(dense_points) if dense_points else 0})")
+            self.logger.error(
+                f"Motion planner returned insufficient points ({len(dense_points) if dense_points else 0})")
             return False
 
         self.logger.info(f"Motion planner produced {len(dense_points)} dense path points")
@@ -1176,7 +1190,7 @@ class BILBO_PositionControl:
     # ------------------------------------------------------------------------------------------------------------------
     @staticmethod
     def _compute_stop_indices_from_waypoints(waypoints: list[dict | tuple] | None,
-                                              dense_points: list[tuple[float, float]]) -> list[int]:
+                                             dense_points: list[tuple[float, float]]) -> list[int]:
         """Find nearest dense path point index for each STOP waypoint.
 
         Args:
@@ -1444,6 +1458,8 @@ class BILBO_PositionControl:
 
         Args:
             x, y: Target position in world coordinates [m]
+            y:
+            x:
             heading: Target heading [rad]
             max_speed: Maximum speed for move phase (0 = use config default)
             max_angular_speed: Maximum turn rate for turn phase [rad/s]
@@ -1590,7 +1606,7 @@ class BILBO_PositionControl:
         )
 
         if result:
-            self._mode = PositionControlMode.IDLE
+            self._set_mode(PositionControlMode.IDLE)
             self._path_state = PathState.IDLE
             self._path_point_count = 0
             self._current_index = 0
@@ -1644,7 +1660,7 @@ class BILBO_PositionControl:
         match event:
             # Path events
             case position_control_event_t.PATH_STARTED:
-                self._mode = PositionControlMode.FOLLOW_PATH
+                self._set_mode(PositionControlMode.FOLLOW_PATH)
                 self._path_state = PathState.RUNNING
                 self.events.path_started.set()
                 self.callbacks.path_started.call()
@@ -1666,7 +1682,7 @@ class BILBO_PositionControl:
                 self.wifi_events.path_resumed.send(data=self._common_event_data(), flags=self._WIFI_FLAGS)
 
             case position_control_event_t.PATH_FINISHED:
-                self._mode = PositionControlMode.IDLE
+                self._set_mode(PositionControlMode.IDLE)
                 self._path_state = PathState.IDLE
                 self.logger.info("Path finished!")
                 self._path_point_count = 0
@@ -1675,7 +1691,7 @@ class BILBO_PositionControl:
                 self.wifi_events.path_finished.send(data=self._common_event_data(), flags=self._WIFI_FLAGS)
 
             case position_control_event_t.PATH_TIMEOUT:
-                self._mode = PositionControlMode.IDLE
+                self._set_mode(PositionControlMode.IDLE)
                 self._path_state = PathState.IDLE
                 self.logger.warning("Path timed out!")
                 self._path_point_count = 0
@@ -1684,7 +1700,7 @@ class BILBO_PositionControl:
                 self.wifi_events.path_timeout.send(data=self._common_event_data(), flags=self._WIFI_FLAGS)
 
             case position_control_event_t.PATH_ABORTED:
-                self._mode = PositionControlMode.IDLE
+                self._set_mode(PositionControlMode.IDLE)
                 self._path_state = PathState.IDLE
                 self.logger.warning("Path aborted!")
                 self._path_point_count = 0
@@ -1715,7 +1731,7 @@ class BILBO_PositionControl:
 
             # Single-point command events
             case position_control_event_t.MOVE_TO_POINT_STARTED:
-                self._mode = PositionControlMode.DRIVE_TO_POINT
+                self._set_mode(PositionControlMode.DRIVE_TO_POINT)
                 self.events.move_to_point_started.set()
                 # Send target coordinates with event
                 cmd = self._current_move_to_point
@@ -1727,7 +1743,7 @@ class BILBO_PositionControl:
                 )
 
             case position_control_event_t.MOVE_TO_POINT_COMPLETED:
-                self._mode = PositionControlMode.IDLE
+                self._set_mode(PositionControlMode.IDLE)
                 # Log with target coordinates
                 cmd = self._current_move_to_point
                 target_data = {'x': cmd.x, 'y': cmd.y} if cmd.active else None
@@ -1742,7 +1758,7 @@ class BILBO_PositionControl:
                 )
 
             case position_control_event_t.MOVE_TO_POINT_TIMEOUT:
-                self._mode = PositionControlMode.IDLE
+                self._set_mode(PositionControlMode.IDLE)
                 # Log with target coordinates
                 cmd = self._current_move_to_point
                 target_data = {'x': cmd.x, 'y': cmd.y} if cmd.active else None
@@ -1757,7 +1773,7 @@ class BILBO_PositionControl:
                 )
 
             case position_control_event_t.TURN_TO_HEADING_STARTED:
-                self._mode = PositionControlMode.TURN_TO_HEADING
+                self._set_mode(PositionControlMode.TURN_TO_HEADING)
                 self.events.turn_to_heading_started.set()
                 # Send target heading with event
                 cmd = self._current_turn_to_heading
@@ -1770,7 +1786,7 @@ class BILBO_PositionControl:
                 )
 
             case position_control_event_t.TURN_TO_HEADING_COMPLETED:
-                self._mode = PositionControlMode.IDLE
+                self._set_mode(PositionControlMode.IDLE)
                 # Log with target heading
                 cmd = self._current_turn_to_heading
                 heading_data = {'heading': cmd.heading,
@@ -1786,7 +1802,7 @@ class BILBO_PositionControl:
                 )
 
             case position_control_event_t.TURN_TO_HEADING_TIMEOUT:
-                self._mode = PositionControlMode.IDLE
+                self._set_mode(PositionControlMode.IDLE)
                 # Log with target heading
                 cmd = self._current_turn_to_heading
                 heading_data = {'heading': cmd.heading,
@@ -1857,11 +1873,20 @@ class BILBO_PositionControl:
         # Sync position control data from sample if available
         if hasattr(sample, 'control') and hasattr(sample.control, 'position_control_data'):
             pos_data = sample.control.position_control_data
-            # Check for mode mismatch
+            # Check for mode mismatch — but don't let stale SPI samples
+            # overwrite a recent event-driven transition (e.g. completion event
+            # already set IDLE, but the next sample still reports DRIVE_TO_POINT).
             stm32_mode = PositionControlMode(pos_data.mode)
             if stm32_mode != self._mode:
-                self.logger.debug(f"Mode mismatch: local={self._mode.name}, STM32={stm32_mode.name}")
-                self._mode = stm32_mode
+                age = time.time() - self._mode_event_time
+                if age < 0.2:
+                    self.logger.debug(
+                        f"Mode mismatch (ignored, event {age * 1000:.0f}ms ago): "
+                        f"local={self._mode.name}, STM32={stm32_mode.name}"
+                    )
+                else:
+                    self.logger.debug(f"Mode mismatch: local={self._mode.name}, STM32={stm32_mode.name}")
+                    self._mode = stm32_mode
 
     def _on_control_mode_change(self, mode, *args, **kwargs):
         """Handle top-level control mode changes"""
@@ -1876,20 +1901,28 @@ class BILBO_PositionControl:
             had_path = self._path_point_count > 0
             self._path_point_count = 0
             self._current_index = 0
-            self._mode = PositionControlMode.IDLE
+            self._set_mode(PositionControlMode.IDLE)
             self._path_state = PathState.IDLE
-            # Clear command tracking
-            self._current_move_to_point = MoveToPointCommand()
-            self._current_turn_to_heading = TurnToHeadingCommand()
-            self._current_move_to_pose = MoveToPoseCommand()
+            # Clear command tracking, but preserve commands that are already active
+            # (auto mode-switching in BILBO_Control may store the command before the
+            # async MODE_CHANGED event arrives from STM32)
+            if not self._current_move_to_point.active:
+                self._current_move_to_point = MoveToPointCommand()
+            if not self._current_turn_to_heading.active:
+                self._current_turn_to_heading = TurnToHeadingCommand()
+            if not self._current_move_to_pose.active:
+                self._current_move_to_pose = MoveToPoseCommand()
             # Notify host that path was cleared by firmware
             if had_path:
                 self.wifi_events.path_cleared.send(data=self._common_event_data(), flags=self._WIFI_FLAGS)
         else:
             # Leaving POSITION mode: fire termination events if commands were active.
-            if self._mode == PositionControlMode.FOLLOW_PATH:
+            # Use _path_state (not _mode) for the FOLLOW_PATH check because firmware
+            # MODE_CHANGED serial events can overwrite _mode with a stale value after
+            # PATH_FINISHED already set it to IDLE.
+            if self._mode == PositionControlMode.FOLLOW_PATH and self._path_state == PathState.RUNNING:
                 self.logger.warning(f"Control mode changed to {mode.name} while path was running, aborting path")
-                self._mode = PositionControlMode.IDLE
+                self._set_mode(PositionControlMode.IDLE)
                 self._path_state = PathState.IDLE
                 self._path_point_count = 0
                 self.events.path_aborted.set()
@@ -1899,7 +1932,7 @@ class BILBO_PositionControl:
                 self.logger.warning(f"Control mode changed to {mode.name} while move_to_point was active")
                 cmd = self._current_move_to_point
                 target_data = {'x': cmd.x, 'y': cmd.y} if cmd.active else None
-                self._mode = PositionControlMode.IDLE
+                self._set_mode(PositionControlMode.IDLE)
                 self._current_move_to_point = MoveToPointCommand()
                 self.events.move_to_point_timeout.set()
                 self.wifi_events.move_to_point_timeout.send(
@@ -1910,7 +1943,7 @@ class BILBO_PositionControl:
                 cmd = self._current_turn_to_heading
                 heading_data = {'heading': cmd.heading,
                                 'heading_deg': math.degrees(cmd.heading)} if cmd.active else None
-                self._mode = PositionControlMode.IDLE
+                self._set_mode(PositionControlMode.IDLE)
                 self._current_turn_to_heading = TurnToHeadingCommand()
                 self.events.turn_to_heading_timeout.set()
                 self.wifi_events.turn_to_heading_timeout.send(
@@ -1923,7 +1956,7 @@ class BILBO_PositionControl:
                 self.wifi_events.path_cleared.send(data=self._common_event_data(), flags=self._WIFI_FLAGS)
 
             # Always clean up local state
-            self._mode = PositionControlMode.IDLE
+            self._set_mode(PositionControlMode.IDLE)
             self._path_state = PathState.IDLE
             self._path_point_count = 0
             self._current_index = 0
@@ -2000,58 +2033,12 @@ class BILBO_PositionControl:
             description='Get number of path points on STM32'
         )
 
-        # Path control
-        self.communication.wifi.newCommand(
-            identifier='position_control_start_path',
-            function=self._wifi_start_path,
-            arguments=[
-                CommandArgument(name='max_speed', type=float, optional=True, default=0.0),
-                CommandArgument(name='max_spacing', type=float, optional=True, default=0.0),
-                CommandArgument(name='timeout', type=float, optional=True, default=0.0),
-                CommandArgument(name='allow_reverse', type=bool, optional=True, default=False),
-            ],
-            description='Start following the path'
-        )
-
-        self.communication.wifi.newCommand(
-            identifier='position_control_load_path',
-            function=self._wifi_load_path,
-            arguments=[
-                'path',
-                CommandArgument(name='start', type=bool, optional=True, default=False),
-                CommandArgument(name='clear_existing', type=bool, optional=True, default=True),
-            ],
-            description='Load a path from dict (with optional start)',
-            execute_in_thread=True
-        )
-
+        # Path management (non-motion: these don't start movement, so no auto mode-switch needed)
         self.communication.wifi.newCommand(
             identifier='position_control_abort_path',
             function=self.abort_path,
             arguments=[],
             description='Abort path execution'
-        )
-
-        # Motion planning + follow
-        self.communication.wifi.newCommand(
-            identifier='position_control_plan_and_follow',
-            function=self._wifi_plan_and_follow,
-            arguments=[
-                'target',
-                CommandArgument(name='waypoints', type=list, optional=True, default=None),
-                CommandArgument(name='obstacles', type=list, optional=True, default=None),
-                CommandArgument(name='bounds', type=dict, optional=True, default=None),
-                CommandArgument(name='stop_indices', type=list, optional=True, default=None),
-                CommandArgument(name='max_speed', type=float, optional=True, default=0.0),
-                CommandArgument(name='max_spacing', type=float, optional=True, default=0.0),
-                CommandArgument(name='timeout', type=float, optional=True, default=0.0),
-                CommandArgument(name='allow_reverse', type=bool, optional=True, default=False),
-                CommandArgument(name='seed', type=int, optional=True, default=None),
-                CommandArgument(name='target_heading', type=float, optional=True, default=None),
-                CommandArgument(name='heading_strength', type=float, optional=True, default=1.0),
-            ],
-            description='Plan path from current position to target and follow it',
-            execute_in_thread=True
         )
 
         self.communication.wifi.newCommand(
@@ -2075,44 +2062,6 @@ class BILBO_PositionControl:
             function=self._wifi_build_prm,
             arguments=[],
             description='Build PRM roadmap from current testbed obstacles',
-            execute_in_thread=True
-        )
-
-        # Simple commands
-        self.communication.wifi.newCommand(
-            identifier='position_control_move_to',
-            function=self._wifi_move_to,
-            arguments=[
-                'x', 'y',
-                CommandArgument(name='max_speed', type=float, optional=True, default=0.0),
-                CommandArgument(name='timeout', type=float, optional=True, default=0.0)
-            ],
-            description='Move to a single point'
-        )
-
-        self.communication.wifi.newCommand(
-            identifier='position_control_turn_to',
-            function=self._wifi_turn_to,
-            arguments=[
-                'heading',
-                CommandArgument(name='max_angular_speed', type=float, optional=True, default=0.0),
-                CommandArgument(name='timeout', type=float, optional=True, default=0.0)
-            ],
-            description='Turn to a heading (radians)'
-        )
-
-        self.communication.wifi.newCommand(
-            identifier='position_control_move_to_pose',
-            function=self._wifi_move_to_pose,
-            arguments=[
-                'x', 'y', 'heading',
-                CommandArgument(name='max_speed', type=float, optional=True, default=0.0),
-                CommandArgument(name='max_angular_speed', type=float, optional=True, default=1.0),
-                CommandArgument(name='position_tolerance', type=float, optional=True, default=0.0),
-                CommandArgument(name='max_corrections', type=int, optional=True, default=3),
-                CommandArgument(name='timeout', type=float, optional=True, default=0.0),
-            ],
-            description='Move to a pose (position + heading)',
             execute_in_thread=True
         )
 
@@ -2144,43 +2093,8 @@ class BILBO_PositionControl:
         """Add stop index from WiFi command"""
         return self.add_stop_index(index=int(index))
 
-    def _wifi_start_path(self, max_speed: float = 0.0, max_spacing: float = 0.0,
-                         timeout: float = 0.0, allow_reverse: bool = False) -> bool:
-        """Start path from WiFi command"""
-        return self.start_path(max_speed=max_speed, max_spacing=max_spacing,
-                               timeout=timeout, allow_reverse=allow_reverse)
-
-    def _wifi_load_path(self, path: dict, start: bool = False, clear_existing: bool = True) -> bool:
-        """Load path from WiFi command"""
-        return self.load_path(path_data=path, start=start, clear_existing=clear_existing)
-
-    def _wifi_plan_and_follow(self, target, waypoints=None, obstacles=None, bounds=None,
-                               stop_indices=None, max_speed=0.0, max_spacing=0.0,
-                               timeout=0.0, allow_reverse=False, seed=None,
-                               target_heading=None, heading_strength=1.0) -> bool:
-        """Plan and follow path from WiFi command"""
-        # Parse target from dict or list
-        if isinstance(target, dict):
-            target = (float(target['x']), float(target['y']))
-        elif isinstance(target, (list, tuple)):
-            target = (float(target[0]), float(target[1]))
-        return self.plan_and_follow(
-            target=target,
-            waypoints=waypoints,
-            obstacles=obstacles,
-            bounds=bounds,
-            stop_indices=stop_indices,
-            max_speed=float(max_speed),
-            max_spacing=float(max_spacing),
-            timeout=float(timeout),
-            allow_reverse=bool(allow_reverse),
-            seed=int(seed) if seed is not None else None,
-            target_heading=float(target_heading) if target_heading is not None else None,
-            heading_strength=float(heading_strength),
-        )
-
     def _wifi_plan_path(self, target, waypoints=None, obstacles=None, bounds=None, seed=None,
-                         target_heading=None, heading_strength=1.0) -> bool:
+                        target_heading=None, heading_strength=1.0) -> bool:
         """Plan path from WiFi command. Plans, emits preview event, and loads onto STM32 (without starting)."""
         if self._top_level_control_mode != BILBO_Control_Mode.POSITION:
             self.logger.warning(
@@ -2241,26 +2155,6 @@ class BILBO_PositionControl:
 
         # Load onto STM32 so "start" can be called immediately
         return self.load_path(path_data=dense_points, start=False, stop_indices=stop_indices)
-
-    def _wifi_move_to(self, x: float, y: float, max_speed: float = 0.0, timeout: float = 0.0) -> bool:
-        """Move to point from WiFi command"""
-        return self.move_to_point(x=x, y=y, max_speed=max_speed, timeout=timeout)
-
-    def _wifi_turn_to(self, heading: float, max_angular_speed: float = 0.0, timeout: float = 0.0) -> bool:
-        """Turn to heading from WiFi command"""
-        return self.turn_to_heading(heading=heading, max_angular_speed=max_angular_speed, timeout=timeout)
-
-    def _wifi_move_to_pose(self, x: float, y: float, heading: float,
-                           max_speed: float = 0.0, max_angular_speed: float = 1.0,
-                           position_tolerance: float = 0.0, max_corrections: int = 3,
-                           timeout: float = 0.0) -> bool:
-        """Move to pose from WiFi command (runs in thread via execute_in_thread)"""
-        return self.move_to_pose(
-            x=x, y=y, heading=heading,
-            max_speed=max_speed, max_angular_speed=max_angular_speed,
-            position_tolerance=position_tolerance, max_corrections=max_corrections,
-            timeout=timeout, blocking=True,
-        )
 
     def _wifi_build_prm(self) -> bool:
         """Build PRM roadmap from WiFi command."""

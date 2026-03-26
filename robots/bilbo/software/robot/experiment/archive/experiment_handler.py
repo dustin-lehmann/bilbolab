@@ -456,7 +456,7 @@ class BILBO_ExperimentHandler:
             settings: DILC_Experiment_Settings with experiment configuration.
 
         Returns:
-            DILC_Results on completion (includes partial data on error/abort), or None on failure.
+            DILC_Results on completion (includes partial data on error/stop), or None on failure.
         """
         from robot.experiment.trial_experiments.dilc import DILC_Experiment
 
@@ -486,7 +486,7 @@ class BILBO_ExperimentHandler:
             settings: LimboBar_DILC_Experiment_Settings with experiment configuration.
 
         Returns:
-            LimboBar_DILC_Results on completion (includes partial data on error/abort), or None on failure.
+            LimboBar_DILC_Results on completion (includes partial data on error/stop), or None on failure.
         """
         from robot.experiment.trial_experiments.limbobar_dilc import LimboBar_DILC_Experiment
 
@@ -523,7 +523,7 @@ class BILBO_ExperimentHandler:
         self.logger.warning(f"Stopping experiment {experiment_id}: {reason}")
 
         # Abort the experiment
-        self.active_experiment.abort(reason=reason)
+        self.active_experiment.stop(reason=reason)
 
         # Clear the active experiment reference
         self.active_experiment = None
@@ -564,7 +564,7 @@ class BILBO_ExperimentHandler:
                 self.trajectory_status = BILBO_ExperimentHandler_TrajectoryStatus.IDLE
                 return None
 
-            # 3) Wait for STARTED or ABORTED (early abort handling)
+            # 3) Wait for STARTED or ABORTED (early stop handling)
             data, trace = wait_for_events(
                 events=OR(
                     (self._internal_events.trajectory_started, pred_flag_equals('trajectory_id', trajectory.id)),
@@ -575,7 +575,7 @@ class BILBO_ExperimentHandler:
             )
 
             if data is TIMEOUT:
-                self.logger.warning(f"Failed to start trajectory {trajectory.id}: No start/abort event received")
+                self.logger.warning(f"Failed to start trajectory {trajectory.id}: No start/stop event received")
                 try:
                     self._send_trajectory_stop_signal_to_lowlevel()
                 except Exception as e:
@@ -616,7 +616,7 @@ class BILBO_ExperimentHandler:
             )
 
             if data is TIMEOUT:
-                self.logger.warning(f"Trajectory {trajectory.id} timeout: No finish/abort event received")
+                self.logger.warning(f"Trajectory {trajectory.id} timeout: No finish/stop event received")
                 try:
                     self._send_trajectory_stop_signal_to_lowlevel()
                 except Exception as e:
@@ -1059,7 +1059,7 @@ class BILBO_ExperimentHandler:
 
     # ------------------------------------------------------------------------------------------------------------------
     def _on_experiment_error(self, data: dict | str | None = None, *args, **kwargs):
-        """Handle experiment error/abort. Now receives full experiment data."""
+        """Handle experiment error/stop. Now receives full experiment data."""
         experiment_id = self.active_experiment.definition.id if self.active_experiment else "unknown"
 
         # Check if we received full experiment data (new behavior) or just a message (old behavior)

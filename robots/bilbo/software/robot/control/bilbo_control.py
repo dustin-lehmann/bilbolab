@@ -1,5 +1,7 @@
 import ctypes
 import dataclasses
+import threading
+import time
 
 import numpy as np
 
@@ -9,7 +11,7 @@ from core.communication.wifi.bilbolab_wifi_interface import (
 from core.communication.wifi.data_link import CommandArgument
 from core.utils.callbacks import CallbackContainer, callback_definition
 from core.utils.dataclass_utils import from_dict_auto
-from core.utils.events import event_definition, EventFlag, Event, pred_flag_equals, TIMEOUT
+from core.utils.events import event_definition, EventFlag, Event, pred_flag_equals, TIMEOUT, wait_for_events, OR
 from core.utils.logging_utils import Logger
 from core.utils.time import setTimeout
 from robot.bilbo_common import BILBO_Common
@@ -99,10 +101,17 @@ class BILBO_Control:
     _MODE_MISMATCH_THRESHOLD: int = 3
 
     # === INIT =========================================================================================================
-    def __init__(self, common: BILBO_Common, estimation: BILBO_Estimation, comm: BILBO_Communication):
+    def __init__(self, common: BILBO_Common,
+                 estimation: BILBO_Estimation,
+                 comm: BILBO_Communication,
+                 control_settings=None):
+
         self.callbacks = BILBO_Control_Callbacks()
         self.events = BILBO_Control_Events()
         self.logger = Logger("CONTROL", "DEBUG")
+
+        # --- Settings ---
+        self._auto_position_mode = control_settings.auto_position_mode if control_settings else False
 
         # --- Input Handling ---
         self.common = common
@@ -112,7 +121,9 @@ class BILBO_Control:
         # WiFi events
         self.wifi_events = ControlWifiEvents(wifi=comm.wifi.wifi, id='control')
 
-        self.position_control = BILBO_PositionControl(common=self.common, communication=self.communication)
+        self.position_control = BILBO_PositionControl(common=self.common,
+                                                      estimation=self.estimation,
+                                                      communication=self.communication)
 
         # --- Register communication callbacks ---
         self.communication.serial.callbacks.event.register(self._lowlevel_control_event_callback,
@@ -349,19 +360,23 @@ class BILBO_Control:
 
     # ------------------------------------------------------------------------------------------------------------------
     def fall_down(self, direction='forward') -> None:
+        if self.mode == BILBO_Control_Mode.OFF:
+            self.logger.warning("Cannot fall down while in OFF mode. Go to BALANCING first")
+            return
+        self.logger.info(f"Falling down in direction {direction}")
+        self.set_mode(BILBO_Control_Mode.BALANCING)
+        time.sleep(0.1)
+        abs_input = 0.2
+        input = -abs_input if direction == 'forward' else abs_input
+        self.disable_external_input()
+        self._set_lowlevel_external_input(left=input, right=input)
 
-        match self.mode:
-            case BILBO_Control_Mode.BALANCING:
-                input = -0.2 if direction == 'forward' else 0.2
-                self.set_external_input(left=input, right=input)
-            case BILBO_Control_Mode.VELOCITY:
-                input = 0.6 if direction == 'forward' else -0.6
-                self.set_velocity(forward=input, turn=0, normalized=False)
-            case _:
-                self.logger.warning(f"Cannot fall down while in mode \"{self.mode}\"")
-                return
+        def _fall_down_callback():
+            self._set_lowlevel_external_input(left=0, right=0)
+            self.set_mode(BILBO_Control_Mode.OFF)
+            self.enable_external_input()
 
-        setTimeout(self.set_mode, 0.5, mode=BILBO_Control_Mode.OFF)
+        setTimeout(_fall_down_callback, 0.1)
 
     # ------------------------------------------------------------------------------------------------------------------
     def set_external_input(self, left: float, right: float) -> None:
@@ -511,6 +526,187 @@ class BILBO_Control:
     def set_psi_setpoint(self, psi: float):
         self._set_lowlevel_psi_setpoint(psi)
 
+    # === POSITION CONTROL WRAPPERS ====================================================================================
+    def _ensure_position_mode(self) -> BILBO_Control_Mode | None:
+        """Switch to POSITION mode if allowed. Returns the previous mode if a switch happened, None otherwise."""
+        if self.mode == BILBO_Control_Mode.POSITION:
+            return None
+        if not self._auto_position_mode:
+            self.logger.warning("Not in POSITION mode and auto_position_mode is disabled")
+            return None
+        if self.mode == BILBO_Control_Mode.OFF:
+            self.logger.warning("Cannot auto-switch to POSITION mode from OFF")
+            return None
+        previous_mode = self.mode
+        self.logger.info(f"Auto-switching to POSITION mode (from {previous_mode.name})")
+        if not self.set_mode(BILBO_Control_Mode.POSITION):
+            return None
+        # Ensure position_control sees the mode change immediately (the event callback
+        # may run in a separate thread and not complete before we call into position_control)
+        self.position_control._top_level_control_mode = BILBO_Control_Mode.POSITION
+        return previous_mode
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _restore_mode_after(self, previous_mode: BILBO_Control_Mode, terminal_events: list[Event]):
+        """Spawn a daemon thread that waits for any terminal event or an external mode change,
+        then restores the previous mode (only if no external mode change occurred)."""
+
+        def _wait_and_restore():
+            # Wait for either a terminal event (command done) or an external mode change
+            all_events = terminal_events + [self.events.mode_change]
+            data, trace = wait_for_events(OR(*all_events), timeout=120)
+
+            if data is TIMEOUT:
+                self.logger.warning("Auto-mode-restore timed out (120s), not restoring")
+                return
+
+            # If mode_change fired, someone else changed the mode — don't restore
+            if trace is not None and trace.caused_by(self.events.mode_change):
+                self.logger.debug("External mode change detected, skipping auto-restore")
+                return
+
+            # Terminal event fired — restore previous mode
+            if self.mode == BILBO_Control_Mode.POSITION:
+                self.logger.info(f"Position command finished, restoring {previous_mode.name} mode")
+                self.set_mode(previous_mode)
+
+        thread = threading.Thread(target=_wait_and_restore, daemon=True)
+        thread.start()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _restore_mode_direct(self, previous_mode: BILBO_Control_Mode):
+        """Restore the previous mode immediately (for use after blocking calls).
+        Only restores if no external mode change occurred in the meantime."""
+        if self.mode == BILBO_Control_Mode.POSITION:
+            self.logger.info(f"Position command finished, restoring {previous_mode.name} mode")
+            self.set_mode(previous_mode)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def move_to_point(self, x: float, y: float,
+                      max_speed: float = 0.0,
+                      timeout: float = 0.0,
+                      blocking: bool = False) -> bool:
+        previous_mode = self._ensure_position_mode()
+        if self.mode != BILBO_Control_Mode.POSITION:
+            return False
+        result = self.position_control.move_to_point(x, y, max_speed=max_speed, timeout=timeout, blocking=blocking)
+        if result and previous_mode is not None:
+            self._restore_mode_after(previous_mode, [
+                self.position_control.events.move_to_point_completed,
+                self.position_control.events.move_to_point_timeout,
+            ])
+        return result
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def turn_to_heading(self, heading: float,
+                        max_angular_speed: float = 0.0,
+                        timeout: float = 0.0,
+                        blocking: bool = False) -> bool:
+        previous_mode = self._ensure_position_mode()
+        if self.mode != BILBO_Control_Mode.POSITION:
+            return False
+        result = self.position_control.turn_to_heading(heading, max_angular_speed=max_angular_speed,
+                                                       timeout=timeout, blocking=blocking)
+        if result and previous_mode is not None:
+            self._restore_mode_after(previous_mode, [
+                self.position_control.events.turn_to_heading_completed,
+                self.position_control.events.turn_to_heading_timeout,
+            ])
+        return result
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def move_to_pose(self, x: float, y: float, heading: float,
+                     max_speed: float = 0.0,
+                     max_angular_speed: float = 3.0,
+                     position_tolerance: float = 0.0,
+                     max_corrections: int = 3,
+                     timeout: float = 0.0,
+                     blocking: bool = False) -> bool:
+        previous_mode = self._ensure_position_mode()
+        if self.mode != BILBO_Control_Mode.POSITION:
+            return False
+        result = self.position_control.move_to_pose(x, y, heading, max_speed=max_speed,
+                                                     max_angular_speed=max_angular_speed,
+                                                     position_tolerance=position_tolerance,
+                                                     max_corrections=max_corrections,
+                                                     timeout=timeout, blocking=blocking)
+        if result and previous_mode is not None:
+            if blocking:
+                # Blocking call already waited for completion — restore mode directly
+                self._restore_mode_direct(previous_mode)
+            else:
+                self._restore_mode_after(previous_mode, [
+                    self.position_control.events.move_to_pose_completed,
+                    self.position_control.events.move_to_pose_timeout,
+                ])
+        return result
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def plan_and_follow(self,
+                        target: tuple[float, float],
+                        waypoints: list[dict | tuple] | None = None,
+                        obstacles: list[dict] | None = None,
+                        bounds: dict | tuple | None = None,
+                        stop_indices: list[int] | None = None,
+                        max_speed: float = 0.0,
+                        max_spacing: float = 0.0,
+                        timeout: float = 0.0,
+                        allow_reverse: bool = False,
+                        seed: int | None = None,
+                        start: tuple[float, float] | None = None,
+                        blocking: bool = False,
+                        target_heading: float | None = None,
+                        heading_strength: float = 1.0) -> bool:
+        previous_mode = self._ensure_position_mode()
+        if self.mode != BILBO_Control_Mode.POSITION:
+            return False
+        result = self.position_control.plan_and_follow(
+            target=target, waypoints=waypoints, obstacles=obstacles, bounds=bounds,
+            stop_indices=stop_indices, max_speed=max_speed, max_spacing=max_spacing,
+            timeout=timeout, allow_reverse=allow_reverse, seed=seed, start=start,
+            blocking=blocking, target_heading=target_heading, heading_strength=heading_strength)
+        if result and previous_mode is not None:
+            self._restore_mode_after(previous_mode, [
+                self.position_control.events.path_finished,
+                self.position_control.events.path_timeout,
+                self.position_control.events.path_aborted,
+            ])
+        return result
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def start_path(self, max_speed: float = 0.0, max_spacing: float = 0.0,
+                   timeout: float = 0.0, allow_reverse: bool = False) -> bool:
+        previous_mode = self._ensure_position_mode()
+        if self.mode != BILBO_Control_Mode.POSITION:
+            return False
+        result = self.position_control.start_path(max_speed=max_speed, max_spacing=max_spacing,
+                                                   timeout=timeout, allow_reverse=allow_reverse)
+        if result and previous_mode is not None:
+            self._restore_mode_after(previous_mode, [
+                self.position_control.events.path_finished,
+                self.position_control.events.path_timeout,
+                self.position_control.events.path_aborted,
+            ])
+        return result
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def load_path(self, path_data, start: bool = False, clear_existing: bool = True) -> bool:
+        if start:
+            previous_mode = self._ensure_position_mode()
+            if self.mode != BILBO_Control_Mode.POSITION:
+                return False
+        else:
+            previous_mode = None
+        result = self.position_control.load_path(path_data=path_data, start=start,
+                                                  clear_existing=clear_existing)
+        if start and result and previous_mode is not None:
+            self._restore_mode_after(previous_mode, [
+                self.position_control.events.path_finished,
+                self.position_control.events.path_timeout,
+                self.position_control.events.path_aborted,
+            ])
+        return result
+
     # ------------------------------------------------------------------------------------------------------------------
     def get_sample(self) -> BILBO_Control_Sample:
         sample = BILBO_Control_Sample(
@@ -653,6 +849,143 @@ class BILBO_Control:
                                            function=self._set_statefeedback_gain_from_wifi,
                                            arguments=['K'],
                                            description='Sets the state feedback gain K (flat list of 8)')
+
+        self.communication.wifi.newCommand(identifier='fall_down',
+                                           function=self.fall_down,
+                                           arguments=['direction'],
+                                           description='Falls over in the given direction (forward/backward)')
+
+        # Position control motion commands (with auto mode-switching)
+        self.communication.wifi.newCommand(
+            identifier='position_control_move_to',
+            function=self._wifi_move_to,
+            arguments=[
+                'x', 'y',
+                CommandArgument(name='max_speed', type=float, optional=True, default=0.0),
+                CommandArgument(name='timeout', type=float, optional=True, default=0.0)
+            ],
+            description='Move to a single point (auto-switches to POSITION mode)'
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='position_control_turn_to',
+            function=self._wifi_turn_to,
+            arguments=[
+                'heading',
+                CommandArgument(name='max_angular_speed', type=float, optional=True, default=0.0),
+                CommandArgument(name='timeout', type=float, optional=True, default=0.0)
+            ],
+            description='Turn to a heading in radians (auto-switches to POSITION mode)'
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='position_control_move_to_pose',
+            function=self._wifi_move_to_pose,
+            arguments=[
+                'x', 'y', 'heading',
+                CommandArgument(name='max_speed', type=float, optional=True, default=0.0),
+                CommandArgument(name='max_angular_speed', type=float, optional=True, default=1.0),
+                CommandArgument(name='position_tolerance', type=float, optional=True, default=0.0),
+                CommandArgument(name='max_corrections', type=int, optional=True, default=3),
+                CommandArgument(name='timeout', type=float, optional=True, default=0.0),
+            ],
+            description='Move to a pose (auto-switches to POSITION mode)',
+            execute_in_thread=True
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='position_control_plan_and_follow',
+            function=self._wifi_plan_and_follow,
+            arguments=[
+                'target',
+                CommandArgument(name='waypoints', type=list, optional=True, default=None),
+                CommandArgument(name='obstacles', type=list, optional=True, default=None),
+                CommandArgument(name='bounds', type=dict, optional=True, default=None),
+                CommandArgument(name='stop_indices', type=list, optional=True, default=None),
+                CommandArgument(name='max_speed', type=float, optional=True, default=0.0),
+                CommandArgument(name='max_spacing', type=float, optional=True, default=0.0),
+                CommandArgument(name='timeout', type=float, optional=True, default=0.0),
+                CommandArgument(name='allow_reverse', type=bool, optional=True, default=False),
+                CommandArgument(name='seed', type=int, optional=True, default=None),
+                CommandArgument(name='target_heading', type=float, optional=True, default=None),
+                CommandArgument(name='heading_strength', type=float, optional=True, default=1.0),
+            ],
+            description='Plan path to target and follow it (auto-switches to POSITION mode)',
+            execute_in_thread=True
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='position_control_start_path',
+            function=self._wifi_start_path,
+            arguments=[
+                CommandArgument(name='max_speed', type=float, optional=True, default=0.0),
+                CommandArgument(name='max_spacing', type=float, optional=True, default=0.0),
+                CommandArgument(name='timeout', type=float, optional=True, default=0.0),
+                CommandArgument(name='allow_reverse', type=bool, optional=True, default=False),
+            ],
+            description='Start following loaded path (auto-switches to POSITION mode)'
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='position_control_load_path',
+            function=self._wifi_load_path,
+            arguments=[
+                'path',
+                CommandArgument(name='start', type=bool, optional=True, default=False),
+                CommandArgument(name='clear_existing', type=bool, optional=True, default=True),
+            ],
+            description='Load a path (auto-switches to POSITION mode if start=True)',
+            execute_in_thread=True
+        )
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _wifi_move_to(self, x: float, y: float, max_speed: float = 0.0, timeout: float = 0.0) -> bool:
+        return self.move_to_point(x=x, y=y, max_speed=max_speed, timeout=timeout)
+
+    def _wifi_turn_to(self, heading: float, max_angular_speed: float = 0.0, timeout: float = 0.0) -> bool:
+        return self.turn_to_heading(heading=heading, max_angular_speed=max_angular_speed, timeout=timeout)
+
+    def _wifi_move_to_pose(self, x: float, y: float, heading: float,
+                           max_speed: float = 0.0, max_angular_speed: float = 1.0,
+                           position_tolerance: float = 0.0, max_corrections: int = 3,
+                           timeout: float = 0.0) -> bool:
+        return self.move_to_pose(
+            x=x, y=y, heading=heading,
+            max_speed=max_speed, max_angular_speed=max_angular_speed,
+            position_tolerance=position_tolerance, max_corrections=max_corrections,
+            timeout=timeout, blocking=True,
+        )
+
+    def _wifi_plan_and_follow(self, target, waypoints=None, obstacles=None, bounds=None,
+                              stop_indices=None, max_speed=0.0, max_spacing=0.0,
+                              timeout=0.0, allow_reverse=False, seed=None,
+                              target_heading=None, heading_strength=1.0) -> bool:
+        if isinstance(target, dict):
+            target = (float(target['x']), float(target['y']))
+        elif isinstance(target, (list, tuple)):
+            target = (float(target[0]), float(target[1]))
+        return self.plan_and_follow(
+            target=target,
+            waypoints=waypoints,
+            obstacles=obstacles,
+            bounds=bounds,
+            stop_indices=stop_indices,
+            max_speed=float(max_speed),
+            max_spacing=float(max_spacing),
+            timeout=float(timeout),
+            allow_reverse=bool(allow_reverse),
+            seed=int(seed) if seed is not None else None,
+            target_heading=float(target_heading) if target_heading is not None else None,
+            heading_strength=float(heading_strength),
+        )
+
+    def _wifi_start_path(self, max_speed: float = 0.0, max_spacing: float = 0.0,
+                         timeout: float = 0.0, allow_reverse: bool = False) -> bool:
+        return self.start_path(max_speed=max_speed, max_spacing=max_spacing,
+                               timeout=timeout, allow_reverse=allow_reverse)
+
+    def _wifi_load_path(self, path: dict, start: bool = False, clear_existing: bool = True) -> bool:
+        return self.load_path(path_data=path, start=start, clear_existing=clear_existing)
 
     # ------------------------------------------------------------------------------------------------------------------
     def _notify_config_changed(self):

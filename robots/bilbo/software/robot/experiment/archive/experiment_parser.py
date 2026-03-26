@@ -733,7 +733,7 @@ def _register_builtin_actions():
         type_name="stop_path",
         action_class=StopPathAction,
         parameters=[],
-        description="Stop/abort the current path"
+        description="Stop/stop the current path"
     ))
 
     register_action(ActionEntry(

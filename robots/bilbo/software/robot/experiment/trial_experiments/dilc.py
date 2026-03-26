@@ -31,17 +31,17 @@ from datetime import datetime
 
 import numpy as np
 
-
 from core.communication.wifi.bilbolab_wifi_interface import (
     wifi_event_definition, WifiEventContainer, WifiEvent, WifiEventFlag,
 )
 from core.utils.callbacks import callback_definition, CallbackContainer
-from core.utils.control_lib.lib_control.il.q_filter import FIR_Design_Params, design_zero_phase_fir, build_Qf_zero_padded
+from core.utils.control_lib.lib_control.il.q_filter import FIR_Design_Params, design_zero_phase_fir, \
+    build_Qf_zero_padded
 from core.utils.control_lib.lib_control.lifted_systems import vec2liftedMatrix
 from core.utils.data import generate_time_vector_by_length, generate_random_input
 from core.utils.events import event_definition, Event, wait_for_events, OR, TIMEOUT
 from core.utils.logging_utils import Logger, enable_redirection, disable_redirection
-from core.utils.time import wait_until
+from core.utils.time import wait_until, interruptible_sleep
 from robot.bilbo_common import BILBO_Common
 from robot.communication.bilbo_communication import BILBO_Communication
 from robot.config import BILBO_Config
@@ -85,13 +85,31 @@ class DILC_Experiment_Meta_Settings:
         auto_start_trials: If True, trials start automatically after the robot is
             prepared (no resume needed). If False, user must send resume to start each trial.
         auto_accept_trials: If True, trial results are accepted automatically (no
-            resume/revert needed). If False, user must accept, repeat, or abort each trial.
+            resume/revert needed). If False, user must accept, repeat, or stop each trial.
+        enable_psi_control: If True, enables heading (psi) control before each trajectory
+            execution and keeps it enabled throughout.
+        disable_tracker_during_trajectory: If True, disables the OptiTrack tracker before
+            each trajectory and re-enables it after the trajectory finishes. Useful to
+            prevent tracker corrections from disturbing the control during injection.
     """
     automatic_initial_conditions_reset: bool = True
     check_if_robot_is_static: bool = True
     static_timeout_s: float = 10.0
     auto_start_trials: bool = False
     auto_accept_trials: bool = False
+    enable_psi_control: bool = False
+    disable_tracker_during_trajectory: bool = False
+
+
+@dataclasses.dataclass
+class DILC_Requirements:
+    """Requirements that must be met before the experiment can start.
+
+    Each requirement defaults to False (not required). Set to True in
+    the experiment settings to enforce the check during initialization.
+    """
+    tracker: bool = False
+    timecode: bool = False
 
 
 @dataclasses.dataclass
@@ -140,9 +158,20 @@ class DILC_Experiment_Settings:
     ilc_gain: float = 1.5
     iml_gain: float = 1.5
     meta: DILC_Experiment_Meta_Settings = dataclasses.field(default_factory=DILC_Experiment_Meta_Settings)
+    requirements: DILC_Requirements = dataclasses.field(default_factory=DILC_Requirements)
     u0_params: DILC_U0_Params = dataclasses.field(default_factory=DILC_U0_Params)
     u0: np.ndarray | None = None
     m0: np.ndarray | None = None
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class DILC_Trial_Meta:
+    """Metadata for a single trial."""
+    timecode: str | None = None
+    tick_start: int | None = None
+    tick_end: int | None = None
+    time_start: float | None = None
+    time_end: float | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -178,12 +207,13 @@ class DILC_Trial_Data:
     L_ilc: np.ndarray
     L_iml: np.ndarray
 
+    meta: DILC_Trial_Meta | None = None
     samples: list[dict] | None = None
 
 
 class TrialResult(enum.Enum):
     """Outcome of a single trial execution."""
-    ERROR = "ERROR"  # Trial failed (hardware error, timeout, user abort)
+    ERROR = "ERROR"  # Trial failed (hardware error, timeout, user stop)
     REVERT = "REVERT"  # User requested to repeat this trial (discard result)
     FINISHED = "FINISHED"  # Trial completed and ILC/IML update was applied
 
@@ -193,7 +223,7 @@ class DILC_Experiment_State(enum.StrEnum):
     NONE = "NONE"  # Not yet initialized
     INITIALIZED = "INITIALIZED"  # Initialized and ready to run
     RUNNING = "RUNNING"  # Currently executing trials
-    ERROR = "ERROR"  # Stopped due to an error or abort
+    ERROR = "ERROR"  # Stopped due to an error or stop
     FINISHED = "FINISHED"  # All trials completed successfully
 
 
@@ -327,11 +357,81 @@ class DILC_Experiment:
       - The input trajectory ``u_j`` (via ILC) to reduce tracking error
       - The system model ``m_j`` (via IML) to improve learning gain accuracy
 
+    Experiment lifecycle and hook points
+    =====================================
+
+    The experiment is driven by ``run()``, which calls ``initialize()`` once,
+    then loops over ``run_trial()`` for each of the J trials. The base class
+    provides five **hook methods** (no-ops by default) that subclasses can
+    override to inject behaviour without duplicating the core logic.
+
+    ::
+
+        run()
+        ├── initialize()
+        │   ├── _check_requirements()
+        │   ├── ... (validate settings, build Q-filters, generate u0/m0)
+        │   ├── _on_initialize()          ← HOOK: register external resources
+        │   └── emit experiment_initialized
+        │
+        ├── for each trial j = 0 … J-1:
+        │   └── run_trial()
+        │       ├── emit trial_started
+        │       ├── prepare_trial()         (navigate to IC, wait for static)
+        │       ├── _on_trial_prepared()   ← HOOK: reset sensors / obstacles
+        │       ├── build input trajectory
+        │       ├── (wait for user resume, if not auto-start)
+        │       ├── execute trajectory (blocking)
+        │       ├── _on_after_trajectory() ← HOOK: read sensors → returns extra dict
+        │       ├── collect samples
+        │       ├── evaluate tracking error
+        │       ├── (wait for user accept/repeat/stop, if not auto-accept)
+        │       ├── compute ILC + IML updates
+        │       ├── _build_trial_data()    ← HOOK: create trial data (subclass type)
+        │       └── emit trial_finished
+        │
+        ├── _build_results() / _save_results_to_file()
+        ├── emit experiment_finished / experiment_error
+        └── _on_cleanup()                  ← HOOK: release external resources
+
+    ``_on_cleanup()`` is called at **every** exit path (init failure, trial
+    error, user abort, and successful completion).
+
+    Hook summary
+    ------------
+    _on_initialize()
+        Called once at the end of ``initialize()``, after Q-filters are built
+        but before the ``experiment_initialized`` event is emitted.
+        Use: register external resources (e.g. testbed obstacles).
+
+    _on_cleanup()
+        Called at every exit of ``run()`` (success, error, abort, init failure).
+        Use: release external resources (e.g. remove obstacles from testbed).
+
+    _on_trial_prepared()
+        Called after ``prepare_trial()`` returns True, before the input
+        trajectory is built. The robot is at the initial conditions.
+        Use: reset per-trial sensors or obstacle flags.
+
+    _on_after_trajectory(trajectory_data) → dict
+        Called after the trajectory finishes (and psi control / tracker are
+        restored), before the ``trajectory_data is None`` check. Receives
+        the trajectory result (may be None on failure). The returned dict
+        is forwarded to ``_build_trial_data()`` as ``extra_trial_data``.
+        Use: read obstacle sensors, evaluate pass/fail conditions.
+
+    _build_trial_data(..., extra_trial_data) → DILC_Trial_Data
+        Factory method that creates the trial data object. Override to
+        return a subclass of ``DILC_Trial_Data`` with additional fields,
+        populated from ``extra_trial_data``.
+
+    Trial flow
+    ----------
     Each trial follows this flow:
       1. Navigate the robot to the initial conditions
-      2. Wait for user to start the trial
+      2. Wait for user to start the trial (or auto-start)
       3. Apply input trajectory ``u_j`` and record the output ``y_j``
-      4. (Optional) Wait for user to accept, repeat, or abort the trial
+      4. (Optional) Wait for user to accept, repeat, or stop the trial
       5. Compute IML model update: ``m_{j+1}``
       6. Compute ILC input update: ``u_{j+1}``
 
@@ -404,21 +504,45 @@ class DILC_Experiment:
             id='dilc_experiment',
         )
 
-        self.common.interaction_events.abort.on(self.abort, once=True)
+        self.common.interaction_events.stop.on(self.stop, once=True)
 
     # === PUBLIC METHODS ===========================================================================================
 
+    def _check_requirements(self):
+        """Check all enabled requirements and raise if any are not met."""
+        reqs = self.settings.requirements
+        errors: list[str] = []
+
+        if reqs.tracker:
+            if not self.common.is_tracker_connected():
+                errors.append("OptiTrack tracker is not connected")
+
+        if reqs.timecode:
+            if self.common.get_timecode() is None:
+                errors.append("No timecode received yet")
+
+        if errors:
+            msg = "Experiment requirements not met: " + "; ".join(errors)
+            self.logger.error(msg)
+            raise RuntimeError(msg)
+
+        self.logger.info("All requirements met")
+
+    # ----------------------------------------------------------------------------------------------------------
     def initialize(self):
         """Initialize the experiment: set up trajectories, Q-filters, and state.
 
         Must be called before ``run()`` (it is called automatically by ``run()``).
         Sets up:
+          - Requirement checks (tracker, timecode)
           - Initial input trajectory ``u_0`` (random if not provided)
           - Initial model ``m_0`` (zeros if not provided)
           - Zero-phase FIR Q-filter matrices for robustness
 
         Emits: ``experiment_initialized``
+        Raises: RuntimeError if any enabled requirement is not met.
         """
+        self._check_requirements()
         self.N = len(self.settings.reference)
 
         # Validate trajectory length: STM32 requires a multiple of 10
@@ -473,6 +597,8 @@ class DILC_Experiment:
         self._abort_requested = False
         self.trials = []
 
+        self._on_initialize()
+
         self.state = DILC_Experiment_State.INITIALIZED
         self.events.experiment_initialized.set(data={
             'settings': self.settings,
@@ -491,11 +617,11 @@ class DILC_Experiment:
         """Run the full DILC experiment.
 
         Initializes the experiment, then executes all J trials sequentially.
-        Handles user interactions (accept, repeat, abort) between trials and
+        Handles user interactions (accept, repeat, stop) between trials and
         applies the ILC/IML updates after each accepted trial.
 
         Returns:
-            DILC_Results on completion (includes partial data on error/abort),
+            DILC_Results on completion (includes partial data on error/stop),
             or None if initialization itself fails.
 
         Emits: ``experiment_started``, then ``experiment_finished`` or ``experiment_error``
@@ -516,6 +642,7 @@ class DILC_Experiment:
                 **self._wifi_data,
                 'message': f"Initialization failed: {e}",
             }, flags=self._WIFI_FLAGS)
+            self._on_cleanup()
             return None
 
         # --- Start ---
@@ -548,7 +675,7 @@ class DILC_Experiment:
         # --- Main trial loop ---
         while self.j < self.settings.J:
 
-            # Check for external abort request (e.g., from GUI abort button)
+            # Check for external stop request (e.g., from GUI stop button)
             if self._abort_requested:
                 self.logger.warning("Experiment aborted by external request")
                 break
@@ -585,6 +712,7 @@ class DILC_Experiment:
                     'results_filepath': results_filepath,
                 }, flags=self._WIFI_FLAGS)
                 beep(frequency='low', repeats=3)
+                self._on_cleanup()
                 return results
 
         # --- Post-loop: completed or aborted ---
@@ -606,6 +734,7 @@ class DILC_Experiment:
                 'message': 'Experiment aborted by user',
                 'results_filepath': results_filepath,
             }, flags=self._WIFI_FLAGS)
+            self._on_cleanup()
             return results
 
         # All trials completed successfully
@@ -631,6 +760,7 @@ class DILC_Experiment:
         self.callbacks.experiment_finished.call()
         self.wifi_events.experiment_finished.send(data={
             **self._wifi_data,
+            **self._extra_experiment_finished_wifi_data(),
             'final_e_norm_ilc': float(self.trials[-1].e_norm_ilc) if self.trials else None,
             'final_e_norm_iml': float(self.trials[-1].e_norm_iml) if self.trials else None,
             'error_norms_ilc': [float(t.e_norm_ilc) for t in self.trials],
@@ -639,9 +769,10 @@ class DILC_Experiment:
         }, flags=self._WIFI_FLAGS)
         beep(frequency='high', repeats=3)
 
+        self._on_cleanup()
         return results
 
-    # ----------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def run_trial(self) -> TrialResult:
         """Execute a single trial: prepare, run trajectory, compute ILC/IML update.
 
@@ -649,9 +780,9 @@ class DILC_Experiment:
             1. Emit ``trial_started``
             2. Prepare the robot (navigate to initial conditions, stabilize)
             3. Build and preview the input trajectory
-            4. Wait for user to start the trial (resume / abort)
+            4. Wait for user to start the trial (resume / stop)
             5. Execute the trajectory on the robot (blocking)
-            6. Optionally wait for user to accept / repeat / abort
+            6. Optionally wait for user to accept / repeat / stop
             7. Compute IML model update and ILC input update
             8. Store trial data and advance to the next trial
 
@@ -692,6 +823,8 @@ class DILC_Experiment:
                 }, flags=self._WIFI_FLAGS)
                 return TrialResult.ERROR
 
+            self._on_trial_prepared()
+
             # --- Step 2: Build the input trajectory for this trial ---
             input_trajectory = BILBO_InputTrajectory.from_vector(
                 vector=self._u,
@@ -723,7 +856,7 @@ class DILC_Experiment:
                 data, trace = wait_for_events(
                     OR(
                         self.common.interaction_events.resume,
-                        self.common.interaction_events.abort,
+                        self.common.interaction_events.stop,
                     ),
                     timeout=60,
                 )
@@ -741,7 +874,7 @@ class DILC_Experiment:
                     }, flags=self._WIFI_FLAGS)
                     return TrialResult.ERROR
 
-                if trace.caused_by(self.common.interaction_events.abort):
+                if trace.caused_by(self.common.interaction_events.stop):
                     self.logger.warning("User aborted before trajectory start")
                     self.events.trial_error.set(data={
                         'trial_index': self.j,
@@ -759,6 +892,12 @@ class DILC_Experiment:
             self.interfaces.disable_external_input()
             self.control.disable_external_input()
 
+            if self.settings.meta.enable_psi_control:
+                self.control.enable_psi_control(True)
+
+            if self.settings.meta.disable_tracker_during_trajectory:
+                self.estimation.set_tracker_updates_enabled(False)
+
             self.events.trajectory_started.set(data={
                 'trajectory': input_trajectory,
                 'trial_index': self.j,
@@ -770,6 +909,23 @@ class DILC_Experiment:
 
             # Blocking call — the robot executes the full input trajectory
             trajectory_data = self.experiment_handler.run_trajectory(input_trajectory)
+
+            if self.settings.meta.enable_psi_control:
+                self.control.enable_psi_control(False)
+
+            if self.settings.meta.disable_tracker_during_trajectory:
+                self.estimation.set_tracker_updates_enabled(True)
+
+            # Determine the timecode at which the trajectory started
+            trajectory_start_timecode: str | None = None
+            if trajectory_data is not None:
+                tc = self.common.get_timecode_for_tick(trajectory_data.meta.start_tick)
+                if tc is not None:
+                    trajectory_start_timecode = tc.to_string()
+                    self.logger.info(f"Trajectory start timecode: {trajectory_start_timecode}")
+
+            # Subclass hook: runs after trajectory completes (e.g., read sensors)
+            extra_trial_data = self._on_after_trajectory(trajectory_data)
 
             if trajectory_data is None:
                 self.logger.error("Trajectory execution failed (run_trajectory returned None)")
@@ -878,6 +1034,7 @@ class DILC_Experiment:
             self.callbacks.trajectory_finished.call()
             self.wifi_events.trajectory_finished.send(data={
                 **self._wifi_data,
+                **extra_trial_data,
                 'error_norm': float(error_norm),
                 'max_abs_error': max_abs_error,
                 'reference': self.settings.reference,
@@ -897,7 +1054,7 @@ class DILC_Experiment:
                     OR(
                         self.common.interaction_events.resume,
                         self.common.interaction_events.repeat,
-                        self.common.interaction_events.abort,
+                        self.common.interaction_events.stop,
                     ),
                     timeout=120.0,
                 )
@@ -915,7 +1072,7 @@ class DILC_Experiment:
                     }, flags=self._WIFI_FLAGS)
                     return TrialResult.ERROR
 
-                if trace.caused_by(self.common.interaction_events.abort):
+                if trace.caused_by(self.common.interaction_events.stop):
                     self.logger.warning("User aborted after trajectory")
                     self.events.trial_error.set(data={
                         'trial_index': self.j,
@@ -972,21 +1129,27 @@ class DILC_Experiment:
             self.logger.info(f"  Model change (||m_new - m||): {model_change_norm:.6f}")
 
             # --- Step 8: Store trial data ---
-            trial_data = DILC_Trial_Data(
-                index=self.j,
-                t=self.t_vector,
-                u=self._u.copy(),
-                y=theta_trajectory.copy(),
-                m=self._m.copy(),
-                e_ilc=error_ilc,
-                e_iml=error_iml,
+            trial_meta = DILC_Trial_Meta(
+                timecode=trajectory_start_timecode,
+                tick_start=trajectory_data.meta.start_tick,
+                tick_end=trajectory_data.meta.end_tick,
+                time_start=self.common.get_time_for_tick(trajectory_data.meta.start_tick),
+                time_end=self.common.get_time_for_tick(trajectory_data.meta.end_tick),
+            )
+            trial_data = self._build_trial_data(
+                trial_meta=trial_meta,
+                theta_trajectory=theta_trajectory,
+                tracking_error=tracking_error,
+                error_ilc=error_ilc,
+                error_iml=error_iml,
                 e_norm_ilc=e_norm_ilc,
                 e_norm_iml=e_norm_iml,
-                u_p1=up1,
-                m_p1=mp1,
+                up1=up1,
+                mp1=mp1,
                 L_ilc=L_ilc,
                 L_iml=L_iml,
-                samples=trial_samples,
+                trial_samples=trial_samples,
+                extra_trial_data=extra_trial_data,
             )
             self.trials.append(trial_data)
 
@@ -999,6 +1162,7 @@ class DILC_Experiment:
             self.callbacks.trial_finished.call()
             self.wifi_events.trial_finished.send(data={
                 **self._wifi_data,
+                **extra_trial_data,
                 'e_norm_ilc': e_norm_ilc,
                 'e_norm_iml': e_norm_iml,
                 'input_change_norm': input_change_norm,
@@ -1035,6 +1199,9 @@ class DILC_Experiment:
             self.interfaces.enable_external_input()
             self.control.enable_external_input()
 
+            self.control.enable_psi_control(False)
+            self.estimation.set_tracker_updates_enabled(True)
+
     # ----------------------------------------------------------------------------------------------------------
     def prepare_trial(self) -> bool:
         """Navigate the robot to the initial conditions and wait for stability.
@@ -1052,18 +1219,21 @@ class DILC_Experiment:
         Emits: ``trial_prepared``
         """
         self.logger.info(f"Preparing trial {self.j + 1}/{self.settings.J}...")
+        stop = self.common.interaction_events.stop
 
         # Ensure the robot is in BALANCING mode
         if self.control.mode != BILBO_Control_Mode.BALANCING:
             self.logger.info("Switching to BALANCING mode")
             self.control.set_mode(BILBO_Control_Mode.BALANCING)
-            time.sleep(1)
+            if not interruptible_sleep(1, stop):
+                return False
 
         # Navigate to initial conditions (if enabled)
         if self.settings.meta.automatic_initial_conditions_reset:
 
             self.control.set_mode(BILBO_Control_Mode.POSITION)
-            time.sleep(1)
+            if not interruptible_sleep(1, stop):
+                return False
 
             # Use separate initial conditions for the first trial (u0 trial) if provided
             if self.j == 0 and self.settings.initial_conditions_u0 is not None:
@@ -1086,7 +1256,8 @@ class DILC_Experiment:
                 return False
             self.logger.info("Reached initial position")
 
-            time.sleep(0.5)
+            if not interruptible_sleep(0.5, stop):
+                return False
 
             # Turn to the desired heading
             result = self.control.position_control.turn_to_heading(
@@ -1100,22 +1271,12 @@ class DILC_Experiment:
                 return False
             self.logger.info("Reached initial heading")
 
-            time.sleep(1)
+            if not interruptible_sleep(1, stop):
+                return False
             self.control.set_mode(BILBO_Control_Mode.BALANCING)
-            time.sleep(0.25)
-            # self.control.set_mode(BILBO_Control_Mode.POSITION)
-            # time.sleep(0.25)
-            # Make a tiny last pass to the desired position. Turning can lead to position errors
-            # result = self.control.position_control.move_to_point(
-            #     x=ic.x,
-            #     y=ic.y,
-            #     blocking=True,
-            #     timeout=10,
-            # )
-            # if not result:
-            #     self.logger.error("Failed to reach final position")
-            #     return False
-            # self.logger.info("Reached initial conditions")
+            if not interruptible_sleep(0.25, stop):
+                return False
+            self.logger.info("Reached initial conditions")
 
         else:
             self.logger.info("Skipping automatic positioning (disabled in meta settings)")
@@ -1127,10 +1288,12 @@ class DILC_Experiment:
             timeout = self.settings.meta.static_timeout_s
             self.logger.info(f"Waiting for robot to become static (timeout={timeout}s)...")
             result = wait_until(
-                lambda: self.estimation.static,
+                lambda: self.estimation.static or self._abort_requested,
                 timeout_s=timeout,
                 poll_period_s=0.25,
             )
+            if self._abort_requested:
+                return False
             if not result:
                 self.logger.error(f"Robot did not become static within {timeout} seconds")
                 return False
@@ -1152,14 +1315,15 @@ class DILC_Experiment:
             'psi': ic.psi,
             'psi_deg': float(np.rad2deg(ic.psi)),
         }, flags=self._WIFI_FLAGS)
+
         self.logger.info("Trial preparation complete")
         return True
 
     # ----------------------------------------------------------------------------------------------------------
-    def abort(self, *args, **kwargs):
+    def stop(self, *args, **kwargs):
         """Request experiment abortion from an external caller (e.g., GUI).
 
-        Sets the abort flag, fires the interaction abort event (to unblock any
+        Sets the stop flag, fires the interaction stop event (to unblock any
         wait_for_events calls), and switches to BALANCING mode to immediately
         interrupt position control moves.
         """
@@ -1167,8 +1331,8 @@ class DILC_Experiment:
         self.logger.warning("Abort requested — interrupting experiment")
         # Switch to BALANCING to cancel any active position control moves
         self.control.set_mode(BILBO_Control_Mode.BALANCING)
-        # Fire the interaction abort event to unblock wait_for_events calls
-        self.common.interaction_events.abort.set()
+        # Fire the interaction stop event to unblock wait_for_events calls
+        self.common.interaction_events.stop.set()
 
     # ----------------------------------------------------------------------------------------------------------
     def set_auto_start_trials(self, value: bool):
@@ -1189,6 +1353,58 @@ class DILC_Experiment:
         self._auto_accept_trials = bool(value)
         self.logger.info(f"auto_accept_trials set to {self._auto_accept_trials}")
         self._send_meta_settings_changed()
+
+    # === HOOKS (override in subclasses) ==========================================================================
+
+    def _on_initialize(self):
+        """Called at the end of initialize(), before events are emitted. Override to add setup."""
+        pass
+
+    def _on_cleanup(self):
+        """Called at every exit point of run(). Override to release resources."""
+        pass
+
+    def _on_trial_prepared(self):
+        """Called after prepare_trial() succeeds, before trajectory is built. Override to reset sensors etc."""
+        pass
+
+    def _on_after_trajectory(self, trajectory_data) -> dict:
+        """Called after the trajectory finishes (even if it failed). Override to read sensors etc.
+
+        Returns:
+            Dict of extra data to pass to _build_trial_data(). Empty dict by default.
+        """
+        return {}
+
+    def _extra_experiment_finished_wifi_data(self) -> dict:
+        """Extra fields to include in the experiment_finished WiFi event.
+
+        Override to add subclass-specific summary data (e.g. per-trial hit lists).
+        """
+        return {}
+
+    def _build_trial_data(self, *, trial_meta, theta_trajectory, tracking_error,
+                          error_ilc, error_iml, e_norm_ilc, e_norm_iml,
+                          up1, mp1, L_ilc, L_iml, trial_samples,
+                          extra_trial_data: dict) -> DILC_Trial_Data:
+        """Create the trial data object. Override to return a subclass with extra fields."""
+        return DILC_Trial_Data(
+            index=self.j,
+            t=self.t_vector,
+            u=self._u.copy(),
+            y=theta_trajectory.copy(),
+            m=self._m.copy(),
+            e_ilc=error_ilc,
+            e_iml=error_iml,
+            e_norm_ilc=e_norm_ilc,
+            e_norm_iml=e_norm_iml,
+            u_p1=up1,
+            m_p1=mp1,
+            L_ilc=L_ilc,
+            L_iml=L_iml,
+            meta=trial_meta,
+            samples=trial_samples,
+        )
 
     # === PRIVATE METHODS ==========================================================================================
 

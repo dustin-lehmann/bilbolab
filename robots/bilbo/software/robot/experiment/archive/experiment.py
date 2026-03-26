@@ -134,7 +134,7 @@ class ExperimentActionStatus(enum.StrEnum):
     FINISHED = 'finished'       # Completed successfully
     ERROR = 'error'             # Failed with error
     TIMEOUT = 'timeout'         # Timed out
-    SKIPPED = 'skipped'         # Skipped due to experiment abort
+    SKIPPED = 'skipped'         # Skipped due to experiment stop
 
 
 # ======================================================================================================================
@@ -1527,7 +1527,7 @@ class TurnToAction(ExperimentAction):
 
 @dataclasses.dataclass(kw_only=True)
 class StopPathAction(ExperimentAction):
-    """Stop/abort the current path."""
+    """Stop/stop the current path."""
 
     def execute(self) -> bool:
         self._on_started()
@@ -2279,8 +2279,8 @@ class Experiment:
         self.tick += 1
 
     # ------------------------------------------------------------------------------------------------------------------
-    def abort(self, reason: str = "External abort request"):
-        """Abort the experiment immediately (external abort request).
+    def stop(self, reason: str = "External stop request"):
+        """Abort the experiment immediately (external stop request).
 
         This will:
         1. Stop all running actions
@@ -2292,15 +2292,15 @@ class Experiment:
 
     # ------------------------------------------------------------------------------------------------------------------
     def _abort_with_data(self, status: ExperimentStatus, error_action_id: str | None, reason: str):
-        """Internal method to abort experiment and collect data.
+        """Internal method to stop experiment and collect data.
 
         Args:
             status: The experiment status (ERROR, TIMEOUT, ABORTED)
-            error_action_id: ID of the action that caused the abort (if applicable)
-            reason: Human-readable reason for the abort
+            error_action_id: ID of the action that caused the stop (if applicable)
+            reason: Human-readable reason for the stop
         """
         if self.finished:
-            self.logger.warning(f"Experiment {self.definition.id} already finished, cannot abort")
+            self.logger.warning(f"Experiment {self.definition.id} already finished, cannot stop")
             return
 
         self.logger.warning(f"Aborting experiment {self.definition.id} ({status.value}): {reason}")
@@ -2423,7 +2423,7 @@ class Experiment:
     def _collect_and_emit_data(self):
         """Collect experiment data and emit the appropriate event (finished or error).
 
-        This method handles both successful completion and error/abort cases.
+        This method handles both successful completion and error/stop cases.
         """
         self.finished = True
 
@@ -2436,7 +2436,7 @@ class Experiment:
             self.experiment_handler.utilities.beep(888, 500, 2)
         else:
             speak(f"Experiment {self.definition.id} {self._status.value}")
-            self.experiment_handler.utilities.beep(440, 300, 3)  # Lower tone for error/abort
+            self.experiment_handler.utilities.beep(440, 300, 3)  # Lower tone for error/stop
 
         # Always reset at end of experiment: re-enable external input
         self.experiment_handler.interfaces.enable_external_input()
@@ -2536,7 +2536,7 @@ class Experiment:
 
     # ------------------------------------------------------------------------------------------------------------------
     def _on_action_error(self, action: ExperimentAction, data: dict | None = None, **kwargs):
-        """Handle action error: update container status and abort experiment with data collection.
+        """Handle action error: update container status and stop experiment with data collection.
 
         Args:
             action: The action that failed
@@ -2572,7 +2572,7 @@ class Experiment:
 
     # ------------------------------------------------------------------------------------------------------------------
     def _on_action_timeout(self, action: ExperimentAction, data: dict | None = None, **kwargs):
-        """Handle action timeout: update container status and abort experiment with data collection.
+        """Handle action timeout: update container status and stop experiment with data collection.
 
         Args:
             action: The action that timed out

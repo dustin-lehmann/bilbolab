@@ -70,6 +70,11 @@ class BILBO_SoundSettings:
 
 
 @dataclasses.dataclass
+class BILBO_ControlSettings:
+    auto_position_mode: bool = False
+
+
+@dataclasses.dataclass
 class BILBO_MiscSettings:
     warn_on_sample_batching: bool = True
 
@@ -92,6 +97,7 @@ class BILBO_Settings:
     tracker: BILBO_TrackerSettings = field(default_factory=BILBO_TrackerSettings)
     joystick: BILBO_JoystickSettings = field(default_factory=BILBO_JoystickSettings)
     sound: BILBO_SoundSettings = field(default_factory=BILBO_SoundSettings)
+    control: BILBO_ControlSettings = field(default_factory=BILBO_ControlSettings)
     misc: BILBO_MiscSettings = field(default_factory=BILBO_MiscSettings)
 
 
@@ -197,7 +203,8 @@ class BILBO(MainProvider):
                                            comm=self.communication,
                                            tracker_settings=self.settings.tracker)
 
-        self.control = BILBO_Control(common=self.common, comm=self.communication, estimation=self.estimation)
+        self.control = BILBO_Control(common=self.common, comm=self.communication, estimation=self.estimation,
+                                     control_settings=self.settings.control)
         self.drive = BILBO_Drive(comm=self.communication)
         self.sensors = BILBO_Sensors(comm=self.communication)
 

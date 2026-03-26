@@ -15,6 +15,9 @@ sound:
   volume: 0.25
   voice: robot  # female, male, or robot
 
+control:
+  auto_position_mode: true  # auto-switch to POSITION when calling move_to/turn_to wrappers
+
 paths:
   main: '~/robot'
 

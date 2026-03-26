@@ -54,7 +54,7 @@ class BILBO_Interfaces:
     _joystick_input: tuple[float, float] = (0, 0)
 
     _joystick: Joystick
-    _joystick_manager: JoystickManager
+    _joystick_manager: JoystickManager | None
     _input_thread: threading.Thread
     _exit_input_task: bool
 
@@ -116,29 +116,29 @@ class BILBO_Interfaces:
         )
 
         self.communication.wifi.newCommand(
-            identifier='revert',
-            function=self.core.setRepeatEvent,
+            identifier='stop',
+            function=self.core.setStopEvent,
             arguments=[CommandArgument(
                 name='data',
                 type='any',
                 optional=True,
                 default=None,
-                description='Data to repeat with (optional)'
+                description='Data to stop with (optional)'
             )],
-            description='Repeat the last action'
+            description='Stop the current action'
         )
 
         self.communication.wifi.newCommand(
-            identifier='abort',
-            function=self.core.setAbortEvent,
+            identifier='start',
+            function=self.core.setStartEvent,
             arguments=[CommandArgument(
                 name='data',
                 type='any',
                 optional=True,
                 default=None,
-                description='Data to abort with (optional)'
+                description='Data to start with (optional)'
             )],
-            description='Abort the current action'
+            description='Start the current action'
         )
 
         self.communication.wifi.newCommand(

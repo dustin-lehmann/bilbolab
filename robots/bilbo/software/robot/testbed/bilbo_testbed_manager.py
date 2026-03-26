@@ -369,7 +369,7 @@ class BILBO_TestbedManager:
                 was_hit = bar.hit
                 bar.update(x, y, theta, psi, config)
                 if bar.hit and not was_hit:
-                    self.logger.info(f"Limbo bar '{bar.id}' hit!")
+                    self.logger.warning(f"Limbo bar '{bar.id}' hit! x={x:.2f}, y={y:.2f}, theta={theta:.2f}, psi={psi:.2f}")
                     self.events.limbo_bar_hit.set(data={'bar_id': bar.id})
                     self.wifi_events.limbo_bar_hit.send(data={'bar_id': bar.id})
 

@@ -74,6 +74,7 @@ class BILBO_ExperimentHandler_Events(EventContainer):
 
 class BILBO_ExperimentHandler_Status(enum.StrEnum):
     IDLE = 'IDLE'
+    LOADING = 'LOADING'
     EXPERIMENT = 'EXPERIMENT'
     TRAJECTORY = 'TRAJECTORY'
     ERROR = 'ERROR'
@@ -96,10 +97,12 @@ _EXPERIMENT_WIFI_EVENT = WifiEvent(data_type=dict)
 
 @wifi_event_definition
 class ExperimentWifiEvents(WifiEventContainer):
+    loaded: WifiEvent = _EXPERIMENT_WIFI_EVENT
     started: WifiEvent = _EXPERIMENT_WIFI_EVENT
     finished: WifiEvent = _EXPERIMENT_WIFI_EVENT
     error: WifiEvent = _EXPERIMENT_WIFI_EVENT
     timeout: WifiEvent = _EXPERIMENT_WIFI_EVENT
+    message: WifiEvent = _EXPERIMENT_WIFI_EVENT
     action_started: WifiEvent = _EXPERIMENT_WIFI_EVENT
     action_finished: WifiEvent = _EXPERIMENT_WIFI_EVENT
     trajectory_finished: WifiEvent = _EXPERIMENT_WIFI_EVENT
@@ -153,6 +156,9 @@ class BILBO_ExperimentHandler:
         self._active_dilc_experiment = None
 
         self.common.callbacks.end_of_step.register(self._end_of_step_callback)
+
+        # Stop running experiment when the stop interaction event is received
+        self.common.interaction_events.stop.on(self._on_stop_interaction_event)
 
         self.communication.serial.callbacks.event.register(self._sequencer_event_callback,
                                                            parameters={'messages': [BILBO_Sequencer_Event_Message]})
@@ -292,7 +298,7 @@ class BILBO_ExperimentHandler:
                 self.trajectory_status = BILBO_ExperimentHandler_TrajectoryStatus.IDLE
                 return None
 
-            # 3) Wait for STARTED or ABORTED (early abort handling)
+            # 3) Wait for STARTED or ABORTED (early stop handling)
             data, trace = wait_for_events(
                 events=OR(
                     (self._internal_events.trajectory_started, pred_flag_equals('trajectory_id', trajectory.id)),
@@ -303,7 +309,7 @@ class BILBO_ExperimentHandler:
             )
 
             if data is TIMEOUT:
-                self.logger.warning(f"Failed to start trajectory {trajectory.id}: No start/abort event received")
+                self.logger.warning(f"Failed to start trajectory {trajectory.id}: No start/stop event received")
                 try:
                     self._send_trajectory_stop_signal_to_lowlevel()
                 except Exception as e:
@@ -344,7 +350,7 @@ class BILBO_ExperimentHandler:
             )
 
             if data is TIMEOUT:
-                self.logger.warning(f"Trajectory {trajectory.id} timeout: No finish/abort event received")
+                self.logger.warning(f"Trajectory {trajectory.id} timeout: No finish/stop event received")
                 try:
                     self._send_trajectory_stop_signal_to_lowlevel()
                 except Exception as e:
@@ -426,10 +432,30 @@ class BILBO_ExperimentHandler:
             self.logger.warning("Cannot start experiment: another experiment is already active")
             return False
 
+        # Transition to LOADING immediately to block concurrent requests
+        self.status = BILBO_ExperimentHandler_Status.LOADING
+        self.wifi_events.loaded.send(data={
+            'experiment_id': definition.id,
+        })
+
         experiment = BILBO_Experiment(
             definition=definition,
             common=self.common,
         )
+
+        # Wire experiment messages to WiFi before initialize (guards emit messages during setup).
+        # Use a closure capturing `experiment` directly so messages are forwarded even before
+        # self.active_experiment is set (which happens after initialize).
+        exp_id = definition.id
+        def _forward_message(data=None, *args, **kwargs):
+            if not data:
+                return
+            self.wifi_events.message.send(data={
+                'experiment_id': exp_id,
+                'text': data.get('text', ''),
+                'level': data.get('level', 'info'),
+            })
+        experiment.events.message.on(_forward_message)
 
         experiment.initialize()
 
@@ -438,6 +464,7 @@ class BILBO_ExperimentHandler:
         # If requirements failed, the experiment finishes immediately during initialize
         if experiment.finished:
             self.logger.error(f"Experiment \"{definition.id}\" failed during initialization")
+            self.status = BILBO_ExperimentHandler_Status.IDLE
             result = experiment.result
             error_msg = result.error_message if result else 'Unknown initialization error'
             self.wifi_events.error.send(data={
@@ -448,14 +475,12 @@ class BILBO_ExperimentHandler:
             self.events.experiment_error.set(flags={'experiment_id': definition.id})
             return False
 
-        # Wire finished event (handles all outcomes: success, error, timeout, abort)
+        # Wire finished event (handles all outcomes: success, error, timeout, stop)
         experiment.events.finished.on(self._on_experiment_finished, once=True)
 
         # Wire action-level events for host progress tracking
         experiment.runner.callbacks.action_started.register(self._on_action_started)
         experiment.runner.callbacks.action_finished.register(self._on_action_finished)
-        # experiment.runner.events.action_started.on(self._on_action_started, discard_match_data=False)
-        # experiment.runner.events.action_finished.on(self._on_action_finished, discard_match_data=False)
 
         self.status = BILBO_ExperimentHandler_Status.EXPERIMENT
         self.wifi_events.started.send(data={
@@ -492,12 +517,17 @@ class BILBO_ExperimentHandler:
         return True
 
     # ------------------------------------------------------------------------------------------------------------------
+    def _on_stop_interaction_event(self, *args, **kwargs):
+        """Handle the stop interaction event (button press or WiFi command)."""
+        self.stop_experiment(reason="Stop interaction event")
+
+    # ------------------------------------------------------------------------------------------------------------------
     def _on_experiment_started(self, *args, **kwargs):
         self.common.board.beep(frequency=1000, time_ms=500, repeats=1)
 
     # ------------------------------------------------------------------------------------------------------------------
     def _on_experiment_finished(self, result: BILBO_ExperimentResult = None, *args, **kwargs):
-        """Handle experiment completion (success, error, timeout, abort).
+        """Handle experiment completion (success, error, timeout, stop).
 
         Cleans up handler state immediately so the robot remains responsive,
         then saves result and notifies host in a background thread.
@@ -534,7 +564,7 @@ class BILBO_ExperimentHandler:
         """Save experiment result to file and send WiFi events (runs in background thread)."""
         filepath = None
         if result is not None and experiment is not None:
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            timestamp = datetime.fromtimestamp(result.start_time).strftime("%Y-%m-%d_%H-%M-%S")
             suffix = f"_{status.value}" if status != ExperimentStatus.FINISHED else ""
             filename = f"{experiment_id}_{timestamp}{suffix}.json"
             filepath = os.path.join(EXPERIMENTS_PATH, filename)

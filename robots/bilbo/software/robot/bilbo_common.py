@@ -17,7 +17,7 @@ from hardware.control_board import RobotControl_Board
 from .config import BILBO_Config, get_bilbo_config
 from .core import get_logging_provider
 from core.utils.callbacks import callback_definition, CallbackContainer
-from core.utils.events import event_definition, Event
+from core.utils.events import event_definition, Event, EventContainer
 from core.utils.files import file_exists
 from core.utils.experiments.experiment_wrapper import _collect_git_info
 from core.utils.json_utils import readJSON
@@ -27,10 +27,11 @@ from robot.paths import CONFIG_PATH, ROBOT_PATH
 
 # ======================================================================================================================
 @event_definition
-class BILBO_Common_Interaction_Events:
+class BILBO_Common_Interaction_Events(EventContainer):
     resume: Event = Event(id='resume')
-    repeat: Event
-    abort: Event
+    start: Event = Event(id='start')
+    stop: Event = Event(id='stop')
+    repeat: Event = Event(id='repeat')
 
 
 @event_definition
@@ -75,7 +76,7 @@ class BILBO_Common:
 
     # === INIT =========================================================================================================
     def __init__(self, bilbo, board: RobotControl_Board):
-        self.interaction_events = BILBO_Common_Interaction_Events()
+        self.interaction_events = BILBO_Common_Interaction_Events(id='interaction')
         self.events = BILBO_Common_Events()
         self.callbacks = BILBO_Common_Callbacks()
 
@@ -97,6 +98,12 @@ class BILBO_Common:
         self.timecode_listener = TimecodeClient()
         self.timecode_listener.callbacks.sync.register(self._on_timecode_sync)
 
+        # Tick-time sync anchor: updated each SPI batch for precise tick→time mapping
+        self._sync_tick: int = 0
+        self._sync_monotonic: float = 0.0
+        self._sync_valid: bool = False
+        self._sync_lock = threading.Lock()
+
         self._thread = threading.Thread(target=self._connection_check_task, daemon=True)
         self._throttle_thread = threading.Thread(target=self._throttle_check_task, daemon=True)
 
@@ -117,6 +124,60 @@ class BILBO_Common:
     # ------------------------------------------------------------------------------------------------------------------
     def get_timecode(self) -> Timecode | None:
         return self.timecode_listener.get_timecode()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def update_tick_sync(self, tick: int, monotonic_time: float | None = None):
+        """Update the tick-time sync anchor. Call this when an SPI batch arrives.
+
+        Args:
+            tick: The firmware tick of the most recent sample in the batch
+                  (i.e. first sample tick + 9 for a 10-sample batch).
+            monotonic_time: The time.monotonic() captured at batch arrival.
+                            If None, uses time.monotonic() now.
+        """
+        if monotonic_time is None:
+            monotonic_time = time.monotonic()
+        with self._sync_lock:
+            self._sync_tick = tick
+            self._sync_monotonic = monotonic_time
+            self._sync_valid = True
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def get_timecode_for_tick(self, tick: int) -> Timecode | None:
+        """Get the most accurate timecode estimate for a specific firmware tick.
+
+        Uses the tick-time sync anchor (updated every SPI batch) to compute the
+        wall-clock time for the given tick, then converts to timecode.
+
+        Returns None if no timecode sync or no tick-time anchor is available.
+        """
+        current_timecode = self.timecode_listener.get_timecode()
+        if current_timecode is None:
+            return None
+
+        with self._sync_lock:
+            if not self._sync_valid:
+                return None
+            sync_tick = self._sync_tick
+            sync_monotonic = self._sync_monotonic
+
+        # The timecode client returns the timecode for "now" (time.monotonic()),
+        # so we need to offset it by the difference between now and the target tick's time.
+        now = time.monotonic()
+        target_time = sync_monotonic + (tick - sync_tick) * 0.01  # BILBO_CONTROL_DT
+        offset_s = target_time - now
+        return current_timecode + offset_s
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def get_time_for_tick(self, tick: int) -> float | None:
+        """Get the most accurate monotonic time estimate for a specific firmware tick.
+
+        Returns None if no tick-time anchor is available yet.
+        """
+        with self._sync_lock:
+            if not self._sync_valid:
+                return None
+            return self._sync_monotonic + (tick - self._sync_tick) * 0.01  # BILBO_CONTROL_DT
 
     # ------------------------------------------------------------------------------------------------------------------
     def is_tracker_connected(self) -> bool:
@@ -167,28 +228,32 @@ class BILBO_Common:
         self.logger.info("Set resume event")
         self.interaction_events.resume.set(data=data)
 
+    # ------------------------------------------------------------------------------------------------------------------
     def setRepeatEvent(self, data):
         self.logger.info("Set repeat event")
         self.interaction_events.repeat.set(data=data)
 
-    def setAbortEvent(self, data):
-        self.logger.warning("Set abort event")
-        self.interaction_events.abort.set(data=data)
+    # ------------------------------------------------------------------------------------------------------------------
+    def setStopEvent(self, data):
+        self.logger.warning("Set stop event")
+        self.interaction_events.stop.set(data=data)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def setStartEvent(self, data):
+        self.logger.info("Set start event")
+        self.interaction_events.start.set(data=data)
 
     # ------------------------------------------------------------------------------------------------------------------
     def get_general_sample_dict(self) -> dict:
 
-        current_timecode = self.timecode_listener.get_timecode()
-
-        # Adapt the timecode for the time of the LL sample. Since this is 0.1 seconds in the past, we have to adjust it
-        if current_timecode is not None:
-            current_timecode = current_timecode - 0.1
+        current_tick = self.tick
+        current_timecode = self.get_timecode_for_tick(current_tick)
 
         sample = {
             'status': 'none',
             'time': 0,
             'time_global': time.monotonic(),
-            'tick': self.tick,
+            'tick': current_tick,
             'connection_strength': self.connection_strength,
             'internet_connected': self.internet_connected,
             'timecode': current_timecode.to_string() if current_timecode is not None else '00:00:00:00',

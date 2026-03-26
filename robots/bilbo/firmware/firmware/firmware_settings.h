@@ -20,17 +20,17 @@
 #define BOARD_REV_4
 
 // Robot model (sets wheel diameter and wheel distance in bilbo_model.h)
-#define BILBO_MODEL_NORMAL
+//#define BILBO_MODEL_NORMAL
 //#define BILBO_MODEL_SMALL
-//#define BILBO_MODEL_BIG
+#define BILBO_MODEL_BIG
 
 /* ================================================================
  * MOTOR INTERFACE — uncomment ONE
  * ================================================================ */
 
 // SimplexMotion communication bus
-//#define BILBO_DRIVE_SIMPLEXMOTION_RS485
-#define BILBO_DRIVE_SIMPLEXMOTION_CAN
+#define BILBO_DRIVE_SIMPLEXMOTION_RS485
+//#define BILBO_DRIVE_SIMPLEXMOTION_CAN
 
 // Motor torque limit (Nm). Clamps all motor commands to this value.
 #define BILBO_MOTOR_TORQUE_LIMIT 0.5
@@ -59,7 +59,7 @@
 // If the counter reaches zero, another event writes Quickstop to the Mode register.
 // The STM32 periodically reloads the counter to prevent timeout.
 // Set to 0 to disable.
-#define BILBO_DRIVE_WATCHDOG_ENABLE 1
+#define BILBO_DRIVE_WATCHDOG_ENABLE 0
 
 // Watchdog counter reload value, written by STM32 each drive task cycle.
 // Timeout = reload × 64ms. Default 10 → 640ms.
