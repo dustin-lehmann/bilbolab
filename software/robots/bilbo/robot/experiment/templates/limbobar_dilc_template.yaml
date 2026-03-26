@@ -28,6 +28,15 @@ limbo_bar:
   end_y: 0.3
   height: 0.25
 
+# Optional: polygon defining the zone the robot must reach to count as "passed".
+# At least 3 [x, y] corner points. If omitted, only hit/no-hit is tracked.
+# target_zone:
+#   points:
+#     - [0.4, -0.5]
+#     - [0.4,  0.5]
+#     - [1.0,  0.5]
+#     - [1.0, -0.5]
+
 # ILC input Q-filter
 input_lowpass:
   fc: 0.05
@@ -51,3 +60,9 @@ meta:
   check_if_robot_is_static: true
   auto_start_trials: false
   auto_accept_trials: false
+
+  # Enable heading (psi) control before each trajectory.
+  enable_psi_control: false
+
+  # Disable the OptiTrack tracker during trajectory execution.
+  disable_tracker_during_trajectory: false

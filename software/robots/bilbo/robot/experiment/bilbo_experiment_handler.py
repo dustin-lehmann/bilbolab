@@ -182,6 +182,49 @@ def _resolve_testbed_file_references(actions: list[dict], source_dir: str) -> No
         logger.info(f"Resolved testbed '{env_id}' from {file_path} ({n_obs} obstacles)")
 
 
+def _resolve_control_config_file_references(actions: list[dict], source_dir: str) -> None:
+    """Resolve ``file`` references in ``load_control_config`` actions.
+
+    Loads the YAML file (relative to *source_dir*) and inlines its content as
+    ``config`` so that the robot can deep-merge it on top of the default config.
+    Modifies actions in-place.
+    """
+    for action in actions:
+        if "actions" in action:
+            sub = action["actions"]
+            if isinstance(sub, list):
+                _resolve_control_config_file_references(sub, source_dir)
+
+        if action.get("type") != "load_control_config":
+            continue
+
+        file_value = action.get("file")
+        if not isinstance(file_value, str):
+            continue
+
+        if not file_value.endswith(('.yaml', '.yml')):
+            file_value += '.yaml'
+
+        file_path = os.path.join(source_dir, file_value)
+        if not os.path.isfile(file_path):
+            logger.warning(
+                f"Control config file '{file_value}' not found in {source_dir} — "
+                f"sending string reference to robot as-is"
+            )
+            continue
+
+        try:
+            with open(file_path, 'r') as f:
+                config_data = yaml.safe_load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load control config file '{file_path}': {e}")
+            continue
+
+        action['config'] = config_data
+        del action['file']
+        logger.info(f"Resolved control config from {file_path}")
+
+
 def _convert_environment_yaml(env_data: dict) -> dict:
     """Convert a compact environment YAML dict to the flat TestbedData format.
 
@@ -264,6 +307,7 @@ def _convert_environment_yaml(env_data: dict) -> dict:
 # ======================================================================================================================
 class BILBO_ExperimentHandler_Status(enum.StrEnum):
     IDLE = "idle"
+    EXPERIMENT_LOADED = "experiment_loaded"
     EXPERIMENT_RUNNING = "experiment_running"
 
 
@@ -287,6 +331,8 @@ class BILBO_ExperimentHandler_Events:
     waiting_for_user: Event = Event()
 
     # Experiment lifecycle events (public)
+    experiment_loaded: Event = Event(flags=[EventFlag('experiment_id', str), EventFlag('experiment_label', str)],
+                                     copy_data_on_set=False)
     experiment_started: Event = Event(flags=[EventFlag('experiment_id', str), EventFlag('experiment_label', str)],
                                       copy_data_on_set=False)
     experiment_finished: Event = Event(flags=EventFlag('experiment_id', str), copy_data_on_set=False)
@@ -299,6 +345,10 @@ class BILBO_ExperimentHandler_Events:
     action_finished: Event = Event(flags=[EventFlag('experiment_id', str), EventFlag('action_id', str)],
                                    copy_data_on_set=False)
 
+    # Experiment message (user-facing status messages)
+    experiment_message: Event = Event(flags=[EventFlag('experiment_id', str), EventFlag('level', str)],
+                                      copy_data_on_set=False)
+
     # DILC experiment events
     dilc_experiment_initialized: Event = Event(copy_data_on_set=False)
     dilc_experiment_started: Event = Event(flags=EventFlag('experiment_id', str), copy_data_on_set=False)
@@ -310,6 +360,7 @@ class BILBO_ExperimentHandler_Events:
 @event_definition
 class BILBO_ExperimentHandler_InternalEvents:
     """Internal events for experiment handling (used for blocking waits)."""
+    experiment_loaded: Event = Event(flags=EventFlag('experiment_id', str), copy_data_on_set=False)
     experiment_started: Event = Event(flags=EventFlag('experiment_id', str), copy_data_on_set=False)
     experiment_finished: Event = Event(flags=EventFlag('experiment_id', str), copy_data_on_set=False)
     experiment_error: Event = Event(flags=EventFlag('experiment_id', str), copy_data_on_set=False)
@@ -508,7 +559,7 @@ class BILBO_ExperimentHandler:
                 self.status = BILBO_ExperimentHandler_Status.IDLE
                 self._experiment_start_time = None
             else:
-                self.logger.error("Experiment already running")
+                self.logger.error(f"Cannot start experiment: handler status is \"{self.status}\"")
                 return None
 
         # Resolve file references in experiment actions before sending to robot
@@ -517,6 +568,7 @@ class BILBO_ExperimentHandler:
                 if key in experiment_definition:
                     _resolve_trajectory_file_references(experiment_definition[key], source_dir)
                     _resolve_testbed_file_references(experiment_definition[key], source_dir)
+                    _resolve_control_config_file_references(experiment_definition[key], source_dir)
 
         result = self.device.executeFunction(
             function_name='run_experiment',
@@ -528,8 +580,21 @@ class BILBO_ExperimentHandler:
             self.logger.error("Experiment failed to start")
             return None
 
+        # Wait for the loaded event (robot parsed the definition and is initializing)
+        data, _ = self._events_internal.experiment_loaded.wait(timeout=10)
+        if data is TIMEOUT:
+            self.logger.error("Experiment failed to load on robot")
+            return None
+
+        self.logger.info(f"Experiment \"{exp_id}\" loaded on robot")
+        self.status = BILBO_ExperimentHandler_Status.EXPERIMENT_LOADED
+        self.current_experiment_definition = experiment_definition
+        self._experiment_start_time = time.monotonic()
+        self.events.experiment_loaded.set(flags={'experiment_id': exp_id, 'experiment_label': exp_label})
+        self.events.status_changed.set(data=self.status, flags={'status': self.status})
+
         # Wait for the experiment start event.
-        # Use a generous timeout: guards (e.g. resume) may block initialization
+        # Use a generous timeout: guards (e.g. start) may block initialization
         # for an extended period before actions begin.
         guard_timeout = 0
         for g in experiment_definition.get('guards', []):
@@ -541,11 +606,13 @@ class BILBO_ExperimentHandler:
 
         if data is TIMEOUT:
             self.logger.error("Experiment failed to start")
+            self.status = BILBO_ExperimentHandler_Status.IDLE
+            self.current_experiment_definition = None
+            self._experiment_start_time = None
             return None
 
         self.logger.info(f"Experiment \"{exp_id}\" started successfully")
         self.status = BILBO_ExperimentHandler_Status.EXPERIMENT_RUNNING
-        self.current_experiment_definition = experiment_definition
         self._experiment_start_time = time.monotonic()
         self.events.experiment_started.set(flags={
             'experiment_id': exp_id,
@@ -916,13 +983,13 @@ class BILBO_ExperimentHandler:
 
         if result.caused_by(self._events_internal.experiment_timeout):
             self.logger.error("Experiment timed out (robot-side timeout)")
-            self.events.experiment_timeout.set(flags={'experiment_id': exp_id})
+            # Public event already fired by _experiment_event_callback
             # Still download data and generate report for timed out experiments
             return self._download_experiment_data(data, experiment_file_folder)
 
         if result.caused_by(self._events_internal.experiment_error):
             self.logger.error("Experiment failed")
-            self.events.experiment_error.set(flags={'experiment_id': exp_id})
+            # Public event already fired by _experiment_event_callback
             # Still download data and generate report for failed experiments
             return self._download_experiment_data(data, experiment_file_folder)
 
@@ -1151,6 +1218,12 @@ class BILBO_ExperimentHandler:
                 if isinstance(file_ref, str):
                     self._add_file_to_zip(zf, file_ref, source_dir, '.yaml', 'files', added)
 
+            # Control config files
+            if action_type == 'load_control_config':
+                file_ref = action.get('file')
+                if isinstance(file_ref, str):
+                    self._add_file_to_zip(zf, file_ref, source_dir, '.yaml', 'files', added)
+
     def _collect_actions_recursive(self, actions: list, out: list) -> None:
         """Flatten nested actions into a single list."""
         for action in actions:
@@ -1214,6 +1287,20 @@ class BILBO_ExperimentHandler:
         self.logger.debug(f"Received experiment event \"{event_name}\" for experiment \"{experiment_id}\"")
 
         match event_name:
+            case 'loaded':
+                self.logger.debug(f"Event: Experiment \"{experiment_id}\" loaded")
+                self._events_internal.experiment_loaded.set(
+                    flags={'experiment_id': experiment_id},
+                    data=payload
+                )
+                # For robot-initiated experiments (not via host run_experiment),
+                # update status so concurrent starts are blocked
+                if self.current_experiment_definition is None:
+                    self.status = BILBO_ExperimentHandler_Status.EXPERIMENT_LOADED
+                    self._experiment_start_time = time.monotonic()
+                    self.events.experiment_loaded.set(flags={'experiment_id': experiment_id, 'experiment_label': experiment_id})
+                    self.events.status_changed.set(data=self.status, flags={'status': self.status})
+
             case 'started':
                 self.logger.debug(f"Event: Experiment \"{experiment_id}\" started")
                 # Store action summary sent by the robot
@@ -1298,6 +1385,15 @@ class BILBO_ExperimentHandler:
                 self.events.action_finished.set(
                     flags={'experiment_id': experiment_id, 'action_id': action_id},
                     data=data
+                )
+
+            case 'message':
+                text = data.get('text', '')
+                level = data.get('level', 'info')
+                self.logger.info(f"Experiment message [{level}]: {text}")
+                self.events.experiment_message.set(
+                    flags={'experiment_id': experiment_id, 'level': level},
+                    data={'text': text, 'level': level},
                 )
 
             case 'trajectory_finished':

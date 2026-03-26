@@ -67,24 +67,31 @@ class LimboBar_DILC_APP(GUI_Popup_Application):
     def _build_popup(self):
         # --- LEFT PANEL: Status, Table, Controls (col 1-6) ---
 
+        self._has_target_zone = (self.experiment.settings is not None
+                                 and self.experiment.settings.target_zone is not None)
+        elements = {
+            'state': StatusWidgetElement(label='State:', color=_COLOR_IDLE, status='Idle'),
+            'trial': StatusWidgetElement(label='Trial:', color=[0.4, 0.4, 0.4], status='--'),
+            'best': StatusWidgetElement(label='Best:', color=[0.4, 0.4, 0.4], status='--'),
+            'hits': StatusWidgetElement(label='Hits:', color=[0.4, 0.4, 0.4], status='0 / 0'),
+        }
+        if self._has_target_zone:
+            elements['passes'] = StatusWidgetElement(label='Passes:', color=[0.4, 0.4, 0.4], status='0 / 0')
         self.status_widget = StatusWidget(
             widget_id='experiment_status',
             title='Experiment',
-            elements={
-                'state': StatusWidgetElement(label='State:', color=_COLOR_IDLE, status='Idle'),
-                'trial': StatusWidgetElement(label='Trial:', color=[0.4, 0.4, 0.4], status='--'),
-                'best': StatusWidgetElement(label='Best:', color=[0.4, 0.4, 0.4], status='--'),
-                'hits': StatusWidgetElement(label='Hits:', color=[0.4, 0.4, 0.4], status='0 / 0'),
-            }
+            elements=elements,
         )
         self.popup.group.addWidget(self.status_widget, row=1, column=1, width=6, height=3)
 
-        # Trial results table with hit column
+        # Trial results table with hit/pass columns
         self.trial_table = Table(widget_id='trial_table')
-        self.trial_table.add_column(TextColumn(id='num', title='#', width=0.10, font_align='center'))
-        self.trial_table.add_column(TextColumn(id='e_ilc', title='ILC Error', width=0.30, font_align='right'))
-        self.trial_table.add_column(TextColumn(id='e_iml', title='IML Error', width=0.30, font_align='right'))
-        self.trial_table.add_column(TextColumn(id='hit', title='Hit', width=0.20, font_align='center'))
+        self.trial_table.add_column(TextColumn(id='num', title='#', width=0.08, font_align='center'))
+        self.trial_table.add_column(TextColumn(id='e_ilc', title='ILC Error', width=0.27, font_align='right'))
+        self.trial_table.add_column(TextColumn(id='e_iml', title='IML Error', width=0.27, font_align='right'))
+        self.trial_table.add_column(TextColumn(id='hit', title='Hit', width=0.14, font_align='center'))
+        if self._has_target_zone:
+            self.trial_table.add_column(TextColumn(id='passed', title='Pass', width=0.14, font_align='center'))
         self.popup.group.addWidget(self.trial_table, row=4, column=1, width=6, height=10)
 
         # Control group
@@ -97,12 +104,12 @@ class LimboBar_DILC_APP(GUI_Popup_Application):
         self.group_control.addWidget(self.resume_button, row=1, column=3, width=1, height=1)
 
         self.revert_button = Button(widget_id='revert_button', text='Revert', color=[110 / 255, 82 / 255, 0])
-        self.revert_button.callbacks.click.register(self.robot.core.set_revert_event_robot, discard_inputs=True)
+        self.revert_button.callbacks.click.register(self.robot.core.set_repeat_event_robot, discard_inputs=True)
         self.group_control.addWidget(self.revert_button, row=1, column=4, width=1, height=1)
 
-        self.abort_button = Button(widget_id='abort_button', text='Abort', color=[0.5, 0.0, 0.0])
-        self.abort_button.callbacks.click.register(self._onAbort, discard_inputs=True)
-        self.group_control.addWidget(self.abort_button, row=1, column=5, width=1, height=1)
+        self.stop_button = Button(widget_id='stop_button', text='Stop', color=[0.5, 0.0, 0.0])
+        self.stop_button.callbacks.click.register(self._onStop, discard_inputs=True)
+        self.group_control.addWidget(self.stop_button, row=1, column=5, width=1, height=1)
 
         self.auto_start_button = MultiStateButton(
             id='auto_start_button', states=['OFF', 'ON'],
@@ -175,6 +182,11 @@ class LimboBar_DILC_APP(GUI_Popup_Application):
         color = _COLOR_HIT if total_hits > 0 else _COLOR_MISS
         self.status_widget.elements['hits'].status = f'{total_hits} / {total}'
         self.status_widget.elements['hits'].color = color
+        if self._has_target_zone:
+            total_passes = sum(1 for t in trials if t.limbo_bar_passed is True)
+            pass_color = _COLOR_MISS if total_passes > 0 else _COLOR_HIT
+            self.status_widget.elements['passes'].status = f'{total_passes} / {total}'
+            self.status_widget.elements['passes'].color = pass_color
         self.status_widget.updateConfig()
 
     def _update_best_trial(self):
@@ -203,17 +215,27 @@ class LimboBar_DILC_APP(GUI_Popup_Application):
 
         for i, trial in enumerate(trials):
             hit_text = 'HIT' if trial.limbo_bar_hit else '--'
-            row = self.trial_table.make_row(
+            row_kwargs = dict(
                 num=str(trial.trial_index + 1),
                 e_ilc=f'{trial.e_norm_ilc:.6f}',
                 e_iml=f'{trial.e_norm_iml:.6f}',
                 hit=hit_text,
             )
+            if self._has_target_zone:
+                if trial.limbo_bar_passed is True:
+                    row_kwargs['passed'] = 'PASS'
+                elif trial.limbo_bar_passed is False:
+                    row_kwargs['passed'] = '--'
+                else:
+                    row_kwargs['passed'] = '?'
+            row = self.trial_table.make_row(**row_kwargs)
             if i == best_idx:
                 row.highlight = True
                 row.row_background_color = [0, 0.35, 0.15, 0.3]
             if trial.limbo_bar_hit:
                 row.row_background_color = [0.5, 0.0, 0.0, 0.15]
+            elif trial.limbo_bar_passed is True:
+                row.row_background_color = [0.0, 0.35, 0.15, 0.15]
             self._trial_rows.append(row)
 
     # === EVENT HANDLERS ===================================================================
@@ -262,8 +284,8 @@ class LimboBar_DILC_APP(GUI_Popup_Application):
     def _onExperimentError(self, *args, **kwargs):
         self._set_state('Error', _COLOR_ERROR)
 
-    def _onAbort(self):
-        self.experiment.abort()
+    def _onStop(self):
+        self.experiment.stop()
 
     def _onAutoStartToggle(self, state, *args, **kwargs):
         enable = (state == 'OFF')

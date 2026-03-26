@@ -59,6 +59,8 @@ class DILC_Experiment_Meta_Settings:
     static_timeout_s: float = 10.0
     auto_start_trials: bool = False
     auto_accept_trials: bool = False
+    enable_psi_control: bool = False
+    disable_tracker_during_trajectory: bool = False
 
 
 @dataclasses.dataclass
@@ -79,6 +81,11 @@ class LimboBarGeometry:
 
 
 @dataclasses.dataclass
+class TargetZone:
+    points: list[list[float]]
+
+
+@dataclasses.dataclass
 class LimboBar_DILC_Experiment_Settings:
     """Configuration for a LimboBar DILC experiment.
 
@@ -94,6 +101,7 @@ class LimboBar_DILC_Experiment_Settings:
     input_lowpass: FIR_Design_Params
     model_lowpass: FIR_Design_Params
     limbo_bar: LimboBarGeometry
+    target_zone: TargetZone | None = None
     initial_conditions_u0: DILC_InitialConditions | None = None
     ilc_gain: float = 1.5
     iml_gain: float = 1.5
@@ -113,6 +121,7 @@ class LimboBar_DILC_Trial_Result:
     input_change_norm: float
     model_change_norm: float
     limbo_bar_hit: bool
+    limbo_bar_passed: bool | None = None
 
 
 @dataclasses.dataclass
@@ -121,11 +130,12 @@ class LimboBar_DILC_Trajectory_Data:
     error_norm: float
     max_abs_error: float
     limbo_bar_hit: bool
-    reference: list[float]
-    theta: list[float]
-    error: list[float]
-    u: list[float]
-    t: list[float]
+    limbo_bar_passed: bool | None = None
+    reference: list[float] = dataclasses.field(default_factory=list)
+    theta: list[float] = dataclasses.field(default_factory=list)
+    error: list[float] = dataclasses.field(default_factory=list)
+    u: list[float] = dataclasses.field(default_factory=list)
+    t: list[float] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -136,6 +146,7 @@ class LimboBar_DILC_Trial_Data:
     input_change_norm: float
     model_change_norm: float
     limbo_bar_hit: bool
+    limbo_bar_passed: bool | None = None
     t: list[float] | None = None
     u: list[float] | None = None
     theta: list[float] | None = None
@@ -195,6 +206,8 @@ class LimboBar_DILC_Experiment_Events:
     trajectory_finished: Event = Event(copy_data_on_set=False)
     trajectory_error: Event = Event(copy_data_on_set=False)
 
+    limbo_bar_hit: Event = Event(copy_data_on_set=False)
+
     meta_settings_changed: Event = Event(copy_data_on_set=False)
 
 
@@ -212,6 +225,7 @@ class LimboBar_DILC_Experiment_Callbacks:
     trial_error: CallbackContainer
     trajectory_started: CallbackContainer
     trajectory_finished: CallbackContainer
+    limbo_bar_hit: CallbackContainer
     meta_settings_changed: CallbackContainer
 
 
@@ -259,6 +273,14 @@ class LimboBar_DILC_Experiment:
         self._event_listener = self.device.events.event.on(
             self._handle_event,
             predicate=pred_flag_equals('container', 'limbobar_dilc_experiment'),
+        )
+
+        self._limbo_bar_hit_listener = self.device.events.event.on(
+            self._handle_limbo_bar_hit_event,
+            predicate=lambda flags, data: (
+                flags.get('container') == 'testbed'
+                and flags.get('event') == 'limbo_bar_hit'
+            ),
         )
 
     # === Configuration =================================================================
@@ -314,9 +336,12 @@ class LimboBar_DILC_Experiment:
         self.auto_start_trials = settings.meta.auto_start_trials
         self.auto_accept_trials = settings.meta.auto_accept_trials
         self.logger = Logger(f"LimboBar DILC \"{settings.id}\" (Host)")
+        tz_str = ""
+        if settings.target_zone is not None:
+            tz_str = f", target zone: {len(settings.target_zone.points)} points"
         self.logger.info(f"Configured: {settings.J} trials, Ts={settings.Ts}s, "
                          f"N={len(settings.reference)} samples, "
-                         f"limbo bar height={settings.limbo_bar.height}")
+                         f"limbo bar height={settings.limbo_bar.height}{tz_str}")
 
         self.events.experiment_initialized.set(data={
             'id': settings.id,
@@ -457,14 +482,17 @@ class LimboBar_DILC_Experiment:
         self.logger.info("Sending repeat command")
         self.device.executeFunction('repeat', arguments={'data': {}})
 
-    def abort(self):
-        self.logger.warning("Sending abort command")
-        self.device.executeFunction('abort', arguments={'data': {}})
+    def stop(self):
+        self.logger.warning("Sending stop command")
+        self.device.executeFunction('stop', arguments={'data': {}})
 
     def close(self):
         if self._event_listener is not None:
             self._event_listener.stop()
             self._event_listener = None
+        if self._limbo_bar_hit_listener is not None:
+            self._limbo_bar_hit_listener.stop()
+            self._limbo_bar_hit_listener = None
 
     def set_auto_start_trials(self, value: bool):
         self.logger.info(f"Setting auto_start_trials to {value}")
@@ -483,6 +511,21 @@ class LimboBar_DILC_Experiment:
         except Exception as e:
             self.logger.error(f"Failed to generate report: {e}")
             raise
+
+    # === Limbo Bar Hit (real-time WiFi event from testbed) ============================
+
+    def _handle_limbo_bar_hit_event(self, event_data, **kwargs):
+        """Called immediately when the robot detects a limbo bar collision.
+
+        This arrives via the 'testbed' WiFi event container, well before the
+        trial_finished event.  Override or connect to ``events.limbo_bar_hit``
+        / ``callbacks.limbo_bar_hit`` to react (e.g. testbed LED feedback).
+        """
+        data = event_data.get('data', {}) or {}
+        bar_id = data.get('bar_id')
+        self.logger.info(f"Limbo bar hit! (bar_id={bar_id})")
+        self.events.limbo_bar_hit.set(data=data)
+        self.callbacks.limbo_bar_hit.call(data)
 
     # === WiFi Event Handler ============================================================
 
@@ -524,7 +567,10 @@ class LimboBar_DILC_Experiment:
 
             hits = data.get('limbo_bar_hits', [])
             total_hits = sum(1 for h in hits if h) if hits else 0
-            speak(f"Experiment finished. {total_hits} limbo bar hits in {total_trials} trials")
+            passes = data.get('limbo_bar_passes', [])
+            total_passes = sum(1 for p in passes if p is True) if passes else 0
+            pass_str = f", {total_passes} passes" if passes else ""
+            speak(f"Experiment finished. {total_hits} limbo bar hits{pass_str} in {total_trials} trials")
 
             results_filepath = data.get('results_filepath')
             if results_filepath:
@@ -569,6 +615,7 @@ class LimboBar_DILC_Experiment:
             input_change = data.get('input_change_norm', 0)
             model_change = data.get('model_change_norm', 0)
             limbo_bar_hit = data.get('limbo_bar_hit', False)
+            limbo_bar_passed = data.get('limbo_bar_passed', None)
 
             trial_data = LimboBar_DILC_Trial_Data(
                 trial_index=trial_index or 0,
@@ -577,6 +624,7 @@ class LimboBar_DILC_Experiment:
                 input_change_norm=input_change,
                 model_change_norm=model_change,
                 limbo_bar_hit=limbo_bar_hit,
+                limbo_bar_passed=limbo_bar_passed,
                 t=data.get('t'),
                 u=data.get('u'),
                 theta=data.get('theta'),
@@ -590,8 +638,11 @@ class LimboBar_DILC_Experiment:
             self.trials.append(trial_data)
 
             hit_str = "HIT" if limbo_bar_hit else "miss"
+            passed_str = ""
+            if limbo_bar_passed is not None:
+                passed_str = f", passed: {'YES' if limbo_bar_passed else 'NO'}"
             self.logger.info(f"Robot: trial {(trial_index or 0) + 1}/{total_trials} finished "
-                             f"(e_ilc={e_norm_ilc:.6f}, limbo bar: {hit_str})")
+                             f"(e_ilc={e_norm_ilc:.6f}, limbo bar: {hit_str}{passed_str})")
             speak(f"Trial {(trial_index or 0) + 1} finished")
             self.events.trial_finished.set(data=data)
             self.callbacks.trial_finished.call()
@@ -619,8 +670,12 @@ class LimboBar_DILC_Experiment:
         elif event_name == 'trajectory_finished':
             error_norm = data.get('error_norm', 0)
             limbo_bar_hit = data.get('limbo_bar_hit', False)
+            limbo_bar_passed = data.get('limbo_bar_passed', None)
             hit_str = "HIT" if limbo_bar_hit else "miss"
-            self.logger.info(f"Robot: trajectory finished (error_norm={error_norm:.6f}, limbo bar: {hit_str})")
+            passed_str = ""
+            if limbo_bar_passed is not None:
+                passed_str = f", passed: {'YES' if limbo_bar_passed else 'NO'}"
+            self.logger.info(f"Robot: trajectory finished (error_norm={error_norm:.6f}, limbo bar: {hit_str}{passed_str})")
 
             if data.get('reference') is not None:
                 self.last_trajectory_data = LimboBar_DILC_Trajectory_Data(
@@ -628,6 +683,7 @@ class LimboBar_DILC_Experiment:
                     error_norm=error_norm,
                     max_abs_error=data.get('max_abs_error', 0),
                     limbo_bar_hit=limbo_bar_hit,
+                    limbo_bar_passed=limbo_bar_passed,
                     reference=data.get('reference', []),
                     theta=data.get('theta', []),
                     error=data.get('error', []),

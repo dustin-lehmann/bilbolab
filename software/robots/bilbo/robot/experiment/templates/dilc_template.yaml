@@ -119,3 +119,13 @@ meta:
   # false: user must accept, repeat (re-run), or abort each trial (default)
   # Can be toggled during the experiment via the GUI or WiFi command.
   auto_accept_trials: false
+
+  # Enable heading (psi) control before each trajectory.
+  # true:  robot actively holds its heading before starting the trial
+  # false: no heading control (default)
+  enable_psi_control: false
+
+  # Disable the OptiTrack tracker during trajectory execution.
+  # true:  tracker is disabled before the trajectory and re-enabled after
+  # false: tracker stays active throughout (default)
+  disable_tracker_during_trajectory: false

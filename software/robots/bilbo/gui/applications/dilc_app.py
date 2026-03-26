@@ -96,13 +96,13 @@ class DILC_APP(GUI_Popup_Application):
 
         # Revert
         self.revert_button = Button(widget_id='revert_button', text='Revert', color=[110 / 255, 82 / 255, 0])
-        self.revert_button.callbacks.click.register(self.robot.core.set_revert_event_robot, discard_inputs=True)
+        self.revert_button.callbacks.click.register(self.robot.core.set_repeat_event_robot, discard_inputs=True)
         self.group_control.addWidget(self.revert_button, row=1, column=4, width=1, height=1)
 
         # Abort
-        self.abort_button = Button(widget_id='abort_button', text='Abort', color=[0.5, 0.0, 0.0])
-        self.abort_button.callbacks.click.register(self._onAbort, discard_inputs=True)
-        self.group_control.addWidget(self.abort_button, row=1, column=5, width=1, height=1)
+        self.stop_button = Button(widget_id='stop_button', text='Stop', color=[0.5, 0.0, 0.0])
+        self.stop_button.callbacks.click.register(self._onStop, discard_inputs=True)
+        self.group_control.addWidget(self.stop_button, row=1, column=5, width=1, height=1)
 
         # Auto-start toggle
         self.auto_start_button = MultiStateButton(
@@ -249,8 +249,8 @@ class DILC_APP(GUI_Popup_Application):
     def _onExperimentError(self, *args, **kwargs):
         self._set_state('Error', _COLOR_ERROR)
 
-    def _onAbort(self):
-        self.experiment.abort()
+    def _onStop(self):
+        self.experiment.stop()
 
     def _onAutoStartToggle(self, state, *args, **kwargs):
         enable = (state == 'OFF')

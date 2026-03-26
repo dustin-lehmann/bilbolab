@@ -139,12 +139,19 @@ class ResetControlAction(ActionBase):
 
 @dataclass
 class LoadControlConfigAction(ActionBase):
-    """Load a named control configuration (e.g. 'default', 'lab')."""
+    """Load a control configuration by name or from a file.
+
+    Use ``name`` to load from configs/control/ (deep-merged on top of default).
+    Use ``file`` to reference a YAML file relative to the experiment YAML on the
+    host — the host resolves and inlines it as ``config`` before sending.
+    """
     type_id: ClassVar[str] = 'load_control_config'
 
     @dataclass
     class Params:
-        name: str  # Config name (matches filename in configs/control/)
+        name: str = None    # Config name (matches filename in configs/control/)
+        file: str = None    # Relative path to YAML file (resolved by host, arrives as 'config')
+        config: dict = None  # Inlined config dict (set by host after resolving 'file')
 
     def execute(self, context: ActionContext) -> ActionResult:
         context.complete()
@@ -1075,18 +1082,33 @@ class PsiControlGuard(GuardBase):
 
 
 @dataclass
-class ResumeGuard(GuardBase):
-    """Block experiment start until the resume interaction event is received.
+class StartGuard(GuardBase):
+    """Block experiment start until the start interaction event is received.
 
-    Waits for the robot's interaction resume event (triggered by WiFi 'resume'
-    command or DPAD_RIGHT button press) before allowing actions to execute.
-    If the timeout expires without a resume signal, the experiment fails.
+    Waits for the robot's interaction start event before allowing actions to execute.
+    If the timeout expires without a start signal, the experiment fails.
     """
-    type_id: ClassVar[str] = 'resume'
+    type_id: ClassVar[str] = 'start'
 
     @dataclass
     class Params:
         timeout: float = 60.0
+
+    def setup(self, context: GuardContext):
+        pass  # Executed on robot
+
+    def teardown(self, context: GuardContext):
+        pass  # No cleanup needed
+
+
+@dataclass
+class TimecodeGuard(GuardBase):
+    """Require a timecode connection before allowing the experiment to start."""
+    type_id: ClassVar[str] = 'timecode'
+
+    @dataclass
+    class Params:
+        timeout: float = 10.0
 
     def setup(self, context: GuardContext):
         pass  # Executed on robot
@@ -1100,7 +1122,8 @@ ALL_BILBO_GUARDS = [
     ZeroInputGuard,
     RestoreControlConfigGuard,
     PsiControlGuard,
-    ResumeGuard,
+    StartGuard,
+    TimecodeGuard,
 ]
 
 
@@ -1131,12 +1154,20 @@ BILBO_GUARDS = {
         'description': 'Enable psi (yaw/heading) control on setup, disable on teardown',
         'params': {},
     },
-    'resume': {
+    'start': {
         'category': 'guards',
-        'description': 'Wait for resume event before starting experiment actions',
+        'description': 'Wait for start event before starting experiment actions',
         'params': {
             'timeout': {'required': False, 'default': 60.0, 'type': 'float',
-                        'description': 'Seconds to wait for resume before failing'},
+                        'description': 'Seconds to wait for start before failing'},
+        },
+    },
+    'timecode': {
+        'category': 'guards',
+        'description': 'Require timecode connection before starting experiment',
+        'params': {
+            'timeout': {'required': False, 'default': 10.0, 'type': 'float',
+                        'description': 'Seconds to wait for timecode sync before failing'},
         },
     },
 }

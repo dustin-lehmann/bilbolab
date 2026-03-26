@@ -255,6 +255,16 @@
             color: #155724;
         }
 
+        .hit-badge.pass {
+            background: #27ae60;
+            color: white;
+        }
+
+        .hit-badge.fail {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
         /* Plots */
         .plots-grid {
             display: grid;
@@ -429,6 +439,14 @@
                         {{ limbo_bar_total_hits }} / {{ completed_trials }}
                     </span>
                 </div>
+                {% if has_target_zone %}
+                <div class="info-item">
+                    <span class="info-label">Total Passes:</span>
+                    <span class="info-value" style="color: {{ '#27ae60' if limbo_bar_total_passes > 0 else '#e74c3c' }};">
+                        {{ limbo_bar_total_passes }} / {{ completed_trials }}
+                    </span>
+                </div>
+                {% endif %}
             </div>
         </section>
 
@@ -440,6 +458,7 @@
                     <tr>
                         <th>Trial</th>
                         <th>Limbo Bar</th>
+                        {% if has_target_zone %}<th>Pass</th>{% endif %}
                         <th>ILC Error Norm</th>
                         <th>IML Error Norm</th>
                         <th>Input Change (%)</th>
@@ -457,6 +476,17 @@
                             <span class="hit-badge miss">OK</span>
                             {% endif %}
                         </td>
+                        {% if has_target_zone %}
+                        <td>
+                            {% if row.limbo_bar_passed is true %}
+                            <span class="hit-badge pass">PASS</span>
+                            {% elif row.limbo_bar_passed is false %}
+                            <span class="hit-badge fail">FAIL</span>
+                            {% else %}
+                            <span>-</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
                         <td>
                             <span class="norm-value">{{ row.e_ilc | format_number(6) }}</span>
                             {% if row.e_ilc_change is not none %}

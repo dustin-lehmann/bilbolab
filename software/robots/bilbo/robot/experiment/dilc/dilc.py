@@ -76,12 +76,17 @@ class DILC_Experiment_Meta_Settings:
             prepared (no resume needed). If False, user must send resume to start each trial.
         auto_accept_trials: If True, trial results are accepted automatically (no
             resume/revert needed). If False, user must accept, repeat, or abort each trial.
+        enable_psi_control: If True, enables heading (psi) control before each trajectory.
+        disable_tracker_during_trajectory: If True, disables the OptiTrack tracker before
+            starting the trajectory and re-enables it after.
     """
     automatic_initial_conditions_reset: bool = True
     check_if_robot_is_static: bool = True
     static_timeout_s: float = 10.0
     auto_start_trials: bool = False
     auto_accept_trials: bool = False
+    enable_psi_control: bool = False
+    disable_tracker_during_trajectory: bool = False
 
 
 @dataclasses.dataclass
@@ -572,10 +577,10 @@ class DILC_Experiment:
         self.logger.info("Sending repeat command")
         self.device.executeFunction('repeat', arguments={'data': {}})
 
-    def abort(self):
-        """Send abort command to the robot (robot-side handles BALANCING switch)."""
-        self.logger.warning("Sending abort command")
-        self.device.executeFunction('abort', arguments={'data': {}})
+    def stop(self):
+        """Send stop command to the robot (robot-side handles BALANCING switch)."""
+        self.logger.warning("Sending stop command")
+        self.device.executeFunction('stop', arguments={'data': {}})
 
     def close(self):
         """Unsubscribe from device events. Call before discarding this instance."""

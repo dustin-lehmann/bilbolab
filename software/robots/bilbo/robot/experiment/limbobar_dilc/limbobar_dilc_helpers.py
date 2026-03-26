@@ -264,7 +264,7 @@ def plot_limbo_bar_hits(
     plot.set_axis(1, 1, axis)
 
     colors = ['red' if h > 0 else 'green' for h in hits]
-    axis.bar(indices, hits, SeriesConfig(color=colors))
+    axis.ax.bar(indices, hits, color=colors, width=0.6)
 
     if show:
         plot.show_temp_pdf()
@@ -474,6 +474,8 @@ def generate_limbobar_dilc_report(
     limbo_bar_settings = settings_dict.get('limbo_bar', {})
     limbo_bar_height = limbo_bar_settings.get('height', '?') if isinstance(limbo_bar_settings, dict) else '?'
     total_hits = sum(1 for t in trials if t.get('limbo_bar_hit', False))
+    has_target_zone = any(t.get('limbo_bar_passed') is not None for t in trials)
+    total_passes = sum(1 for t in trials if t.get('limbo_bar_passed') is True) if has_target_zone else 0
 
     status_info = {
         'status': state,
@@ -501,6 +503,8 @@ def generate_limbobar_dilc_report(
             if prev_iml > 0:
                 e_iml_change = ((e_iml - prev_iml) / prev_iml) * 100
 
+        passed = trial.get('limbo_bar_passed')
+
         norms_table.append({
             'trial': _get_trial_index(trial, i) + 1,
             'e_ilc': e_ilc,
@@ -510,6 +514,7 @@ def generate_limbobar_dilc_report(
             'input_change_pct': _get_change_percent(trial, 'u', 'u_p1'),
             'model_change_pct': _get_change_percent(trial, 'm', 'm_p1'),
             'limbo_bar_hit': hit,
+            'limbo_bar_passed': passed,
         })
 
     reference = settings_dict.get('reference', None)
@@ -595,6 +600,8 @@ def generate_limbobar_dilc_report(
         plot_limbo_hits=p_hits,
         limbo_bar_height=limbo_bar_height,
         limbo_bar_total_hits=total_hits,
+        has_target_zone=has_target_zone,
+        limbo_bar_total_passes=total_passes,
         best_trial_index=best_trial_index,
         best_trial_state_plots=best_trial_state_plots,
         best_trial_control_plots=best_trial_control_plots,
