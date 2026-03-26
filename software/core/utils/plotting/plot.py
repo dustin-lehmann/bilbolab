@@ -1802,6 +1802,14 @@ class PlotConfig:
     facealpha: float = 1.0
     tight_layout: bool = True
 
+    # Figure title (suptitle)
+    title: str | None = None
+    title_font_size: float | None = None
+
+    # Shared axes
+    sharex: bool = False
+    sharey: bool = False
+
     # Global style
     use_latex: bool = False
     # font_family: str = "sans-serif"
@@ -1850,9 +1858,18 @@ class Plot:
             figsize=self.config.size,
             dpi=self.config.dpi,
             facecolor=self.config.facecolor,
+            sharex=self.config.sharex,
+            sharey=self.config.sharey,
         )
         self.figure = fig
         self.figure.patch.set_alpha(self.config.facealpha)
+
+        # Figure title (suptitle)
+        if self.config.title is not None:
+            suptitle_kwargs = {}
+            if self.config.title_font_size is not None:
+                suptitle_kwargs['fontsize'] = self.config.title_font_size
+            self.figure.suptitle(self.config.title, **suptitle_kwargs)
 
         # Normalize ax -> 2D list [row][col]
         if isinstance(ax, np.ndarray):
@@ -2291,14 +2308,9 @@ class Plot:
         # LaTeX usage
         if cfg.use_latex:
             rc["text.usetex"] = True
-            rc["text.latex.preamble"] = r""  # or e.g. r"\usepackage{amsmath}"
-
-            # Optional: set a LaTeX preamble if you need extra packages
-            # rc["text.latex.preamble"] = r"\usepackage{amsmath}"
+            # Don't reset text.latex.preamble — respect whatever was set via rcParams
         else:
             rc["text.usetex"] = False
-            # You can also reset/clear preamble if you like:
-            # rc["text.latex.preamble"] = r""
 
 
 # === HELPERS ==========================================================================================================

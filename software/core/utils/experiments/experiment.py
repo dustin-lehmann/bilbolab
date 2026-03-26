@@ -10,7 +10,7 @@ from core.utils.logging_utils import Logger
 
 from core.utils.experiments.types import (
     ActionStatus, ActionResult, ExperimentStatus, TriggerType,
-    ActionTrigger, Transition, ExperimentActionData, MISSING
+    ActionTrigger, Transition, ExperimentActionData, MessageLevel, MISSING
 )
 from core.utils.experiments.expression import ExpressionEngine
 from core.utils.experiments.action import ActionBase, ActionContext, ActionRegistry
@@ -45,6 +45,9 @@ class ActionDefinition:
     # Timing delays (seconds)
     wait_before: float | None = None
     wait_after: float | None = None
+    # Messages emitted before/after the action executes
+    message_before: str | None = None
+    message_after: str | None = None
 
 
 @dataclass
@@ -83,6 +86,7 @@ class ExperimentEvents(EventContainer):
     error: Event = Event(flags=EventFlag('action_id', str))
     action_started: Event = Event(flags=EventFlag('id', str))
     action_finished: Event = Event(flags=EventFlag('id', str))
+    message: Event = Event(flags=EventFlag('level', str), copy_data_on_set=False)
 
 
 @callback_definition
@@ -99,7 +103,8 @@ def _format_action_short(action: 'ActionDefinition') -> str:
     """Format an action as a compact one-line summary for logging."""
     reserved = {'id', 'type', 'trigger', 'transitions', 'actions', 'sub_actions',
                 'test', 'then', 'else', 'count', 'variable', 'max_iterations',
-                'params', 'wait_before', 'wait_after', 'label', 'meta'}
+                'params', 'wait_before', 'wait_after', 'message_before', 'message_after',
+                'label', 'meta'}
     parts = [action.type]
     for key, val in action.params.items():
         if key in reserved:
@@ -182,6 +187,9 @@ class ExperimentRunner:
         # Log experiment summary before doing anything
         self._log_experiment_summary()
 
+        n_actions = len(self.definition.actions)
+        self.message(f"Experiment loaded ({n_actions} action{'s' if n_actions != 1 else ''})")
+
         # Check requirements before doing anything else
         if self.definition.requirements and self.requirement_registry:
             failed = self._check_requirements()
@@ -189,6 +197,7 @@ class ExperimentRunner:
                 self._finished = True
                 self.status = ExperimentStatus.ERROR
                 reasons = '; '.join(r.message for r in failed)
+                self.message(f"Requirements not met: {reasons}", MessageLevel.ERROR)
                 self.events.error.set(flags={'action_id': ''})
                 self.events.finished.set(data={'status': ExperimentStatus.ERROR, 'reason': reasons})
                 self.logger.error(f"Requirements not met: {reasons}")
@@ -201,26 +210,37 @@ class ExperimentRunner:
         self._start_time = 0.0  # set on first step()
         self.status = ExperimentStatus.RUNNING
 
+        has_init_work = self.definition.guards or self.definition.setup_actions
+        if has_init_work:
+            self.message("Initializing...")
+
         # Set up guards
         if self.definition.guards and self.guard_registry:
-            guard_context = GuardContext(self._context_objects, self.definition)
+            guard_context = GuardContext(self._context_objects, self.definition, runner=self)
             for guard_def in self.definition.guards:
                 try:
                     instance = self.guard_registry.create_guard(
                         guard_def.id, guard_def.type, guard_def.params
                     )
+                    # Emit default message_before from the guard class (if any)
+                    default_msg = getattr(instance, 'default_message_before', None)
+                    if default_msg:
+                        self.message(default_msg)
                     instance.setup(guard_context)
                     self._active_guards.append(instance)
                     self.logger.info(f"  Guard '{guard_def.type}' set up")
                 except Exception as e:
                     self.logger.error(f"  Guard '{guard_def.type}' setup failed: {e}")
+                    self.message(f"Guard '{guard_def.type}' setup failed: {e}", MessageLevel.ERROR)
                     self._finish(ExperimentStatus.ERROR, f"Guard setup failed: {e}")
                     return
 
         # Run setup actions (sequential, blocking)
         if self.definition.setup_actions:
+            self.message(f"Running setup actions ({len(self.definition.setup_actions)})")
             success = self._run_phase_actions(self.definition.setup_actions, 'setup')
             if not success:
+                self.message("Setup action failed", MessageLevel.ERROR)
                 self._finish(ExperimentStatus.ERROR, 'Setup action failed')
                 return
 
@@ -252,6 +272,7 @@ class ExperimentRunner:
             elif trigger and trigger.type == TriggerType.TICK:
                 self._pending_tick_triggers.append((trigger.tick, action_id))
 
+        self.message("Starting experiment")
         self.events.started.set()
         self.logger.info(f"Experiment '{self.definition.id}' running")
 
@@ -334,6 +355,25 @@ class ExperimentRunner:
     def get_context_object(self, name: str) -> Any:
         """Get a context object by name."""
         return self._context_objects.get(name)
+
+    def message(self, text: str, level: MessageLevel | str = MessageLevel.INFO):
+        """Emit an experiment message for display to the user.
+
+        Messages are logged and emitted as events so that external listeners
+        (experiment handler, GUI) can display them.
+
+        Args:
+            text: The message text.
+            level: Message level ('info', 'warning', 'error').
+        """
+        if isinstance(level, str):
+            level = MessageLevel(level)
+        log_func = getattr(self.logger, level.value, self.logger.info)
+        log_func(f"[message] {text}")
+        self.events.message.set(
+            data={'text': text, 'level': level.value},
+            flags={'level': level.value},
+        )
 
     # === Internal Methods ===
 
@@ -511,6 +551,10 @@ class ExperimentRunner:
             except Exception as e:
                 self.logger.warning(f"Failed to resolve params for '{action_id}': {e}")
 
+        # Emit message_before if defined on the action
+        if state.definition.message_before:
+            self.message(state.definition.message_before)
+
         context = ActionContext(runner=self, action=instance)
         instance.events.started.set()
         self.events.action_started.set(flags={'id': action_id})
@@ -565,6 +609,10 @@ class ExperimentRunner:
             self.events.action_finished.set(flags={'id': action_id})
             self.callbacks.action_finished.call(action_id=action_id)
             self.logger.debug(f"Action '{action_id}' completed (port={port})")
+
+            # Emit message_after if defined on the action (only on success)
+            if port != 'error' and state.definition.message_after:
+                self.message(state.definition.message_after)
 
             # Check wait_after — delay transition firing
             wait_after = state.definition.wait_after
@@ -696,13 +744,27 @@ class ExperimentRunner:
         self._finished = True
         self.status = status
 
+        # Emit finish message with appropriate level
+        finish_levels = {
+            ExperimentStatus.FINISHED: MessageLevel.INFO,
+            ExperimentStatus.ERROR: MessageLevel.ERROR,
+            ExperimentStatus.TIMEOUT: MessageLevel.WARNING,
+            ExperimentStatus.ABORTED: MessageLevel.WARNING,
+        }
+        level = finish_levels.get(status, MessageLevel.INFO)
+        msg = f"Experiment {status.value}"
+        if reason:
+            msg += f": {reason}"
+        self.message(msg, level)
+
         # Run cleanup actions (sequential, blocking, always runs)
         if self.definition.cleanup_actions:
+            self.message(f"Running cleanup actions ({len(self.definition.cleanup_actions)})")
             self._run_phase_actions(self.definition.cleanup_actions, 'cleanup')
 
         # Tear down guards in reverse order (guaranteed cleanup)
         if self._active_guards:
-            guard_context = GuardContext(self._context_objects, self.definition)
+            guard_context = GuardContext(self._context_objects, self.definition, runner=self)
             for guard in reversed(self._active_guards):
                 try:
                     guard.teardown(guard_context)

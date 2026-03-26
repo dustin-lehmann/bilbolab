@@ -45,11 +45,18 @@ class ActionResult(enum.StrEnum):
 
 
 class ExperimentStatus(enum.StrEnum):
+    LOADED = 'loaded'
     RUNNING = 'running'
     FINISHED = 'finished'
     ERROR = 'error'
     TIMEOUT = 'timeout'
     ABORTED = 'aborted'
+
+
+class MessageLevel(enum.StrEnum):
+    INFO = 'info'
+    WARNING = 'warning'
+    ERROR = 'error'
 
 
 class TriggerType(enum.StrEnum):

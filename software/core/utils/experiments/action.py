@@ -103,6 +103,15 @@ class ActionContext:
         scope = self.runner._build_scope(for_action_id=self.action.id)
         return self.runner.expression_engine.resolve_value(params, scope)
 
+    def message(self, text: str, level: str = 'info'):
+        """Emit an experiment message for display to the user.
+
+        Args:
+            text: The message text.
+            level: Message level ('info', 'warning', 'error').
+        """
+        self.runner.message(text, level)
+
 
 # === ActionBase ===
 

@@ -37,6 +37,23 @@ def disable_precision_timing_windows():
     timeEndPeriod(1)
 
 
+def interruptible_sleep(duration: float, stop_event) -> bool:
+    """Sleep for the given duration, but return early if stop_event fires.
+
+    Args:
+        duration: Sleep duration in seconds.
+        stop_event: An Event (from core.utils.events) that, when set,
+                    interrupts the sleep early.
+
+    Returns:
+        True if the full duration elapsed (no interruption).
+        False if the stop_event fired early.
+    """
+    from core.utils.events import wait_for_events, TIMEOUT
+    data, _ = wait_for_events(stop_event, timeout=duration)
+    return data is TIMEOUT
+
+
 def wait_until(
         predicate: Callable[[], bool],
         timeout_s: float,

@@ -291,7 +291,7 @@ class ExperimentParser:
         reserved_keys = {
             'id', 'type', 'trigger', 'transitions', 'actions', 'sub_actions',
             'test', 'then', 'else', 'count', 'variable', 'max_iterations',
-            'params', 'wait_before', 'wait_after',
+            'params', 'wait_before', 'wait_after', 'message_before', 'message_after',
         }
         # Params from explicit 'params' key, or from top-level non-reserved keys
         params = dict(raw.get('params', {}))
@@ -352,6 +352,8 @@ class ExperimentParser:
             max_iterations=raw.get('max_iterations'),
             wait_before=wait_before,
             wait_after=wait_after,
+            message_before=raw.get('message_before'),
+            message_after=raw.get('message_after'),
         )
 
     @classmethod

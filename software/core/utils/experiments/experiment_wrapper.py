@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from core.utils.events import event_definition, EventContainer, Event
+from core.utils.events import event_definition, EventContainer, Event, EventFlag
 from core.utils.logging_utils import Logger, enable_redirection, disable_redirection
 
 from core.utils.experiments.experiment import (
@@ -122,6 +122,7 @@ class ExperimentResult:
 class ExperimentWrapperEvents(EventContainer):
     started: Event
     finished: Event = Event(copy_data_on_set=False)
+    message: Event = Event(flags=EventFlag('level', str), copy_data_on_set=False)
 
 
 class Experiment:
@@ -226,6 +227,10 @@ class Experiment:
         """
         self._start_time = time.time()
         self._start_log_capture()
+
+        # Forward runner message events to the wrapper's message event
+        self._runner.events.message.on(self._on_runner_message)
+
         self._runner.initialize(context_objects)
 
         # Runner sets _finished=True and status=ERROR when requirements fail
@@ -285,6 +290,11 @@ class Experiment:
         self.logger.info(f"Experiment '{self.definition.id}' finished: {self._runner.status}")
 
     # ------------------------------------------------------------------------------------------------------------------
+    def _on_runner_message(self, data=None, *args, **kwargs):
+        """Forward runner message events to the wrapper's message event."""
+        if data:
+            self.events.message.set(data=data, flags={'level': data.get('level', 'info')})
+
     def _build_result(self) -> ExperimentResult:
         """Build the result object. Override in subclasses for extra data."""
         return ExperimentResult(

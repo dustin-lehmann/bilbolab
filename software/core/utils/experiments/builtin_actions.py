@@ -634,7 +634,7 @@ class StopAction(ActionBase):
         except ValueError:
             status = ExperimentStatus.FINISHED
 
-        context.runner.abort(reason=message, status=status)
+        context.runner.stop(reason=message, status=status)
         return ActionResult.COMPLETED
 
 
@@ -682,6 +682,23 @@ class LogAction(ActionBase):
         return ActionResult.COMPLETED
 
 
+class MessageAction(ActionBase):
+    """Emit a user-facing experiment message. Supports expression interpolation in text."""
+    type_id: ClassVar[str] = 'message'
+    parameter_defs: ClassVar[dict[str, ActionParameterDef]] = {
+        'text': ActionParameterDef(id='text', type=str, required=True),
+        'level': ActionParameterDef(id='level', type=str, default='info'),
+    }
+
+    def execute(self, context: ActionContext) -> ActionResult:
+        params = context.resolve_params(self.raw_params)
+        text = str(params.get('text', ''))
+        level = str(params.get('level', 'info')).lower()
+        context.message(text, level)
+        context.complete()
+        return ActionResult.COMPLETED
+
+
 # === Registration ===
 
 def register_builtin_actions(registry: ActionRegistry):
@@ -708,6 +725,7 @@ def register_builtin_actions(registry: ActionRegistry):
         ExecuteFunctionAction,
         # Logging
         LogAction,
+        MessageAction,
         # Experiment control
         StopAction,
         MarkerAction,

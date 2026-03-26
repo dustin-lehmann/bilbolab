@@ -17,6 +17,7 @@ from core.utils.logging_utils import Logger
 from core.utils.callbacks import CallbackContainer, callback_definition
 from core.utils.events import event_definition, Event
 from core.utils.exit import register_exit_callback
+from core.utils.json_utils import jsonEncode
 
 
 @dataclass
@@ -233,7 +234,7 @@ class AioHttpWebsocketServer:
                     ws = self._client_websockets[client]
                     if not ws.closed:
                         try:
-                            await ws.send_str(json.dumps(message))
+                            await ws.send_str(jsonEncode(message).decode())
                         except Exception as e:
                             self.logger.warning(f"Failed to send to {client.address}:{client.port}: {e}")
             except asyncio.CancelledError:

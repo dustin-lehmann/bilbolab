@@ -27,7 +27,8 @@ _original_handshake = _WebSocketHandler.handshake
 def _safe_handshake(self):
     try:
         _original_handshake(self)
-    except (KeyError, Exception):
+    except Exception as e:
+        logging.getLogger(__name__).debug(f"Handshake failed (non-WebSocket request): {type(e).__name__}: {e}")
         self.keep_alive = False
 
 _WebSocketHandler.handshake = _safe_handshake
@@ -170,7 +171,7 @@ class WebsocketServer:
         self._server.set_fn_new_client(self._on_new_client)
         self._server.set_fn_client_left(self._on_client_left)
         self._server.set_fn_message_received(self._on_message_received)
-
+        self.logger.info(f"Server started on {self.host}:{self.port}")
         try:
             self._server.run_forever()
         except Exception as e:
@@ -256,7 +257,7 @@ class WebsocketServer:
         Send a message to all connected clients.
         """
         if isinstance(message, dict):
-            message = json.dumps(message)
+            message = jsonEncode(message)
         for client in list(self.clients):
             try:
                 self._server.send_message(client.client, message)
@@ -498,7 +499,7 @@ class WebsocketClient:
         """
         if self.connected:
             if isinstance(message, dict):
-                message = json.dumps(message)
+                message = jsonEncode(message)
             try:
                 self.ws.send(message)
             except Exception as e:

@@ -23,17 +23,23 @@ class GuardDefinition:
 class GuardContext:
     """Lightweight context passed to guard setup/teardown.
 
-    Provides access to context objects (robot, testbed, etc.) and the
-    experiment definition.
+    Provides access to context objects (robot, testbed, etc.), the
+    experiment definition, and the runner (for emitting messages).
     """
 
-    def __init__(self, context_objects: dict, definition=None):
+    def __init__(self, context_objects: dict, definition=None, runner=None):
         self.context_objects = context_objects
         self.definition = definition
+        self.runner = runner
 
     def get_object(self, name: str) -> Any:
         """Get a context object by name."""
         return self.context_objects.get(name)
+
+    def message(self, text: str, level: str = 'info'):
+        """Emit an experiment message (delegates to runner)."""
+        if self.runner is not None:
+            self.runner.message(text, level)
 
 
 # === GuardBase ===
@@ -55,6 +61,7 @@ class GuardBase(abc.ABC):
     type_id: ClassVar[str] = ''
     params_type: ClassVar[type | None] = None
     parameter_defs: ClassVar[dict[str, ActionParameterDef]] = {}
+    default_message_before: ClassVar[str | None] = None
 
     # Instance state
     id: str = ''
