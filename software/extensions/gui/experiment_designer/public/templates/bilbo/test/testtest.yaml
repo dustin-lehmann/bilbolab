@@ -1,7 +1,0 @@
-id: experiment_2
-description: New experiment
-
-actions:
-  - type: wait_time
-    id: wait_time_2
-    time: 1.0
