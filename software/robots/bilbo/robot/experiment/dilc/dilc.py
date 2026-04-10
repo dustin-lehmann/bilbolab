@@ -532,6 +532,41 @@ class DILC_Experiment:
                 self.logger.info(f"Saved reference trajectory to {ref_path}")
             except Exception as e:
                 self.logger.warning(f"Failed to save reference trajectory: {e}")
+            # Save the initial model vector (m0) if provided
+            if self.settings.m0 is not None:
+                try:
+                    m0_model = ModelVector.from_vector(
+                        vector=np.asarray(self.settings.m0),
+                        name="m0",
+                        id=0,
+                        dt=self.settings.Ts,
+                    )
+                    m0_file_data = m0_model.to_file_data(
+                        id=self.settings.id,
+                        description="Initial model vector (m0)",
+                    )
+                    m0_path = os.path.join(self._run_dir, "m0.bmvec")
+                    write_model_vector_file(m0_path, m0_file_data)
+                    self.logger.info(f"Saved initial model vector to {m0_path}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to save initial model vector: {e}")
+            # Save the initial input trajectory (u0) if provided
+            if self.settings.u0 is not None:
+                try:
+                    u0_trajectory = InputTrajectory.from_vector(
+                        vector=np.asarray(self.settings.u0),
+                        name="u0",
+                        id=0,
+                        dt=self.settings.Ts,
+                    )
+                    u0_file_data = u0_trajectory.to_file_data(
+                        id=self.settings.id,
+                        description="Initial input trajectory (u0)",
+                    )
+                    write_input_file("u0", self._run_dir, u0_file_data)
+                    self.logger.info(f"Saved initial input trajectory to {self._run_dir}/u0.bitrj")
+                except Exception as e:
+                    self.logger.warning(f"Failed to save initial input trajectory: {e}")
 
         self.logger.info(f"Experiment run ID: {self._run_id}")
         self.logger.info("Sending experiment settings to robot...")

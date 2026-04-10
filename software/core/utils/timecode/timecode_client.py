@@ -115,7 +115,7 @@ class TimecodeClient:
 
                 # Simple jitter/delay rejection: if this packet came way too late, drop it.
                 if delta > expected + ALLOWED_JITTER:
-                    self.logger.warning(
+                    self.logger.debug(
                         f"Dropping timecode {timecode} due to jitter/delay: "
                         f"delta={delta:.3f}s, expected={expected:.3f}s, "
                         f"allowed_jitter={ALLOWED_JITTER:.3f}s"

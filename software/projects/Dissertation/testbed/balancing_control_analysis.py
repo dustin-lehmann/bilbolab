@@ -3,7 +3,7 @@ from numpy import nan
 
 from core.utils.colors import get_palette
 from core.utils.data import generate_time_vector
-from core.utils.plotting_utils import Plot, AxisConfig, Axis
+from core.utils.plotting_utils import Plot, AxisConfig, LegendConfig, Axis
 from extensions.simulation.src.objects.bilbo import BILBO_Dynamics_3D, DEFAULT_BILBO_MODEL, BILBO_3D_State
 from projects.Dissertation.settings import TESTBED_SIM_RESULTS_PATH
 
@@ -382,8 +382,7 @@ def compare_conjugate_pair_step_response():
         title="Step Response – Influence of $\\theta$ Conjugate Pair",
         xlabel="time [s]",
         ylabel="$\\theta$ [rad]",
-        legend=True,
-        legend_loc='upper right',
+        legend=LegendConfig(loc='upper right'),
         palette=palette,
         xlim=(0, time_vector[-1]),
         facecolor=(1, 0, 0, 0)

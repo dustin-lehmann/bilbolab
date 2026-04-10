@@ -9,6 +9,7 @@ from core.utils.logging_utils import Logger
 from robots.bilbo.robot.bilbo_definitions import BILBO_Control_Mode
 from robots.bilbo.simulation.model import (
     BILBO_DynamicAgent,
+    BILBO_Dynamics_3D_Linear,
     BILBO_3D_Input,
     BILBO_3D_State,
     BilboModel,
@@ -54,16 +55,54 @@ class VelocityCommand:
 
 
 @dataclasses.dataclass
+class FeedforwardConfig:
+    """Feedforward configuration matching the firmware feedforward controller."""
+    Kv: float = 0.0        # Velocity gain [torque / (m/s)]
+    Ka: float = 0.0        # Acceleration gain [torque / (m/s²)]
+    Kc: float = 0.0        # Stiction/Coulomb magnitude
+
+    # Velocity reference slew-rate limiting
+    enable_vref_slew: bool = False
+    vref_slew_rate: float = 0.0     # [m/s² or rad/s²]
+
+    # Stiction smoothing (tanh with Stribeck decay)
+    enable_stiction: bool = False
+    v0_stiction: float = 0.08       # Tanh transition width
+    v_decay_stiction: float = 0.15  # Stribeck decay speed
+
+
+@dataclasses.dataclass
 class VelocityControllerConfig:
-    # Longitudinal velocity PID
-    k_p_v: float = -0.179
-    k_i_v: float = -0.8
-    k_d_v: float = -0.005
+    """Velocity controller config matching firmware: PID + Feedforward for v and psi_dot."""
+
+    # Longitudinal velocity PID (small gains — FF handles steady state)
+    k_p_v: float = 0.0
+    k_i_v: float = -0.05
+    k_d_v: float = 0.0
+
+    # Longitudinal velocity feedforward (use auto_tune_velocity_ff() to set Kv for your K)
+    ff_v: FeedforwardConfig = dataclasses.field(default_factory=lambda: FeedforwardConfig(
+        Kv=-0.25,
+        Ka=-0.02,
+        Kc=0.0,
+        enable_vref_slew=True,
+        vref_slew_rate=5.0,
+        enable_stiction=True,
+        v0_stiction=0.08,
+        v_decay_stiction=0.15,
+    ))
 
     # Yaw rate (psi_dot) PID
-    k_p_psi_dot: float = 0.35121
-    k_i_psi_dot: float = 7.6256
-    k_d_psi_dot: float = 0.0023
+    k_p_psi_dot: float = 0.01
+    k_i_psi_dot: float = 0.05
+    k_d_psi_dot: float = 0.0
+
+    # Yaw rate feedforward
+    ff_psi_dot: FeedforwardConfig = dataclasses.field(default_factory=lambda: FeedforwardConfig(
+        Kv=0.03,
+        Ka=0.0,
+        Kc=0.0,
+    ))
 
     # Integral limits
     k_integral_max_v: float = 10.0
@@ -129,6 +168,10 @@ class BILBO_CompleteAgent(BILBO_DynamicAgent):
         self._v_last_error: float = 0.0
         self._psi_dot_integral: float = 0.0
         self._psi_dot_last_error: float = 0.0
+
+        # Feedforward state (previous velocity commands for acceleration estimation)
+        self._ff_v_prev: float = 0.0
+        self._ff_psi_dot_prev: float = 0.0
 
         # Position controller (firmware-style)
         pos_cfg = position_config or PositionControlConfig(Ts=float(self.Ts))
@@ -214,6 +257,70 @@ class BILBO_CompleteAgent(BILBO_DynamicAgent):
         """Set the velocity command for VELOCITY mode."""
         self.velocity_command.v = v
         self.velocity_command.psi_dot = psi_dot
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def auto_tune_velocity_ff(self, apply: bool = True) -> tuple[float, float]:
+        """Compute feedforward Kv gains from the current model and K matrix.
+
+        Solves the steady-state equations so that the feedforward alone
+        produces the correct velocity without relying on the PID integral.
+        Uses the linearized model augmented with the nonlinear drag terms
+        (tau_x, tau_theta) that the standard linearization omits.
+
+        The result depends on the physical model and the chosen state-feedback
+        poles (K matrix), so call this after eigenstructure assignment.
+
+        Args:
+            apply: If True (default), write the computed gains into the
+                   velocity controller config. If False, only return them.
+
+        Returns:
+            (Kv_forward, Kv_turn) — the computed feedforward gains.
+        """
+        lin = BILBO_Dynamics_3D_Linear(self.model, Ts=float(self.Ts))
+        A, B, _, _ = lin._linear_model()
+
+        # The nonlinear dynamics have extra drag terms not in the linearization:
+        #   v_dot     += -tau_x * v
+        #   theta_dot += -tau_theta * theta_dot
+        A[2, 2] -= self.model.tau_x
+        A[4, 4] -= self.model.tau_theta
+
+        K = self.K
+        A_cl = A - B @ K
+
+        # --- Forward velocity Kv ---
+        # At steady state with constant v (theta_dot = 0):
+        #   0 = A_cl[2, 2]*v + A_cl[2, 3]*theta_ss + b_fwd[0]*Kv*v
+        #   0 = A_cl[4, 2]*v + A_cl[4, 3]*theta_ss + b_fwd[2]*Kv*v
+        # Two equations, two unknowns: theta_ss/v and Kv.
+        idx_fwd = [2, 3, 4]
+        A_sub = A_cl[np.ix_(idx_fwd, idx_fwd)]
+        b_fwd = B[idx_fwd, 0] + B[idx_fwd, 1]  # symmetric input
+
+        M_fwd = np.array([
+            [A_sub[0, 1], b_fwd[0]],
+            [A_sub[2, 1], b_fwd[2]],
+        ])
+        rhs_fwd = np.array([-A_sub[0, 0], -A_sub[2, 0]])
+        sol_fwd = np.linalg.solve(M_fwd, rhs_fwd)
+        Kv_forward = float(sol_fwd[1])
+
+        # --- Turn (yaw rate) Kv ---
+        # psi_dot dynamics at steady state (constant psi_dot):
+        #   0 = A_cl[6, 6]*psi_dot + b_turn*Kv_turn*psi_dot
+        # where b_turn = B[6,1] - B[6,0] (differential input).
+        b_turn = B[6, 1] - B[6, 0]
+        Kv_turn = float(-A_cl[6, 6] / b_turn)
+
+        self.logger.info(f"Auto-tuned velocity FF: Kv_forward={Kv_forward:.4f}, "
+                         f"Kv_turn={Kv_turn:.4f}")
+
+        if apply:
+            self.velocity_controller_config.ff_v.Kv = Kv_forward
+            self.velocity_controller_config.ff_psi_dot.Kv = Kv_turn
+
+        return Kv_forward, Kv_turn
 
     # -- Obstacle management --
 
@@ -642,43 +749,97 @@ class BILBO_CompleteAgent(BILBO_DynamicAgent):
     # === VELOCITY PID =================================================================================================
 
     def _velocity_control(self) -> np.ndarray:
-        """PID on forward velocity v and yaw rate psi_dot -> [u_l, u_r]."""
+        """Feedforward + PID on forward velocity and yaw rate -> [u_l, u_r].
+
+        Matches the firmware velocity controller structure:
+          u_forward = ff_forward(v_cmd) + pid_forward(v_cmd, v_meas)
+          u_turn    = ff_turn(psi_dot_cmd) + pid_turn(psi_dot_cmd, psi_dot_meas)
+          u_l = u_forward - u_turn
+          u_r = u_forward + u_turn
+        """
         state = self.dynamics.state
         cfg = self.velocity_controller_config
+        Ts = float(self.Ts)
 
+        # --- Forward velocity feedforward ---
+        u_forward_ff = self._feedforward(
+            v_cmd=self.velocity_command.v,
+            v_cmd_prev=self._ff_v_prev,
+            ff_cfg=cfg.ff_v,
+            Ts=Ts,
+        )
+        self._ff_v_prev = self.velocity_command.v
+
+        # --- Yaw rate feedforward ---
+        u_turn_ff = self._feedforward(
+            v_cmd=self.velocity_command.psi_dot,
+            v_cmd_prev=self._ff_psi_dot_prev,
+            ff_cfg=cfg.ff_psi_dot,
+            Ts=Ts,
+        )
+        self._ff_psi_dot_prev = self.velocity_command.psi_dot
+
+        # --- Forward velocity PID ---
         e_v = self.velocity_command.v - state.v
-        e_psi_dot = self.velocity_command.psi_dot - state.psi_dot
-
-        # Integrals
-        self._v_integral += e_v * self.Ts
-        self._psi_dot_integral += e_psi_dot * self.Ts
-
-        # Derivatives
-        e_v_dot = (e_v - self._v_last_error) / self.Ts
-        self._v_last_error = e_v
-
-        e_psi_dot_dot = (e_psi_dot - self._psi_dot_last_error) / self.Ts
-        self._psi_dot_last_error = e_psi_dot
-
-        # Saturate integrals
+        self._v_integral += e_v * Ts
         self._v_integral = _clamp(self._v_integral,
                                   -cfg.k_integral_max_v, cfg.k_integral_max_v)
+        e_v_dot = (e_v - self._v_last_error) / Ts
+        self._v_last_error = e_v
+
+        u_forward_pid = (cfg.k_p_v * e_v + cfg.k_i_v * self._v_integral +
+                         cfg.k_d_v * e_v_dot)
+
+        # --- Yaw rate PID ---
+        e_psi_dot = self.velocity_command.psi_dot - state.psi_dot
+        self._psi_dot_integral += e_psi_dot * Ts
         self._psi_dot_integral = _clamp(self._psi_dot_integral,
                                         -cfg.k_integral_max_psi_dot,
                                         cfg.k_integral_max_psi_dot)
+        e_psi_dot_dot = (e_psi_dot - self._psi_dot_last_error) / Ts
+        self._psi_dot_last_error = e_psi_dot
 
-        # PID for v
-        u_v = (cfg.k_p_v * e_v + cfg.k_i_v * self._v_integral +
-               cfg.k_d_v * e_v_dot)
+        u_turn_pid = (cfg.k_p_psi_dot * e_psi_dot +
+                      cfg.k_i_psi_dot * self._psi_dot_integral +
+                      cfg.k_d_psi_dot * e_psi_dot_dot)
 
-        # PID for psi_dot
-        u_psi = (cfg.k_p_psi_dot * e_psi_dot +
-                 cfg.k_i_psi_dot * self._psi_dot_integral +
-                 cfg.k_d_psi_dot * e_psi_dot_dot)
+        # --- Sum FF + PID ---
+        u_forward = u_forward_ff + u_forward_pid
+        u_turn = u_turn_ff + u_turn_pid
 
-        u_l = u_v - u_psi
-        u_r = u_v + u_psi
+        u_l = u_forward - u_turn
+        u_r = u_forward + u_turn
         return np.asarray([u_l, u_r], dtype=float)
+
+    @staticmethod
+    def _feedforward(v_cmd: float, v_cmd_prev: float,
+                     ff_cfg: FeedforwardConfig, Ts: float) -> float:
+        """Compute feedforward output matching firmware: tau = Kv*v + Ka*a + stiction."""
+        v = v_cmd
+
+        # Slew-rate limit on velocity reference
+        if ff_cfg.enable_vref_slew and ff_cfg.vref_slew_rate > 0:
+            max_delta = ff_cfg.vref_slew_rate * Ts
+            v = v_cmd_prev + _clamp(v_cmd - v_cmd_prev, -max_delta, max_delta)
+
+        # Acceleration estimate from reference change
+        a_ref = (v - v_cmd_prev) / Ts if Ts > 0 else 0.0
+
+        # Velocity term
+        tau_v = ff_cfg.Kv * v
+
+        # Acceleration term
+        tau_a = ff_cfg.Ka * a_ref
+
+        # Stiction / Coulomb term with Stribeck decay
+        tau_c = 0.0
+        if ff_cfg.enable_stiction and ff_cfg.Kc != 0.0:
+            v0 = ff_cfg.v0_stiction if ff_cfg.v0_stiction > 0 else 1.0
+            sign_v = math.tanh(v / v0)
+            decay = math.exp(-abs(v) / ff_cfg.v_decay_stiction) if ff_cfg.v_decay_stiction > 0 else 1.0
+            tau_c = ff_cfg.Kc * sign_v * decay
+
+        return tau_v + tau_a + tau_c
 
     # === PATH PLANNING ================================================================================================
 
@@ -809,3 +970,5 @@ class BILBO_CompleteAgent(BILBO_DynamicAgent):
         self._v_last_error = 0.0
         self._psi_dot_integral = 0.0
         self._psi_dot_last_error = 0.0
+        self._ff_v_prev = 0.0
+        self._ff_psi_dot_prev = 0.0

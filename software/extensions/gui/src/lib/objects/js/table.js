@@ -2961,7 +2961,19 @@ export class ButtonCell extends TableCell {
             if (!active) return;
             this.button.classList.add("pressed");
             setTimeout(() => this.button && this.button.classList.remove("pressed"), 120);
-            console.log(`ButtonCell (${this.row}, ${this.column}) pressed`);
+
+            if (this.table) {
+                this.table.callbacks.get('event').call({
+                    id: this.table.id,
+                    event: 'cell_edit',
+                    data: {
+                        row_id: this.row,
+                        column_id: this.column,
+                        value: this.value,
+                        cell_id: this.id,
+                    },
+                });
+            }
         });
 
         this.element.appendChild(this.button);

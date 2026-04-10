@@ -206,6 +206,7 @@ class TestbedManager:
         self._display_clear_timer: threading.Timer | None = None
         self._limbo_bar_clear_timer: threading.Timer | None = None
         self._limbo_bar_experiment_listeners: list = []
+        self._dilc_experiment_listeners: list = []
         self._obstacle_sync_thread: threading.Thread | None = None
         register_exit_callback(self.close)
 
@@ -302,6 +303,8 @@ class TestbedManager:
             robot.experiment_handler.events.experiment_finished.on(self._on_experiment_finished),
             robot.experiment_handler.events.experiment_error.on(self._on_experiment_finished),
             robot.experiment_handler.events.experiment_timeout.on(self._on_experiment_finished),
+            robot.experiment_handler.events.dilc_experiment_initialized.on(
+                self._on_dilc_experiment_initialized),
             robot.experiment_handler.events.limbobar_dilc_experiment_initialized.on(
                 self._on_limbobar_dilc_experiment_initialized),
         ]
@@ -354,6 +357,54 @@ class TestbedManager:
             self._display_clear_timer.daemon = True
             self._display_clear_timer.start()
 
+    # === EVENT HANDLERS: DILC EXPERIMENT ================================================================================
+    def _on_dilc_experiment_initialized(self, data, *args, **kwargs):
+        experiment = data.get('experiment')
+        if experiment is None:
+            return
+
+        # Stop any previous DILC experiment listeners
+        for listener in self._dilc_experiment_listeners:
+            listener.stop()
+        self._dilc_experiment_listeners = []
+
+        display = self.extensions.display if self.extensions is not None else None
+        experiment_id = experiment.settings.id if experiment.settings else ''
+        total_trials = experiment.settings.J if experiment.settings else '?'
+
+        # Show experiment ID on display
+        if display is not None:
+            if self._display_clear_timer is not None:
+                self._display_clear_timer.cancel()
+                self._display_clear_timer = None
+            display.set_title(experiment_id)
+            display.set_text(f"0 / {total_trials}")
+            display.show_wall_clock(color=(255, 255, 255), size=80)
+
+        # Update display with the current trial number
+        def on_trial_started(trial_data, *a, **kw):
+            if display is None or not isinstance(trial_data, dict):
+                return
+            trial_index = trial_data.get('trial_index', 0)
+            total = trial_data.get('total_trials', total_trials)
+            display.set_text(f"Trial {trial_index + 1} / {total}")
+
+        # Clear display 5s after experiment ends
+        def on_experiment_ended(end_data, *a, **kw):
+            if display is not None:
+                display.stop_clock()
+                if self._display_clear_timer is not None:
+                    self._display_clear_timer.cancel()
+                self._display_clear_timer = threading.Timer(5.0, display.clear)
+                self._display_clear_timer.daemon = True
+                self._display_clear_timer.start()
+
+        self._dilc_experiment_listeners = [
+            experiment.events.trial_prepared.on(on_trial_started),
+            experiment.events.experiment_finished.on(on_experiment_ended),
+            experiment.events.experiment_error.on(on_experiment_ended),
+        ]
+
     # === EVENT HANDLERS: LIMBO BAR DILC EXPERIMENT =====================================================================
     def _on_limbobar_dilc_experiment_initialized(self, data, *args, **kwargs):
         experiment = data.get('experiment')
@@ -374,7 +425,7 @@ class TestbedManager:
         if experiment.settings is not None and experiment.settings.limbo_bar is not None:
             height = experiment.settings.limbo_bar.height
         if height is not None:
-            limbo_bar.setHeight(height*1000)
+            limbo_bar.setHeight(height * 1000)
             self.logger.info(f"Limbo bar height set to {height} m from experiment settings")
 
         # Cancel any pending clear timer
@@ -400,13 +451,13 @@ class TestbedManager:
             self.logger.warning(f"Limbo bar hit: {hit_data}")
             limbo_bar.blinkRed()
 
-        # Update display with current trial number
+        # Update display with the current trial number
         def on_trial_started(trial_data, *a, **kw):
             if display is None or not isinstance(trial_data, dict):
                 return
             trial_index = trial_data.get('trial_index', 0)
             total = trial_data.get('total_trials', total_trials)
-            display.set_text(f"{trial_index + 1} / {total}")
+            display.set_text(f"Trial {trial_index + 1} / {total}")
 
         # Blink at end of trial (if not already hit):
         #   green = passed (reached target zone), red = not passed
@@ -442,7 +493,7 @@ class TestbedManager:
 
         self._limbo_bar_experiment_listeners = [
             experiment.events.limbo_bar_hit.on(on_limbo_bar_hit),
-            experiment.events.trial_started.on(on_trial_started),
+            experiment.events.trial_prepared.on(on_trial_started),
             experiment.events.trial_finished.on(on_trial_finished),
             experiment.events.experiment_finished.on(on_experiment_ended),
             experiment.events.experiment_error.on(on_experiment_ended),

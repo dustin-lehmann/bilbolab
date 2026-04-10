@@ -534,7 +534,7 @@ class BabylonVisualization:
         config_dict['websocket_port'] = str(port)
 
         # Legacy dict override (for existing callers passing raw dicts)
-        self.config = update_dict(config_dict, babylon_config)
+        self.config = update_dict(config_dict, babylon_config or {})
 
         self.id = id
 

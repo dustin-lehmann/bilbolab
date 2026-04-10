@@ -17,11 +17,14 @@ DEFAULT_WEBSOCKET_PORT = 7777
 DEFAULT_NUM_PIXELS = 30
 DEFAULT_HEIGHT_OFFSET_TO_PIXEL_0 = 10.0  # physical height (same units as 'height') at pixel 0
 DEFAULT_DISTANCE_BETWEEN_PIXELS = 16.5  # distance (same units) between successive pixels
-DEFAULT_HEIGHT_COLOR = (0, 0, 255)  # color for "height" indicator pixels
+# DEFAULT_HEIGHT_COLOR = (0, 0, 255)  # color for "height" indicator pixels
+DEFAULT_HEIGHT_COLOR = (128,0,128)
+
 DEFAULT_BLUE = (0, 0, 255)
 DEFAULT_OFF = (0, 0, 0)
 
 PIN = board.D18
+
 
 
 @dataclasses.dataclass

@@ -34,10 +34,7 @@ class TextWidget(Widget):
     @text.setter
     def text(self, new_text):
         self._text = new_text
-        self.function(
-            function_name="setText",
-            args=new_text
-        )
+        self.updateConfig()
 
     def getConfiguration(self) -> dict:
         config = {

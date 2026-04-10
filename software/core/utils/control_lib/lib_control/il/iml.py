@@ -12,17 +12,17 @@ def imlUpdateOptimal(uj: np.ndarray, yj: np.ndarray, mj: np.ndarray) -> np.ndarr
     return mj_1
 
 
-
 def getOptimalLearningMatrixFromMatrix(U: np.ndarray):
     N = U.shape[0]
     Q = np.eye(N)
     sigma_max = np.linalg.norm(U, 2)
     # S = (sigma_max ** 2) * np.eye(N)
-    S = (sigma_max/100) * np.eye(N)
+    S = (sigma_max / 100) * np.eye(N)
     A = U.T @ (Q @ U) + S
     B = U.T @ Q
     L = np.linalg.solve(A, B)
     return L
+
 
 def getOptimalLearningMatrix(u: np.ndarray):
     u = np.asarray(u)

@@ -31,10 +31,10 @@ model:
   wheel_diameter: 0.12383         # meters
   vertical_offset: 0.137          # meters
   mass: 0.0                       # kilograms
-  height: 0.00                    # meters
-  width: 0.00                     # meters
-  depth: 0.00                     # meters
-  distance_wheels: 0.00           # meters between wheels
+  height: 0.15                    # meters
+  width: 0.14                     # meters
+  depth: 0.085                    # meters
+  distance_wheels: 0.16           # meters between wheels
   l_cg: 0.00                      # center of gravity distance (m)
   theta_offset: 0.075             # radians
   trajectory_delta: 0.0           # Asymmetric torque split: left = u*(0.5+delta), right = u*(0.5-delta)

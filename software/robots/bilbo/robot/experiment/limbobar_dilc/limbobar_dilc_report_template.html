@@ -265,6 +265,11 @@
             color: #721c24;
         }
 
+        .hit-badge.best {
+            background: #fff3cd;
+            color: #856404;
+        }
+
         /* Plots */
         .plots-grid {
             display: grid;
@@ -384,11 +389,66 @@
             font-size: 0.75em;
         }
 
+        /* Collapsible sections */
+        .collapsible-section {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            margin-bottom: 16px;
+        }
+
+        .collapsible-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: #f8f9fa;
+            cursor: pointer;
+            user-select: none;
+            border-radius: 4px;
+        }
+
+        .collapsible-header:hover {
+            background: #e9ecef;
+        }
+
+        .collapsible-arrow {
+            font-size: 0.7em;
+            transition: transform 0.2s;
+            color: #7f8c8d;
+        }
+
+        .collapsible-section.open .collapsible-arrow {
+            transform: rotate(90deg);
+        }
+
+        .collapsible-header h3 {
+            color: #2c3e50;
+            font-size: 0.95em;
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .collapsible-header .hit-badge {
+            margin-left: auto;
+        }
+
+        .collapsible-body {
+            display: none;
+            padding: 12px 16px;
+        }
+
+        .collapsible-section.open .collapsible-body {
+            display: block;
+        }
+
         @media print {
             body { background: white; padding: 0; }
             .container { box-shadow: none; }
             .plots-grid {
                 grid-template-columns: 1fr;
+            }
+            .collapsible-body {
+                display: block !important;
             }
         }
     </style>
@@ -467,8 +527,8 @@
                 </thead>
                 <tbody>
                     {% for row in norms %}
-                    <tr class="{{ 'hit-row' if row.limbo_bar_hit else '' }}">
-                        <td>{{ row.trial }}</td>
+                    <tr class="{{ 'hit-row' if row.limbo_bar_hit or row.limbo_bar_passed is false else '' }}">
+                        <td>{{ row.trial }}{% if row.is_best %} <span class="hit-badge best">BEST</span>{% endif %}</td>
                         <td>
                             {% if row.limbo_bar_hit %}
                             <span class="hit-badge hit">HIT</span>
@@ -516,12 +576,36 @@
         </section>
         {% endif %}
 
+        {% if trial_side_view_plots %}
         <section>
-            <h2>Limbo Bar Hits</h2>
-            <div class="plot-container plot-full">
-                {{ plot_limbo_hits }}
+            <h2>Trial Side Views</h2>
+            {% for plot in trial_side_view_plots %}
+            <div class="collapsible-section">
+                <div class="collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+                    <span class="collapsible-arrow">&#9654;</span>
+                    <h3>{{ plot.title }}</h3>
+                    {% if plot.is_best %}
+                    <span class="hit-badge best">BEST</span>
+                    {% endif %}
+                    {% if plot.hit %}
+                    <span class="hit-badge hit">HIT</span>
+                    {% elif plot.passed is true %}
+                    <span class="hit-badge pass">PASS</span>
+                    {% elif plot.passed is false %}
+                    <span class="hit-badge fail">FAIL</span>
+                    {% else %}
+                    <span class="hit-badge miss">OK</span>
+                    {% endif %}
+                </div>
+                <div class="collapsible-body">
+                    <div class="plot-container plot-full">
+                        {{ plot.image }}
+                    </div>
+                </div>
             </div>
+            {% endfor %}
         </section>
+        {% endif %}
 
         <section>
             <h2>Output Trajectories</h2>
@@ -582,6 +666,18 @@
             <h2>Settings</h2>
             <div class="settings-grid">
                 {% for key, value in settings.items() %}
+                <span class="label">{{ key }}</span>
+                <span class="value">{{ value }}</span>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if robot_model %}
+        <section>
+            <h2>Robot Model</h2>
+            <div class="settings-grid">
+                {% for key, value in robot_model.items() %}
                 <span class="label">{{ key }}</span>
                 <span class="value">{{ value }}</span>
                 {% endfor %}

@@ -12,7 +12,7 @@ import numpy as np
 
 from core.utils.plotting.plot import (
     Plot, PlotConfig,
-    Axis, AxisConfig,
+    Axis, AxisConfig, LegendConfig,
     SeriesConfig,
 )
 
@@ -97,8 +97,7 @@ def plot_outputs(
         title='Output Trajectories',
         xlabel='Time [s]',
         ylabel='Output',
-        legend=True,
-        legend_loc='upper right',
+        legend=LegendConfig(loc='upper right'),
     ))
     plot.set_axis(1, 1, axis)
 
@@ -165,8 +164,7 @@ def plot_inputs(
         title='Input Trajectories',
         xlabel='Time [s]',
         ylabel='Input',
-        legend=True,
-        legend_loc='upper right',
+        legend=LegendConfig(loc='upper right'),
     ))
     plot.set_axis(1, 1, axis)
 

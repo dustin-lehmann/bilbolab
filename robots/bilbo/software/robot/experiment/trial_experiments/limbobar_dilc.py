@@ -35,6 +35,7 @@ from robot.experiment.trial_experiments.dilc import (
     DILC_Experiment_Meta_Settings,
     DILC_U0_Params,
     DILC_WifiEvents,
+    DILC_Phase,
 )
 from robot.interfaces.bilbo_interfaces import BILBO_Interfaces
 from robot.config import BILBO_Config
@@ -108,6 +109,7 @@ class LimboBar_DILC_Trial_Data:
     L_ilc: np.ndarray
     L_iml: np.ndarray
     limbo_bar_hit: bool
+    limbo_bar_hit_data: dict | None = None
     limbo_bar_passed: bool | None = None
     meta: DILC_Trial_Meta | None = None
 
@@ -122,6 +124,7 @@ class LimboBar_DILC_Results_Meta:
     control_config: BILBO_ControlConfig
     settings: LimboBar_DILC_Experiment_Settings
     logs: list[dict] = dataclasses.field(default_factory=list)
+    testbed_size: dict | None = None
 
 
 @dataclasses.dataclass
@@ -193,6 +196,7 @@ class LimboBar_DILC_Experiment(DILC_Experiment):
         super().__init__(common, estimation, control, communication,
                          interfaces, experiment_handler, settings)
         self._limbo_bar_id: str | None = None
+        self._limbo_bar_hit_listener = None
         self.logger.name = f"LimboBar DILC {settings.id}"
 
         # Override WiFi event container so the host-side LimboBar DILC proxy
@@ -210,8 +214,10 @@ class LimboBar_DILC_Experiment(DILC_Experiment):
     def _on_initialize(self):
         self._register_limbo_bar()
         self._validate_target_zone()
+        self._subscribe_to_limbo_bar_hit()
 
     def _on_cleanup(self):
+        self._unsubscribe_from_limbo_bar_hit()
         self._cleanup_limbo_bar()
 
     def _on_trial_prepared(self):
@@ -219,6 +225,7 @@ class LimboBar_DILC_Experiment(DILC_Experiment):
 
     def _on_after_trajectory(self, trajectory_data) -> dict:
         limbo_bar_hit = self._get_limbo_bar_hit()
+        limbo_bar_hit_data = self._get_limbo_bar_hit_data()
         limbo_bar_passed = self._check_target_zone_passed(limbo_bar_hit)
         self.logger.info(f"Limbo bar hit: {limbo_bar_hit}")
         if limbo_bar_passed is not None:
@@ -228,6 +235,7 @@ class LimboBar_DILC_Experiment(DILC_Experiment):
         self._reset_limbo_bar()
         return {
             'limbo_bar_hit': limbo_bar_hit,
+            'limbo_bar_hit_data': limbo_bar_hit_data,
             'limbo_bar_passed': limbo_bar_passed,
         }
 
@@ -250,6 +258,7 @@ class LimboBar_DILC_Experiment(DILC_Experiment):
             L_ilc=L_ilc,
             L_iml=L_iml,
             limbo_bar_hit=extra_trial_data.get('limbo_bar_hit', False),
+            limbo_bar_hit_data=extra_trial_data.get('limbo_bar_hit_data'),
             limbo_bar_passed=extra_trial_data.get('limbo_bar_passed'),
             meta=trial_meta,
             samples=trial_samples,
@@ -263,6 +272,12 @@ class LimboBar_DILC_Experiment(DILC_Experiment):
 
     def _build_results(self):
         from datetime import datetime
+        testbed_size = None
+        testbed_cfg = self.experiment_handler.testbed.testbed_config
+        if testbed_cfg is not None:
+            sz = testbed_cfg.size
+            testbed_size = {'x_min': sz.x_min, 'x_max': sz.x_max,
+                            'y_min': sz.y_min, 'y_max': sz.y_max}
         meta = LimboBar_DILC_Results_Meta(
             robot_id=self.common.id,
             date=datetime.now().isoformat(),
@@ -270,6 +285,7 @@ class LimboBar_DILC_Experiment(DILC_Experiment):
             control_config=self.control.get_control_config(),
             settings=self.settings,
             logs=self._logs,
+            testbed_size=testbed_size,
         )
         return LimboBar_DILC_Results(
             meta=meta,
@@ -339,6 +355,56 @@ class LimboBar_DILC_Experiment(DILC_Experiment):
             if bar is not None:
                 return bar.hit
         return False
+
+    def _get_limbo_bar_hit_data(self) -> dict | None:
+        """Read the hit data of the experiment's limbo bar (x, theta, etc. at collision)."""
+        if self._limbo_bar_id is not None:
+            testbed = self.experiment_handler.testbed
+            bar = next((b for b in testbed.limbo_bars if b.id == self._limbo_bar_id), None)
+            if bar is not None and bar.hit and bar.hit_data:
+                return bar.hit_data
+        return None
+
+    # === Limbo bar hit event forwarding ============================================================================
+
+    def _subscribe_to_limbo_bar_hit(self):
+        """Subscribe to the testbed's limbo_bar_hit event and forward it as an
+        experiment-scoped WiFi event, but only during RUNNING_TRAJECTORY phase."""
+        testbed = self.experiment_handler.testbed
+        self._limbo_bar_hit_listener = testbed.events.limbo_bar_hit.on(
+            self._on_testbed_limbo_bar_hit,
+        )
+        self.logger.info("Subscribed to testbed limbo_bar_hit event")
+
+    def _unsubscribe_from_limbo_bar_hit(self):
+        """Unsubscribe from the testbed's limbo_bar_hit event."""
+        if self._limbo_bar_hit_listener is not None:
+            self._limbo_bar_hit_listener.stop()
+            self._limbo_bar_hit_listener = None
+            self.logger.info("Unsubscribed from testbed limbo_bar_hit event")
+
+    def _on_testbed_limbo_bar_hit(self, data, **kwargs):
+        """Called when the testbed detects a limbo bar collision.
+
+        Only forwards the hit as an experiment-scoped WiFi event when the
+        experiment is in the RUNNING_TRAJECTORY phase. Hits during other
+        phases (e.g. driving back to initial conditions) are ignored.
+        """
+        if self.phase != DILC_Phase.RUNNING_TRAJECTORY:
+            self.logger.debug(f"Limbo bar hit ignored (phase={self.phase})")
+            return
+
+        bar_id = data.get('bar_id') if isinstance(data, dict) else None
+        if bar_id and self._limbo_bar_id and bar_id != self._limbo_bar_id:
+            return  # Hit on a different bar, not ours
+
+        self.logger.info(f"Limbo bar hit during trajectory! (bar_id={bar_id})")
+        self.wifi_events.limbo_bar_hit.send(data={
+            **self._wifi_data,
+            **(data if isinstance(data, dict) else {}),
+        }, flags=self._WIFI_FLAGS)
+
+    # === Target zone methods ======================================================================================
 
     def _validate_target_zone(self):
         """Validate target zone configuration at experiment init."""

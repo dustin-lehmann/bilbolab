@@ -1,4 +1,4 @@
-name: 'bilbo2 lab control'
+name: 'bilbo1 lab control'
 description: 'For the blue carpet tiles in the lab'
 velocity_control:
   v:

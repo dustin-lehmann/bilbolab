@@ -460,6 +460,8 @@ def animate_plot(
         data_rate: float = 0.01,
         target_fps: float = 25.0,
         timecode: Timecode | None = None,
+        lead_time: float = 0.0,
+        hold_time: float = 0.0,
 ) -> str:
     """
     Animate all Series in a Plot into a time-based overlay video with constant fps.
@@ -479,7 +481,14 @@ def animate_plot(
         Starting SMPTE timecode for the video. If provided and its internal
         fps differs from `target_fps`, it is rebased via `timecode.rebase_fps`
         so that the absolute time is preserved but the frame number is
-        expressed at `target_fps`.
+        expressed at `target_fps`. The timecode is shifted backwards by
+        `lead_time` so that the data animation starts at the original timecode.
+    lead_time : float, default 0.0
+        Seconds of still frames to prepend before the animation starts.
+        Shows only axes and static series (no animated data, no end dots).
+    hold_time : float, default 0.0
+        Seconds of still frames to append after the animation ends.
+        Shows the fully revealed plot without end dots.
 
     Returns
     -------
@@ -550,19 +559,39 @@ def animate_plot(
     if target_fps <= 0:
         raise ValueError("target_fps must be positive")
 
+    # Lead frames (before animation): show only axes + static series
+    n_lead_frames = int(round(lead_time * target_fps)) if lead_time > 0 else 0
+
+    # Animation frames
     duration = max(0.0, t_max - t_min)
     if duration == 0.0:
-        n_frames = 1
+        n_anim_frames = 1
     else:
-        n_frames = int(np.floor(duration * target_fps)) + 1
+        n_anim_frames = int(np.floor(duration * target_fps)) + 1
 
-    frame_indices = np.arange(n_frames, dtype=float)
-    rel_frame_times = frame_indices / float(target_fps)  # relative to t_min
-    frame_times = t_min + rel_frame_times
+    # Hold frames (after animation): show full plot without end dots
+    n_hold_frames = int(round(hold_time * target_fps)) if hold_time > 0 else 0
 
-    # Timestamps used for ffmpeg concat (seconds since 0).
-    # Absolute offset doesn't matter for durations; we start at 0.
-    timestamps = [float(t_rel) for t_rel in rel_frame_times]
+    anim_indices = np.arange(n_anim_frames, dtype=float)
+    anim_rel_times = anim_indices / float(target_fps)  # relative to t_min
+    anim_frame_times = t_min + anim_rel_times
+
+    # Build a unified frame descriptor list: (phase, data_time)
+    # - 'lead':    no animated data shown, data_time = t_min (before animation)
+    # - 'animate': progressive reveal, data_time = current time
+    # - 'hold':    full data shown, data_time = t_max (after animation)
+    frame_descriptors: list[tuple[str, float]] = []
+    for _ in range(n_lead_frames):
+        frame_descriptors.append(('lead', t_min))
+    for t_cur in anim_frame_times:
+        frame_descriptors.append(('animate', float(t_cur)))
+    for _ in range(n_hold_frames):
+        frame_descriptors.append(('hold', t_max))
+
+    n_total_frames = len(frame_descriptors)
+
+    # Timestamps for ffmpeg concat (seconds since 0, constant spacing)
+    timestamps = [i / float(target_fps) for i in range(n_total_frames)]
 
     # Sanity: timestamps strictly increasing
     for i in range(1, len(timestamps)):
@@ -624,16 +653,13 @@ def animate_plot(
         output_path = output_path.with_suffix(".mov")
     output_path = output_path.resolve()
 
-    include_end_dots = True  # keep behavior from the original helper
-
     # --- Generate frames and ffmpeg concat file in a temp dir -------------------
     try:
         with tempfile.TemporaryDirectory() as tmpdir_str:
             tmpdir = Path(tmpdir_str)
             frame_paths: list[Path] = []
 
-            # Generate frames by progressively revealing data
-            for idx, t_current in enumerate(frame_times):
+            for idx, (phase, t_current) in enumerate(frame_descriptors):
                 extra_artists = []
 
                 # Update all series for this frame
@@ -641,24 +667,38 @@ def animate_plot(
                     if series.ax is None:
                         continue
 
-                    mask = x_full <= t_current
-                    if np.any(mask):
-                        x_frame = x_full[mask]
-                        y_frame = y_full[mask]
+                    # Static series are always shown in full
+                    if getattr(series.config, 'static', False):
+                        series.set_data(x_full, y_full, autoscale=False)
+                        continue
+
+                    if phase == 'lead':
+                        # Lead phase: hide animated series
+                        series.set_data(np.asarray([]), np.asarray([]), autoscale=False)
+                    elif phase == 'hold':
+                        # Hold phase: show full data
+                        series.set_data(x_full, y_full, autoscale=False)
                     else:
-                        x_frame = np.asarray([])
-                        y_frame = np.asarray([])
+                        # Animate phase: progressive reveal
+                        mask = x_full <= t_current
+                        if np.any(mask):
+                            x_frame = x_full[mask]
+                            y_frame = y_full[mask]
+                        else:
+                            x_frame = np.asarray([])
+                            y_frame = np.asarray([])
+                        series.set_data(x_frame, y_frame, autoscale=False)
 
-                    series.set_data(x_frame, y_frame, autoscale=False)
-
-                # Draw moving end dots at the *current* end of each series
-                if include_end_dots:
+                # Draw moving end dots only during the animate phase
+                if phase == 'animate':
                     for axis in plot.axes.values():
                         if axis.ax is None:
                             continue
                         mpl_ax = axis.ax
                         for series, (x_full, y_full) in series_data.items():
                             if series.ax is not mpl_ax or x_full.size == 0:
+                                continue
+                            if getattr(series.config, 'static', False):
                                 continue
 
                             mask = x_full <= t_current
@@ -752,11 +792,15 @@ def animate_plot(
                 "-pix_fmt", "yuva444p10le",  # YUV + alpha, 10-bit
             ])
 
-            # Add SMPTE timecode if requested, rebased to target_fps if needed
+            # Add SMPTE timecode if requested, rebased to target_fps if needed.
+            # Shift backwards by lead_time so the data animation starts at the
+            # original timecode.
             if timecode is not None:
                 tc = timecode
                 if tc.fps is None:
                     raise ValueError("Timecode.fps must be set")
+                if lead_time > 0:
+                    tc = tc.offset_seconds(-lead_time)
                 if abs(tc.fps - target_fps) > 1e-3:
                     tc = tc.rebase_fps(new_fps=target_fps, df=tc.df)
                 cmd.extend(["-timecode", tc.to_string()])

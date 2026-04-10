@@ -1,2 +1,0 @@
-flare.png: https://github.com/BabylonJS/Babylon.js/tree/master/Playground/textures
-skybox_??.jpg: https://github.com/BabylonJS/Babylon.js/tree/master/Playground/textures

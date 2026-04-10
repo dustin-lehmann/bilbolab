@@ -126,6 +126,7 @@ class MultiSelectWidget(Widget):
         match message['event']:
             case 'multi_select_change':
                 self.value = message['data']['value']
+                self.callbacks.selection_changed.call(self.value)
 
         # event = message.get("event")
         # data = message.get("data", {})

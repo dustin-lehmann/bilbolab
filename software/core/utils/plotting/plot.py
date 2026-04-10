@@ -792,6 +792,7 @@ class SeriesConfig:
 
     # Special
     stairs: bool = False  # if True -> use ax.step
+    static: bool = False  # if True -> not animated (always shown in full)
 
 
 class Series:
@@ -904,6 +905,24 @@ class Series:
         return out
 
 
+# === LEGEND ============================================================================================================
+@dataclasses.dataclass
+class LegendConfig:
+    """Legend styling configuration."""
+    show: bool = True
+    loc: str = "upper right"
+    alpha: float = 1.0
+    font_size: float | None = None
+    marker_scale: float = 1.0
+    line_width: float = 1.0
+    font_color: str | Sequence[float] | None = 'black'
+    background_color: str | Sequence[float] | None = 'white'
+    edge_color: str | Sequence[float] | None = None
+    border_width: float | None = None
+    outside_right: bool = False
+    outside_right_pad: float = 0.02
+
+
 # === AXIS =============================================================================================================
 @dataclasses.dataclass
 class AxisConfig:
@@ -943,18 +962,12 @@ class AxisConfig:
     grid_linewidth: float = 0.5
     grid_color: str | Sequence[float] | None = dataclasses.field(default_factory=lambda: [0.2, 0.2, 0.2])
 
-    # Legend
-    legend: bool = True
-    legend_loc: str = "upper right"
-    legend_alpha: float = 1.0
-    legend_font_size: float | None = None
-    legend_marker_scale: float = 1.0
-    legend_line_width: float = 1.0
-    legend_font_color: str | Sequence[float] | None = 'black'
-    legend_background_color: str | Sequence[float] | None = 'white'  # TODO new
-    # NEW: place legend outside to the right of the axes
-    legend_outside_right: bool = False  # if True -> legend outside
-    legend_outside_right_pad: float = 0.02  # gap between axes and legend (in axes fraction)
+    # Legend (accepts bool for convenience: True/False → LegendConfig(show=...))
+    legend: LegendConfig | bool = dataclasses.field(default_factory=LegendConfig)
+
+    def __post_init__(self):
+        if isinstance(self.legend, bool):
+            self.legend = LegendConfig(show=self.legend)
 
 
 class Axis:
@@ -1608,10 +1621,10 @@ class Axis:
             return
 
         ax = self.ax
-        cfg = self.config
+        lcfg = self.config.legend
 
         # If legends are disabled, remove any existing legend and exit
-        if not cfg.legend:
+        if not lcfg.show:
             leg = ax.get_legend()
             if leg is not None:
                 leg.remove()
@@ -1630,57 +1643,60 @@ class Axis:
         handles, labels = zip(*filtered)
 
         legend_kwargs = dict(
-            loc=cfg.legend_loc,
-            markerscale=cfg.legend_marker_scale,
+            loc=lcfg.loc,
+            markerscale=lcfg.marker_scale,
         )
 
-        if cfg.legend_font_size is not None:
-            legend_kwargs["fontsize"] = cfg.legend_font_size
+        if lcfg.font_size is not None:
+            legend_kwargs["fontsize"] = lcfg.font_size
 
         # Optional legend outside placement
-        if getattr(cfg, "legend_outside_right", False):
-            pad = getattr(cfg, "legend_outside_right_pad", 0.02)
+        if lcfg.outside_right:
             legend_kwargs["loc"] = "center left"
-            legend_kwargs["bbox_to_anchor"] = (1.0 + pad, 0.5)
+            legend_kwargs["bbox_to_anchor"] = (1.0 + lcfg.outside_right_pad, 0.5)
             legend_kwargs["borderaxespad"] = 0.0
 
         # Create/update legend
         leg = ax.legend(handles, labels, **legend_kwargs)
 
         # linewidth
-        if cfg.legend_line_width is not None:
+        if lcfg.line_width is not None:
             for line in leg.get_lines():
-                line.set_linewidth(cfg.legend_line_width)
+                line.set_linewidth(lcfg.line_width)
 
         # text colors
-        if cfg.legend_font_color is not None:
+        if lcfg.font_color is not None:
             for text in leg.get_texts():
-                text.set_color(cfg.legend_font_color)
+                text.set_color(lcfg.font_color)
 
-        # --- FIXED ALPHA BEHAVIOR ---------------------------------------------------------
+        # --- Frame styling ----------------------------------------------------------------
         frame = leg.get_frame()
 
-        # If background color is RGBA, use its alpha directly
-        bg = cfg.legend_background_color
+        # Background color with alpha handling
+        bg = lcfg.background_color
         rgba = None
 
         if isinstance(bg, (list, tuple)) and len(bg) in (3, 4):
-            # inject alpha component correctly
             if len(bg) == 3:
-                # no alpha in color → use framealpha
-                rgba = (*bg, cfg.legend_alpha)
+                rgba = (*bg, lcfg.alpha)
             else:
-                # RGBA supplied → override frame alpha from color
                 rgba = bg
-                frame.set_alpha(bg[3])  # important
+                frame.set_alpha(bg[3])
         else:
-            # String color → apply alpha separately
-            frame.set_alpha(cfg.legend_alpha)
+            frame.set_alpha(lcfg.alpha)
 
         if rgba is not None:
             frame.set_facecolor(rgba)
         elif bg is not None:
             frame.set_facecolor(bg)
+
+        # Edge color
+        if lcfg.edge_color is not None:
+            frame.set_edgecolor(lcfg.edge_color)
+
+        # Border width
+        if lcfg.border_width is not None:
+            frame.set_linewidth(lcfg.border_width)
 
     # ------------------------------------------------------------------------------------------------------------------
     def remove_series(self, series_id: str) -> None:
@@ -2583,7 +2599,6 @@ if __name__ == '__main__':
         title="Multiple Time Series",
         xlabel="Time [s]",
         ylabel="Value",
-        legend=True,
         grid=True,
     )
 

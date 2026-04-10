@@ -1,7 +1,7 @@
 name: 'bilbo1 default control'
 description: ''
 general:
-  max_wheel_speed: 100.0              # [rad/s] Motor speed limit
+  max_wheel_speed: 60.0              # [rad/s] Motor speed limit
   max_wheel_torque: 0.5               # [Nm] Motor torque limit
   enable_external_inputs: true        # Allow external torque inputs in balancing mode
   torque_offset: [ 0,0 ]              # [Nm] Static torque offset [left, right]
@@ -13,7 +13,7 @@ inputs:
       max: 0.12                       # [Nm] Max normalized turn torque input
   velocity:
     forward:
-      max: 0.5                        # [m/s] Max forward velocity from normalized input
+      max: 0.75                        # [m/s] Max forward velocity from normalized input
     turn:
       max: 3.0                        # [rad/s] Max yaw rate from normalized input
 balancing_control:
@@ -104,11 +104,11 @@ velocity_control:
 position_control: # Dense path following (pure pursuit)
   kp_angular: 4.0                     # [(rad/s)/rad] Heading error proportional gain
   ki_angular: 0.25                    # [(rad/s)/(rad*s)] Heading error integral gain
-  kp_angular_heading: 0.0            # [(rad/s)/rad] Heading-only kp for turn_to_heading (0 = use kp_angular)
-  ki_angular_heading: 0.0            # [(rad/s)/(rad*s)] Heading-only ki for turn_to_heading (0 = use ki_angular)
+  kp_angular_heading: 6.0            # [(rad/s)/rad] Heading-only kp for turn_to_heading (0 = use kp_angular)
+  ki_angular_heading: 0.25            # [(rad/s)/(rad*s)] Heading-only ki for turn_to_heading (0 = use ki_angular)
   kp_linear: 0.0                      # [1/s] Speed proportional gain (unused when decel_limit > 0)
   ki_linear: 0.012                    # [1/s^2] Speed integral gain
-  kd_linear: 0.5                      # [-] Velocity damping factor
+  kd_linear: 0.4                      # [-] Velocity damping factor
   max_speed: 0.6                      # [m/s] Maximum forward velocity
   max_turn_rate: 5.0                  # [rad/s] Maximum yaw rate
   lookahead_base: 0.15                # [m] Base lookahead distance (scaled by speed for path following)
@@ -118,7 +118,7 @@ position_control: # Dense path following (pure pursuit)
   stop_dwell_time: 1.0                # [s] Hold time at STOP waypoints
   reverse_enter_angle: 2.1            # [rad] Enter reverse mode (~120 deg)
   reverse_exit_angle: 1.05            # [rad] Exit reverse mode (~60 deg)
-  decel_limit: 0.5                    # [m/s^2] Sqrt deceleration profile (0 = use kp_linear instead)
+  decel_limit: 0.4                    # [m/s^2] Sqrt deceleration profile (0 = use kp_linear instead)
   curvature_gain: 0.2                # [-] Curvature→speed: v = max_speed / (1 + gain * κ). Higher = slower in curves.
   curvature_lookahead: 0.1            # [m] How far ahead to estimate curvature from path points
 planning:

@@ -16,7 +16,7 @@ HEIGHT_OFFSET_TO_PIXEL_0 = 0.0  # physical height (same units as 'height') at pi
 DISTANCE_BETWEEN_PIXELS = 17  # distance (same units) between successive pixels
 DEFAULT_HEIGHT_COLOR = (50, 0, 50)
 DEFAULT_NUM_PIXELS = 30
-DEFAULT_MAX_BRIGHTNESS = 10  # max per-channel value after scaling (0..255)
+DEFAULT_MAX_BRIGHTNESS = 40  # max per-channel value after scaling (0..255)
 
 
 def _as_color_triplet(

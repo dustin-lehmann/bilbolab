@@ -1308,6 +1308,38 @@ def wait_for_events(events,
         _stop_subscriber_tree(root)
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+def on_events(events,
+              callback: Callback | Callable,
+              *,
+              once: bool = False,
+              timeout: float | None = None,
+              max_rate: float | None = None,
+              stale_event_time: float | None = None,
+              discard_match_data: bool = True,
+              event_loop: EventLoop | None = None,
+              **kwargs) -> SubscriberListener:
+    """
+    Compile events into a Subscriber tree and register a callback.
+    `events` may be:
+      - Event / Subscriber / pattern str / (Event, Predicate) / (str, Predicate)
+      - OR(…) / AND(…) expressions
+    Returns the SubscriberListener handle (call .stop() to unsubscribe).
+    """
+    root = _compile_expr_to_subscriber(events,
+                                       stale_event_time=stale_event_time,
+                                       event_loop=event_loop,
+                                       once=once,
+                                       id=None)
+    root.once = once
+    return root.on(callback=callback,
+                   once=once,
+                   timeout=timeout,
+                   max_rate=max_rate,
+                   discard_match_data=discard_match_data,
+                   **kwargs)
+
+
 # === EVENT LOOP =======================================================================================================
 class EventLoop(metaclass=_SingletonMeta):
     """

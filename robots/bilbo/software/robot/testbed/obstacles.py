@@ -71,6 +71,7 @@ class LimboBar:
     id: str
     geometry: LimboBarGeometry
     hit: bool = False
+    hit_data: dict = {}
 
     def __init__(self, id: str, geometry: LimboBarGeometry):
         self.id = id
@@ -79,6 +80,7 @@ class LimboBar:
 
     def reset(self):
         self.hit = False
+        self.hit_data = {}
 
     def update(self, x: float, y: float, theta: float, psi: float, config) -> None:
         if self.hit:

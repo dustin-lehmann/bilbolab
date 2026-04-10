@@ -227,6 +227,22 @@ class DILC_Experiment_State(enum.StrEnum):
     FINISHED = "FINISHED"  # All trials completed successfully
 
 
+class DILC_Phase(enum.StrEnum):
+    """Fine-grained phase within a DILC trial.
+
+    Tracks where the experiment is within its trial loop, allowing
+    external consumers (e.g. testbed indicators) to react differently
+    depending on whether the robot is actively running a trajectory
+    vs. repositioning between trials.
+    """
+    IDLE = "IDLE"                                       # No trial in progress
+    PREPARING = "PREPARING"                             # Driving to initial conditions
+    WAITING_FOR_START = "WAITING_FOR_START"              # At IC, waiting for user resume
+    RUNNING_TRAJECTORY = "RUNNING_TRAJECTORY"            # Trajectory executing
+    WAITING_FOR_ACCEPTANCE = "WAITING_FOR_ACCEPTANCE"    # Trajectory done, awaiting review
+    COMPUTING_UPDATE = "COMPUTING_UPDATE"                # ILC/IML computation
+
+
 @dataclasses.dataclass
 class DILC_Results_Meta:
     """Metadata recorded alongside experiment results for reproducibility."""
@@ -343,6 +359,9 @@ class DILC_WifiEvents(WifiEventContainer):
     trial_reverted: WifiEvent = _DILC_WIFI_EVENT
     trial_finished: WifiEvent = _DILC_WIFI_EVENT
     trial_error: WifiEvent = _DILC_WIFI_EVENT
+
+    # Testbed events (forwarded by subclasses with phase filtering)
+    limbo_bar_hit: WifiEvent = _DILC_WIFI_EVENT
 
     # Settings changes (during experiment)
     meta_settings_changed: WifiEvent = _DILC_WIFI_EVENT
@@ -485,6 +504,7 @@ class DILC_Experiment:
         self.experiment_handler = experiment_handler
 
         self.trials = []
+        self.phase: DILC_Phase = DILC_Phase.IDLE
 
         # Runtime-mutable meta settings (initialized from settings in initialize())
         self._auto_start_trials: bool = settings.meta.auto_start_trials
@@ -596,6 +616,7 @@ class DILC_Experiment:
         self._finished = False
         self._abort_requested = False
         self.trials = []
+        self.phase = DILC_Phase.IDLE
 
         self._on_initialize()
 
@@ -693,6 +714,7 @@ class DILC_Experiment:
 
             elif result == TrialResult.ERROR:
                 # Trial failed. Stop the experiment and return partial results.
+                self.phase = DILC_Phase.IDLE
                 self.state = DILC_Experiment_State.ERROR
                 self._finished = True
                 self._stop_log_capture()
@@ -716,6 +738,7 @@ class DILC_Experiment:
                 return results
 
         # --- Post-loop: completed or aborted ---
+        self.phase = DILC_Phase.IDLE
         if self._abort_requested:
             self.state = DILC_Experiment_State.ERROR
             self._finished = True
@@ -800,6 +823,8 @@ class DILC_Experiment:
             self.logger.info(f"Trial {self.j + 1}/{self.settings.J}")
             self.logger.info("=" * 60)
 
+            self.phase = DILC_Phase.PREPARING
+
             self.events.trial_started.set(data={
                 'trial_index': self.j,
                 'total_trials': self.settings.J,
@@ -824,6 +849,7 @@ class DILC_Experiment:
                 return TrialResult.ERROR
 
             self._on_trial_prepared()
+            self.phase = DILC_Phase.WAITING_FOR_START
 
             # --- Step 2: Build the input trajectory for this trial ---
             input_trajectory = BILBO_InputTrajectory.from_vector(
@@ -888,6 +914,7 @@ class DILC_Experiment:
                     return TrialResult.ERROR
 
             # --- Step 4: Execute the trajectory ---
+            self.phase = DILC_Phase.RUNNING_TRAJECTORY
             self.logger.info("Starting trajectory execution...")
             self.interfaces.disable_external_input()
             self.control.disable_external_input()
@@ -926,6 +953,7 @@ class DILC_Experiment:
 
             # Subclass hook: runs after trajectory completes (e.g., read sensors)
             extra_trial_data = self._on_after_trajectory(trajectory_data)
+            self.phase = DILC_Phase.WAITING_FOR_ACCEPTANCE
 
             if trajectory_data is None:
                 self.logger.error("Trajectory execution failed (run_trajectory returned None)")
@@ -1102,6 +1130,7 @@ class DILC_Experiment:
                 self.logger.info("Trial accepted by user")
 
             # --- Step 7: Compute ILC and IML updates ---
+            self.phase = DILC_Phase.COMPUTING_UPDATE
             self.logger.info("Computing DILC update...")
 
             # IML update: improve the model using the prediction error
@@ -1315,7 +1344,7 @@ class DILC_Experiment:
             'psi': ic.psi,
             'psi_deg': float(np.rad2deg(ic.psi)),
         }, flags=self._WIFI_FLAGS)
-
+        time.sleep(2)
         self.logger.info("Trial preparation complete")
         return True
 
@@ -1413,6 +1442,7 @@ class DILC_Experiment:
         """Common fields included in every WiFi event."""
         return {
             'state': self.state.value,
+            'phase': self.phase.value,
             'experiment_id': self.settings.id,
             'trial_index': self.j,
             'total_trials': self.settings.J,

@@ -146,6 +146,7 @@ class LimboBar_DILC_Trial_Data:
     input_change_norm: float
     model_change_norm: float
     limbo_bar_hit: bool
+    limbo_bar_hit_data: dict | None = None
     limbo_bar_passed: bool | None = None
     t: list[float] | None = None
     u: list[float] | None = None
@@ -167,6 +168,7 @@ class LimboBar_DILC_Results_Meta:
     control_config: dict
     settings: dict
     logs: list[dict] = dataclasses.field(default_factory=list)
+    testbed_size: dict | None = None
 
 
 @dataclasses.dataclass
@@ -184,6 +186,16 @@ class LimboBar_DILC_Experiment_State(enum.StrEnum):
     RUNNING = "RUNNING"
     ERROR = "ERROR"
     FINISHED = "FINISHED"
+
+
+class LimboBar_DILC_Phase(enum.StrEnum):
+    """Mirrors robot-side DILC_Phase for host-side tracking."""
+    IDLE = "IDLE"
+    PREPARING = "PREPARING"
+    WAITING_FOR_START = "WAITING_FOR_START"
+    RUNNING_TRAJECTORY = "RUNNING_TRAJECTORY"
+    WAITING_FOR_ACCEPTANCE = "WAITING_FOR_ACCEPTANCE"
+    COMPUTING_UPDATE = "COMPUTING_UPDATE"
 
 
 # === Events ===============================================================================
@@ -254,6 +266,7 @@ class LimboBar_DILC_Experiment:
 
         self.settings = None
         self.state = LimboBar_DILC_Experiment_State.NONE
+        self.phase = LimboBar_DILC_Phase.IDLE
         self.trials = []
         self.last_trajectory_data: LimboBar_DILC_Trajectory_Data | None = None
         self.results: LimboBar_DILC_Results | None = None
@@ -278,7 +291,7 @@ class LimboBar_DILC_Experiment:
         self._limbo_bar_hit_listener = self.device.events.event.on(
             self._handle_limbo_bar_hit_event,
             predicate=lambda flags, data: (
-                flags.get('container') == 'testbed'
+                flags.get('container') == 'limbobar_dilc_experiment'
                 and flags.get('event') == 'limbo_bar_hit'
             ),
         )
@@ -447,6 +460,41 @@ class LimboBar_DILC_Experiment:
                 self.logger.info(f"Saved reference trajectory to {ref_path}")
             except Exception as e:
                 self.logger.warning(f"Failed to save reference trajectory: {e}")
+            # Save the initial model vector (m0) if provided
+            if self.settings.m0 is not None:
+                try:
+                    m0_model = ModelVector.from_vector(
+                        vector=np.asarray(self.settings.m0),
+                        name="m0",
+                        id=0,
+                        dt=self.settings.Ts,
+                    )
+                    m0_file_data = m0_model.to_file_data(
+                        id=self.settings.id,
+                        description="Initial model vector (m0)",
+                    )
+                    m0_path = os.path.join(self._run_dir, "m0.bmvec")
+                    write_model_vector_file(m0_path, m0_file_data)
+                    self.logger.info(f"Saved initial model vector to {m0_path}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to save initial model vector: {e}")
+            # Save the initial input trajectory (u0) if provided
+            if self.settings.u0 is not None:
+                try:
+                    u0_trajectory = InputTrajectory.from_vector(
+                        vector=np.asarray(self.settings.u0),
+                        name="u0",
+                        id=0,
+                        dt=self.settings.Ts,
+                    )
+                    u0_file_data = u0_trajectory.to_file_data(
+                        id=self.settings.id,
+                        description="Initial input trajectory (u0)",
+                    )
+                    write_input_file("u0", self._run_dir, u0_file_data)
+                    self.logger.info(f"Saved initial input trajectory to {self._run_dir}/u0.bitrj")
+                except Exception as e:
+                    self.logger.warning(f"Failed to save initial input trajectory: {e}")
 
         self.logger.info(f"Experiment run ID: {self._run_id}")
         self.logger.info("Sending experiment settings to robot...")
@@ -515,15 +563,16 @@ class LimboBar_DILC_Experiment:
     # === Limbo Bar Hit (real-time WiFi event from testbed) ============================
 
     def _handle_limbo_bar_hit_event(self, event_data, **kwargs):
-        """Called immediately when the robot detects a limbo bar collision.
+        """Called when the robot detects a limbo bar collision during trajectory execution.
 
-        This arrives via the 'testbed' WiFi event container, well before the
-        trial_finished event.  Override or connect to ``events.limbo_bar_hit``
-        / ``callbacks.limbo_bar_hit`` to react (e.g. testbed LED feedback).
+        This arrives via the 'limbobar_dilc_experiment' WiFi event container.
+        The robot only sends this event when the experiment phase is
+        RUNNING_TRAJECTORY, so hits during repositioning are already filtered out.
         """
         data = event_data.get('data', {}) or {}
         bar_id = data.get('bar_id')
-        self.logger.info(f"Limbo bar hit! (bar_id={bar_id})")
+        phase = data.get('phase', '')
+        self.logger.info(f"Limbo bar hit during trajectory! (bar_id={bar_id}, phase={phase})")
         self.events.limbo_bar_hit.set(data=data)
         self.callbacks.limbo_bar_hit.call(data)
 
@@ -537,6 +586,13 @@ class LimboBar_DILC_Experiment:
         if remote_state:
             try:
                 self.state = LimboBar_DILC_Experiment_State(remote_state)
+            except ValueError:
+                pass
+
+        remote_phase = data.get('phase', None)
+        if remote_phase:
+            try:
+                self.phase = LimboBar_DILC_Phase(remote_phase)
             except ValueError:
                 pass
 
@@ -624,6 +680,7 @@ class LimboBar_DILC_Experiment:
                 input_change_norm=input_change,
                 model_change_norm=model_change,
                 limbo_bar_hit=limbo_bar_hit,
+                limbo_bar_hit_data=data.get('limbo_bar_hit_data'),
                 limbo_bar_passed=limbo_bar_passed,
                 t=data.get('t'),
                 u=data.get('u'),

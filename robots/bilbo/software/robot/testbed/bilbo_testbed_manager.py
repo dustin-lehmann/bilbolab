@@ -369,9 +369,20 @@ class BILBO_TestbedManager:
                 was_hit = bar.hit
                 bar.update(x, y, theta, psi, config)
                 if bar.hit and not was_hit:
-                    self.logger.warning(f"Limbo bar '{bar.id}' hit! x={x:.2f}, y={y:.2f}, theta={theta:.2f}, psi={psi:.2f}")
-                    self.events.limbo_bar_hit.set(data={'bar_id': bar.id})
-                    self.wifi_events.limbo_bar_hit.send(data={'bar_id': bar.id})
+                    hit_data = {
+                        'bar_id': bar.id,
+                        'x': x,
+                        'y': y,
+                        'theta': theta,
+                        'psi': psi,
+                        'tick': sample['tick'],
+                        'bar_geometry': dataclasses.asdict(bar.geometry),
+                    }
+                    self.logger.warning(
+                        f"Limbo bar '{bar.id}' hit! x={x:.2f}, y={y:.2f}, theta={theta:.2f}, psi={psi:.2f}")
+                    bar.hit_data = hit_data
+                    self.events.limbo_bar_hit.set(data=hit_data)
+                    self.wifi_events.limbo_bar_hit.send(data=hit_data)
 
     # ------------------------------------------------------------------------------------------------------------------
     def _load_testbed_control_config(self, testbed_id: str):

@@ -20,16 +20,16 @@ network:
 
 optitrack:
   points: [1, 2, 3, 4, 5]            # Marker IDs used for tracking
-  point_x_axis_start: 0
-  point_x_axis_end: 0
-  point_y_axis_start: 0
-  point_y_axis_end: 0
+  point_x_axis_start: 1
+  point_x_axis_end: 4
+  point_y_axis_start: 3
+  point_y_axis_end: 5
   marker_size: 0.01               # Marker size in m
 
 model:
   type: "normal"   # e.g. "bilbo_default"
   wheel_diameter: 0.12383         # meters
-  vertical_offset: 0.137          # meters
+  vertical_offset: 0.1385          # meters
   mass: 0.0                       # kilograms
   height: 0.00                    # meters
   width: 0.00                     # meters
