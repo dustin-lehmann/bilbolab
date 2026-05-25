@@ -1,0 +1,10 @@
+id: "origin-hannover"
+points: [ 1, 2, 3, 4, 5 ]
+x_start: 2
+x_end: 1
+y_start: 4
+y_end: 3
+offset_x: 0.01
+offset_y: 0.01
+offset_z: 0.02
+marker_size: 0.01
