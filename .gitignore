@@ -10,7 +10,7 @@ package-lock.json
 Debug/
 *.mp3
 *.mp4
-testbed/software/RobotManager/utils/sound/tts_files/index.json
+software/core/utils/sound/tts_files/
 *.parcel-cache/
 CLAUDE.md
 .claude/
