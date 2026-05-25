@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 
-from applications.FRODO.simulation.navigation_test.frodo_navigation_test import FRODO_Interactive_CommandSet
+from robots.frodo.applications.simulation.navigation_test.frodo_navigation_test import FRODO_Interactive_CommandSet
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger, addLogRedirection, LOGGING_COLORS
 from core.utils.sound.sound import SoundSystem
@@ -14,9 +14,9 @@ from extensions.tools.cli.cli import CommandSet, CLI, Command, CommandArgument
 from extensions.gui.src.gui import GUI, Category, Page
 from extensions.gui.src.lib.objects.python.babylon_widget import BabylonWidget
 from extensions.hardware.joystick.joystick_manager import JoystickManager, Joystick
-from extensions.simulation.src.core.environment import BASE_ENVIRONMENT_ACTIONS
-from extensions.simulation.src.objects.base_environment import BaseEnvironment
-from extensions.simulation.src.objects.frodo_new import DEFAULT_SAMPLE_TIME
+from simulation.core.environment import BASE_ENVIRONMENT_ACTIONS
+from simulation.objects.base_environment import BaseEnvironment
+from robots.frodo.simulation.frodo import DEFAULT_SAMPLE_TIME
 
 
 # === FRODO EXAMPLE INTERACTIVE ========================================================================================

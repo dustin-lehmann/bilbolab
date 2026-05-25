@@ -13,7 +13,7 @@ from core.utils.orientation.orientation_2d import calculate_projection, calculat
 from core.utils.states import State
 from core.utils.time import setInterval
 from extensions.hardware.optitrack.optitrack import RigidBodySample
-from robots.frodo.frodo_definitions import TrackedOrigin_Definition, STATIC_DEFINITIONS, \
+from robots.frodo.robot.frodo_definitions import TrackedOrigin_Definition, STATIC_DEFINITIONS, \
     ORIGIN_FRODO_DEFINITION, FRODO1_OPTITRACK_SETTINGS, FRODO2_OPTITRACK_SETTINGS, FRODO3_OPTITRACK_SETTINGS, \
     FRODO4_OPTITRACK_SETTINGS
 

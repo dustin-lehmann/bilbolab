@@ -3,12 +3,12 @@ from __future__ import annotations
 import dataclasses
 import time
 
-from applications.FRODO.agent_manager import FRODO_AgentManager
-from applications.FRODO.algorithm.algorithm_manager import FRODO_AlgorithmManager, AlgorithmSettings
-from applications.FRODO.experiments.frodo_experiment import FRODO_ExperimentManager, ExperimentSettings
-from applications.FRODO.gui.frodo_gui import FRODO_GUI
-from applications.FRODO.simulation.frodo_simulation import FRODO_Simulation
-from applications.FRODO.testbed.testbed_manager import FRODO_TestbedManager
+from robots.frodo.applications.agent_manager import FRODO_AgentManager
+from robots.frodo.applications.algorithm.algorithm_manager import FRODO_AlgorithmManager, AlgorithmSettings
+from robots.frodo.applications.experiments.frodo_experiment import FRODO_ExperimentManager, ExperimentSettings
+from robots.frodo.applications.gui.frodo_gui import FRODO_GUI
+from robots.frodo.applications.simulation.frodo_simulation import FRODO_Simulation
+from robots.frodo.applications.testbed.testbed_manager import FRODO_TestbedManager
 from core.utils.exit import register_exit_callback
 from core.utils.logging_utils import Logger
 from core.utils.sound.sound import SoundSystem, speak

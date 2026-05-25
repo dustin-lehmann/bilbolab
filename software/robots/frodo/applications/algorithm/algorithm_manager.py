@@ -5,11 +5,11 @@ import dataclasses
 
 import numpy as np
 
-from applications.FRODO.algorithm.algorithm import AlgorithmAgentState, AlgorithmAgentSettings, AlgorithmAgentInput, \
+from robots.frodo.applications.algorithm.algorithm import AlgorithmAgentState, AlgorithmAgentSettings, AlgorithmAgentInput, \
     AlgorithmAgentMeasurement
-from applications.FRODO.algorithm.algorithm_centralized import CentralizedAlgorithm, CentralizedAlgorithm_Sample, \
+from robots.frodo.applications.algorithm.algorithm_centralized import CentralizedAlgorithm, CentralizedAlgorithm_Sample, \
     CentralizedAgent
-from applications.FRODO.algorithm.algorithm_distributed import DistributedAlgorithm, DistributedAlgorithm_Sample, \
+from robots.frodo.applications.algorithm.algorithm_distributed import DistributedAlgorithm, DistributedAlgorithm_Sample, \
     DistributedAgent
 from core.utils.logging_utils import Logger
 from extensions.tools.cli.cli import CommandSet, Command

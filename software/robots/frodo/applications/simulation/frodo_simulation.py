@@ -8,12 +8,12 @@ import time
 import numpy as np
 import qmt
 
-import extensions.simulation.src.core as core
-from applications.FRODO.definitions import get_simulated_agent_definition_by_id
-from applications.FRODO.navigation.navigator import Navigator, NavigatorExecutionMode, NavigatedObjectState, \
+import simulation.core as core
+from robots.frodo.applications.definitions import get_simulated_agent_definition_by_id
+from robots.frodo.applications.navigation.navigator import Navigator, NavigatorExecutionMode, NavigatedObjectState, \
     MoveTo, NavigatorSpeedControlMode, TurnTo, TurnToPoint
-from applications.FRODO.simulation.frodo_simulation_utils import is_view_obstructed
-from applications.FRODO.utilities.measurements import agent_is_in_fov
+from robots.frodo.applications.simulation.frodo_simulation_utils import is_view_obstructed
+from robots.frodo.applications.utilities.measurements import agent_is_in_fov
 from core.utils.dataclass_utils import update_dataclass_from_dict
 from core.utils.events import event_definition, Event
 from core.utils.exit import register_exit_callback
@@ -22,11 +22,11 @@ from core.utils.logging_utils import Logger
 from core.utils.states import State
 from extensions.tools.cli.cli import CommandSet, Command, CommandArgument
 from extensions.hardware.joystick.joystick_manager import Joystick
-from extensions.simulation.src.core.environment import BASE_ENVIRONMENT_ACTIONS, Object
-from extensions.simulation.src.objects.base_environment import BaseEnvironment
-from extensions.simulation.src.objects.frodo.frodo import FRODO_DynamicAgent, FRODO_Input
-from robots.frodo.frodo_definitions import FRODO_ControlMode
-from applications.FRODO.utilities.measurement_model import measurement_model_from_file
+from simulation.core.environment import BASE_ENVIRONMENT_ACTIONS, Object
+from simulation.objects.base_environment import BaseEnvironment
+from robots.frodo.simulation.frodo import FRODO_DynamicAgent, FRODO_Input
+from robots.frodo.robot.frodo_definitions import FRODO_ControlMode
+from robots.frodo.applications.utilities.measurement_model import measurement_model_from_file
 
 # Global registries
 SIMULATED_AGENTS: dict[str, "FRODO_VisionAgent"] = {}

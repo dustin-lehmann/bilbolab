@@ -3,7 +3,7 @@ from typing import Optional
 
 import numpy as np
 
-from applications.FRODO.algorithm.algorithm import LocalizationAlgorithm, AlgorithmAgent, augment_state, \
+from robots.frodo.applications.algorithm.algorithm import LocalizationAlgorithm, AlgorithmAgent, augment_state, \
     augment_covariance, INDEX_COS, INDEX_SIN, INDEX_X, INDEX_Y, AlgorithmAgentMeasurement, \
     augment_measurement_covariance, augment_measurement, get_state_from_augmented, get_covariance_from_augmented, \
     augment_state_array, AlgorithmAgentState

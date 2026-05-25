@@ -5,10 +5,10 @@ from core.utils.callbacks import callback_definition
 from core.utils.events import event_definition, Event
 from core.utils.logging_utils import Logger
 from core.utils.time import delayed_execution, setTimeout
-from robots.frodo.frodo_control import FRODO_Control
-from robots.frodo.frodo_core import FRODO_Core
-from robots.frodo.frodo_definitions import FRODO_Config, FRODO_ControlMode
-from robots.frodo.frodo_interfaces import FRODO_Interfaces
+from robots.frodo.robot.frodo_control import FRODO_Control
+from robots.frodo.robot.frodo_core import FRODO_Core
+from robots.frodo.robot.frodo_definitions import FRODO_Config, FRODO_ControlMode
+from robots.frodo.robot.frodo_interfaces import FRODO_Interfaces
 
 
 # ======================================================================================================================

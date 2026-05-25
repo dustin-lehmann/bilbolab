@@ -491,13 +491,23 @@ def get_all_aruco_ids() -> List[int]:
 
 # ======================================================================================================================
 @dataclasses.dataclass
-class FRODO_Information:
-    id: str = ''
-    color: list | None = None
+class FRODO_Network_Settings:
     address: str = ''
     data_stream_port: int = 0
-    gui_port: int = ''
+    gui_port: int = 0
     ssid: str = ''
     username: str = ''
     password: str = ''
-    definition: FRODO_Definition | None = None
+
+
+# ======================================================================================================================
+@dataclasses.dataclass
+class FRODO_Information:
+    """Handshake payload sent to the host. Mirrors the host-side FRODO_Config shape."""
+    id: str = ''
+    color: list | None = None
+    network: FRODO_Network_Settings = dataclasses.field(default_factory=FRODO_Network_Settings)
+    camera: FRODO_Camera_Settings | None = None
+    aruco: FRODO_Aruco_Settings | None = None
+    optitrack: FRODO_Optitrack_Settings | None = None
+    physical_model: FRODO_Physical_Model | None = None

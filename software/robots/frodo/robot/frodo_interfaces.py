@@ -5,9 +5,9 @@ import numpy as np
 
 from extensions.tools.cli.cli import CommandSet, CommandArgument, Command
 from extensions.hardware.joystick.joystick_manager import Joystick
-from robots.frodo.frodo import FRODO_Control
-from robots.frodo.frodo_core import FRODO_Core
-from robots.frodo.frodo_definitions import FRODO_ControlMode
+from robots.frodo.robot.frodo import FRODO_Control
+from robots.frodo.robot.frodo_core import FRODO_Core
+from robots.frodo.robot.frodo_definitions import FRODO_ControlMode
 
 
 class FRODO_Interfaces:

@@ -4,9 +4,9 @@ import math
 import numpy as np
 import qmt
 
-from applications.FRODO.utilities.measurement_model import FRODO_MeasurementModel
+from robots.frodo.applications.utilities.measurement_model import FRODO_MeasurementModel
 from core.utils.states import State
-from robots.frodo.frodo_utilities import vector2LocalFrame
+from robots.frodo.robot.frodo_utilities import vector2LocalFrame
 
 
 @dataclasses.dataclass

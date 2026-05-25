@@ -7,9 +7,9 @@ import re
 import numpy as np
 import qmt
 
-from applications.FRODO.algorithm.archive.algorithm_distributed_2 import AlgorithmAgent, AlgorithmAgentState, \
+from robots.frodo.applications.algorithm.archive.algorithm_distributed_2 import AlgorithmAgent, AlgorithmAgentState, \
     AlgorithmAgentMeasurement, DistributedAlgorithm, DistributedAlgorithmState, AlgorithmAgentInput, UpdateAlgorithm
-from applications.FRODO.simulation.frodo_simulation import FRODO_Simulation, FRODO_VisionAgent, \
+from robots.frodo.applications.simulation.frodo_simulation import FRODO_Simulation, FRODO_VisionAgent, \
     FRODO_VisionAgent_Interactive, FRODO_Static, FRODO_ENVIRONMENT_ACTIONS
 from core.utils.colors import random_color_from_palette, get_color_from_palette
 from core.utils.exit import register_exit_callback
@@ -28,7 +28,7 @@ from extensions.gui.src.lib.map.map_objects import VisionAgent, MapObjectGroup, 
     Circle, Ellipse
 from extensions.gui.src.lib.objects.python.babylon_widget import BabylonWidget
 from extensions.hardware.joystick.joystick_manager import Joystick, JoystickManager
-from extensions.simulation.src.core.environment import BASE_ENVIRONMENT_ACTIONS
+from simulation.core.environment import BASE_ENVIRONMENT_ACTIONS
 
 TS = 0.05
 

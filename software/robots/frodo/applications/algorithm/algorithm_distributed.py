@@ -5,7 +5,7 @@ import enum
 import numpy as np
 import qmt
 
-from applications.FRODO.algorithm.algorithm import AlgorithmAgent, AlgorithmAgentState, INDEX_PSI, \
+from robots.frodo.applications.algorithm.algorithm import AlgorithmAgent, AlgorithmAgentState, INDEX_PSI, \
     AlgorithmAgentMeasurement, get_rotation_matrix, dR_dpsi_times_vec, LocalizationAlgorithm
 from core.utils.control_lib.lib_control.estimation.data_fusion import covariance_intersection
 from core.utils.control_lib.lib_control.orientation import align_angle

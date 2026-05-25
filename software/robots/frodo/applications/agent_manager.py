@@ -8,16 +8,16 @@ import time
 import numpy as np
 
 # ======================================================================================================================
-from applications.FRODO.navigation.multi_agent_navigator import MultiAgentNavigator, NavigatorPlan, \
+from robots.frodo.applications.navigation.multi_agent_navigator import MultiAgentNavigator, NavigatorPlan, \
     MultiAgentNavigator_Sample
-from applications.FRODO.navigation.navigator import NavigatedObject
-from applications.FRODO.navigation.utilities import FRODO_Real_NavigatedObject, FRODO_Sim_NavigatedObject
-from applications.FRODO.testbed.testbed_manager import TestbedObject_FRODO, TestbedObject_STATIC, FRODO_TestbedManager, \
+from robots.frodo.applications.navigation.navigator import NavigatedObject
+from robots.frodo.applications.navigation.utilities import FRODO_Real_NavigatedObject, FRODO_Sim_NavigatedObject
+from robots.frodo.applications.testbed.testbed_manager import TestbedObject_FRODO, TestbedObject_STATIC, FRODO_TestbedManager, \
     TestbedObject
-from applications.FRODO.simulation.frodo_simulation import FRODO_VisionAgent, FRODO_Static, FRODO_Simulation, \
+from robots.frodo.applications.simulation.frodo_simulation import FRODO_VisionAgent, FRODO_Static, FRODO_Simulation, \
     FRODO_VisionAgent_Config
-from applications.FRODO.utilities.measurement_model import FRODO_MeasurementModel
-from applications.FRODO.utilities.measurements import agent_is_in_fov, generate_noisy_measurement, \
+from robots.frodo.applications.utilities.measurement_model import FRODO_MeasurementModel
+from robots.frodo.applications.utilities.measurements import agent_is_in_fov, generate_noisy_measurement, \
     generate_ideal_measurement
 from core.utils.events import Event, event_definition, EventFlag
 from core.utils.exit import register_exit_callback

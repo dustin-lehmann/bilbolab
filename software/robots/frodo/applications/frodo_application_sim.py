@@ -7,17 +7,17 @@ import re
 import numpy as np
 import qmt
 
-from applications.FRODO.algorithm.algorithm import AlgorithmAgentInput, get_covariance_ellipse
-from applications.FRODO.algorithm.algorithm_centralized_alternative import CentralizedAgent, CentralizedAlgorithm
-from applications.FRODO.algorithm.algorithm_distributed import AlgorithmAgent, AlgorithmAgentState, \
+from robots.frodo.applications.algorithm.algorithm import AlgorithmAgentInput, get_covariance_ellipse
+from robots.frodo.applications.algorithm.algorithm_centralized_alternative import CentralizedAgent, CentralizedAlgorithm
+from robots.frodo.applications.algorithm.algorithm_distributed import AlgorithmAgent, AlgorithmAgentState, \
     AlgorithmAgentMeasurement, DistributedAlgorithm, DistributedUpdateType, DistributedAgent
-from applications.FRODO.frodo_application import AlgorithmState
-from applications.FRODO.navigation.multi_agent_navigator import MultiAgentNavigator, NavigatorPlan, ActionGroup, Move, \
+from robots.frodo.applications.frodo_application import AlgorithmState
+from robots.frodo.applications.navigation.multi_agent_navigator import MultiAgentNavigator, NavigatorPlan, ActionGroup, Move, \
     Wait
-from applications.FRODO.navigation.navigator import CoordinatedMoveTo, MoveTo
-from applications.FRODO.navigation.utilities import FRODO_Sim_NavigatedObject
+from robots.frodo.applications.navigation.navigator import CoordinatedMoveTo, MoveTo
+from robots.frodo.applications.navigation.utilities import FRODO_Sim_NavigatedObject
 
-from applications.FRODO.simulation.frodo_simulation import FRODO_Simulation, FRODO_VisionAgent, \
+from robots.frodo.applications.simulation.frodo_simulation import FRODO_Simulation, FRODO_VisionAgent, \
     FRODO_VisionAgent_Interactive, FRODO_Static, FRODO_ENVIRONMENT_ACTIONS
 from core.utils.colors import random_color_from_palette, get_color_from_palette, LIGHT_GREEN, LIGHT_RED, NamedColor
 from core.utils.exit import register_exit_callback
@@ -41,7 +41,7 @@ from extensions.gui.src.lib.objects.python.babylon_widget import BabylonWidget
 from extensions.gui.src.lib.objects.python.buttons import Button
 from extensions.gui.src.lib.plot.realtime.rt_plot import RT_Plot_Widget, Y_Axis, TimeSeries
 from extensions.hardware.joystick.joystick_manager import Joystick, JoystickManager
-from extensions.simulation.src.core.environment import BASE_ENVIRONMENT_ACTIONS
+from simulation.core.environment import BASE_ENVIRONMENT_ACTIONS
 
 from core.utils.colors import darken_color
 

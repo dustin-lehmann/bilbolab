@@ -25,9 +25,9 @@ from extensions.tools.cli.cli import CLI, CommandSet, Command, CommandArgument
 from extensions.gui.src.gui import GUI, Category, Page
 from extensions.gui.src.lib.objects.python.babylon_widget import BabylonWidget
 from extensions.hardware.joystick.joystick_manager import Joystick, JoystickManager
-from extensions.simulation.src.core.environment import BASE_ENVIRONMENT_ACTIONS
-from extensions.simulation.src.objects.base_environment import BaseEnvironment
-from extensions.simulation.src.objects.frodo_new import FRODO_DynamicAgent, DEFAULT_SAMPLE_TIME, FRODO_Input_LR, \
+from simulation.core.environment import BASE_ENVIRONMENT_ACTIONS
+from simulation.objects.base_environment import BaseEnvironment
+from robots.frodo.simulation.frodo import FRODO_DynamicAgent, DEFAULT_SAMPLE_TIME, FRODO_Input_LR, \
     FRODO_State
 
 

@@ -4,7 +4,7 @@ from typing import Optional
 
 import numpy as np
 
-from applications.FRODO.algorithm.algorithm import (
+from robots.frodo.applications.algorithm.algorithm import (
     LocalizationAlgorithm,
     AlgorithmAgent,
     AlgorithmAgentMeasurement,

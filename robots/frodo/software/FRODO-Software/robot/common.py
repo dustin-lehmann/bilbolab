@@ -12,7 +12,7 @@ from core.utils.files import fileExists
 from core.utils.json_utils import readJSON
 from core.utils.logging_utils import Logger
 from core.utils.network import get_own_hostname, getSignalStrength, check_internet
-from robot.definitions import FRODO_Information, FRODO_DynamicState
+from robot.definitions import FRODO_Information, FRODO_DynamicState, FRODO_Network_Settings
 from robot.settings import settings_file_path
 from robot.setup import FRODO_Definition
 
@@ -115,13 +115,18 @@ class FRODO_Common:
         information = FRODO_Information(
             id=self.id,
             color=definition.color,
-            address='',
-            gui_port=0,
-            ssid='',
-            data_stream_port=0,
-            username='admin',
-            password='beutlin',
-            definition=definition
+            network=FRODO_Network_Settings(
+                address='',
+                gui_port=0,
+                data_stream_port=0,
+                ssid='',
+                username='admin',
+                password='beutlin',
+            ),
+            camera=definition.camera,
+            aruco=definition.aruco,
+            optitrack=definition.optitrack,
+            physical_model=definition.physical_model,
         )
         return information
 

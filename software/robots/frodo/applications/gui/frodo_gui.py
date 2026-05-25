@@ -7,14 +7,14 @@ import numpy as np
 from prompt_toolkit.history import ThreadedHistory
 from scipy.linalg import block_diag
 
-from applications.FRODO.algorithm.algorithm import get_covariance_ellipse
-from applications.FRODO.definitions import get_simulated_agent_definition_by_id
-from applications.FRODO.simulation.frodo_simulation import FRODO_Simulation, FRODO_VisionAgent, FRODO_Static
-from applications.FRODO.testbed.testbed_manager import FRODO_TestbedManager, TestbedObject, TestbedObject_FRODO, \
+from robots.frodo.applications.algorithm.algorithm import get_covariance_ellipse
+from robots.frodo.applications.definitions import get_simulated_agent_definition_by_id
+from robots.frodo.applications.simulation.frodo_simulation import FRODO_Simulation, FRODO_VisionAgent, FRODO_Static
+from robots.frodo.applications.testbed.testbed_manager import FRODO_TestbedManager, TestbedObject, TestbedObject_FRODO, \
     TestbedObject_STATIC
 
-from applications.FRODO.testbed.tracker.definitions import TrackedFRODO, TrackedStatic
-from applications.FRODO.testbed.tracker.frodo_tracker import FRODO_Tracker
+from robots.frodo.applications.testbed.tracker.definitions import TrackedFRODO, TrackedStatic
+from robots.frodo.applications.testbed.tracker.frodo_tracker import FRODO_Tracker
 from core.utils.callbacks import Callback
 from core.utils.colors import random_color_from_palette
 from core.utils.exit import register_exit_callback
@@ -37,18 +37,18 @@ from extensions.gui.src.lib.objects.python.video import VideoWidget
 from extensions.gui.src.lib.objects.python.text import TextWidget
 
 from extensions.gui.src.lib.terminal.terminal_widget import TerminalWidget
-from robots.frodo.frodo import FRODO
-from robots.frodo.frodo_definitions import STATIC_DEFINITIONS, FRODO_Sample, TESTBED_SIZE, \
+from robots.frodo.robot.frodo import FRODO
+from robots.frodo.robot.frodo_definitions import STATIC_DEFINITIONS, FRODO_Sample, TESTBED_SIZE, \
     TESTBED_TILE_SIZE, FRODO_VIDEO_PORT, FRODO_COLORS
-from robots.frodo.frodo_manager import FRODO_Manager
+from robots.frodo.robot.frodo_manager import FRODO_Manager
 from core.utils.lipo import lipo_soc
-from robots.frodo.frodo_utilities import vector2GlobalFrame
-import applications.FRODO.agent_manager as agent_manager
+from robots.frodo.robot.frodo_utilities import vector2GlobalFrame
+import robots.frodo.applications.agent_manager as agent_manager
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from applications.FRODO.frodo_application import FRODO_Application
+    from robots.frodo.applications.frodo_application import FRODO_Application
 
 
 class FRODO_SSH_Page:

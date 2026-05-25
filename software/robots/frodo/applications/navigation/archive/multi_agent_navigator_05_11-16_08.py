@@ -8,13 +8,13 @@ from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Un
 import yaml
 
 # === Import your primitives / base types =========================================
-from applications.FRODO.navigation.navigator import (
+from robots.frodo.applications.navigation.navigator import (
     NavigationElement,
     NavigatedObjectState,
 )
-import applications.FRODO.navigation.navigator as agent_navigator
+import robots.frodo.applications.navigation.navigator as agent_navigator
 
-from applications.FRODO.simulation.frodo_simulation import FRODO_VisionAgent
+from robots.frodo.applications.simulation.frodo_simulation import FRODO_VisionAgent
 
 # === App/core infra (callbacks, events, timers, logging) =========================
 from core.utils.events import wait_for_events, AND, TIMEOUT, OR

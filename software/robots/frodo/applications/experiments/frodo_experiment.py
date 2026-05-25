@@ -10,14 +10,14 @@ from typing import Any, Union
 
 import numpy as np
 
-from applications.FRODO.agent_manager import FRODO_AgentManager, AgentManager_Sample, AgentContainer, StaticContainer
-from applications.FRODO.algorithm.algorithm import AlgorithmAgentInput, AlgorithmAgentMeasurement, AlgorithmAgentState
-from applications.FRODO.algorithm.algorithm_manager import FRODO_AlgorithmManager, AlgorithmAgentUpdateData, \
+from robots.frodo.applications.agent_manager import FRODO_AgentManager, AgentManager_Sample, AgentContainer, StaticContainer
+from robots.frodo.applications.algorithm.algorithm import AlgorithmAgentInput, AlgorithmAgentMeasurement, AlgorithmAgentState
+from robots.frodo.applications.algorithm.algorithm_manager import FRODO_AlgorithmManager, AlgorithmAgentUpdateData, \
     AlgorithmAgentConfig, AlgorithmManager_Sample
 
-from applications.FRODO.algorithm.algorithm_manager import AlgorithmAgentContainer
-from applications.FRODO.navigation.multi_agent_navigator import MultiAgentNavigator, Move, NavigatorPlan
-from applications.FRODO.navigation.navigator import CoordinatedMoveTo
+from robots.frodo.applications.algorithm.algorithm_manager import AlgorithmAgentContainer
+from robots.frodo.applications.navigation.multi_agent_navigator import MultiAgentNavigator, Move, NavigatorPlan
+from robots.frodo.applications.navigation.navigator import CoordinatedMoveTo
 from core.utils.callbacks import Callback
 from core.utils.dataclass_utils import update_dataclass_from_dict
 from core.utils.events import event_definition, Event, SubscriberListener, EventContainer, EventFlag

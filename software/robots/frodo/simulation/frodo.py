@@ -4,8 +4,8 @@ import math
 from typing import TypeVar, Generic, Type, Optional
 import numpy as np
 from core.utils.states import State
-from extensions.simulation.src.core.agents import Agent
-from extensions.simulation.src.core.environment import BASE_ENVIRONMENT_ACTIONS
+from simulation.core.agents import Agent
+from simulation.core.environment import BASE_ENVIRONMENT_ACTIONS
 
 DEFAULT_SAMPLE_TIME = 0.05
 

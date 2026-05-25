@@ -43,7 +43,7 @@ class FRODO_WIFI_Interface:
 
         self.address = network.getLocalIP_RPi()
 
-        self.common.information.address = self.address
+        self.common.information.network.address = self.address
 
         self.callbacks = FRODO_Wifi_Callbacks()
         self.events = FRODO_Wifi_Events()

@@ -117,11 +117,14 @@ class PyCamera:
             new_controls["ExposureTime"] = exposure_time
         if gain is not None:
             new_controls["AnalogueGain"] = gain
-        if auto_focus:
-            new_controls["AfMode"] = controls.AfModeEnum.Continuous
-        else:
-            new_controls["AfMode"] = controls.AfModeEnum.Manual
-            new_controls["LensPosition"] = lens_position
+        # The GS (Global Shutter) camera has a fixed lens and does not advertise
+        # focus controls; only set them when libcamera actually supports them.
+        if "AfMode" in self.picam.camera_controls:
+            if auto_focus:
+                new_controls["AfMode"] = controls.AfModeEnum.Continuous
+            else:
+                new_controls["AfMode"] = controls.AfModeEnum.Manual
+                new_controls["LensPosition"] = lens_position
 
         if frame_rate is not None:
             new_controls["FrameRate"] = frame_rate

@@ -8,7 +8,7 @@ from typing import List, Tuple, Dict
 import cv2
 import numpy as np
 
-from applications.FRODO.utilities.measurement_model import FRODO_MeasurementModel, measurement_model_from_file
+from robots.frodo.applications.utilities.measurement_model import FRODO_MeasurementModel, measurement_model_from_file
 from core.utils.files import get_absolute_path
 
 FRODO_ID = ['frodo1', 'frodo2', 'frodo3', 'frodo4']
@@ -326,7 +326,7 @@ class FRODO_Config:
     aruco: FRODO_Aruco_Settings
     optitrack: FRODO_Optitrack_Settings
     physical_model: FRODO_Physical_Model
-    measurement_model: FRODO_MeasurementModel
+    measurement_model: FRODO_MeasurementModel = dataclasses.field(default_factory=FRODO_MeasurementModel)
 
 
 # --- Statics (non-robot tracked targets) ------------------------------------------------------------------------------

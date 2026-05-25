@@ -7,8 +7,8 @@ from typing import Optional
 import numpy as np
 import qmt
 
-from applications.FRODO.testbed.tracker.definitions import TrackedStatic, TrackedFRODO
-from applications.FRODO.testbed.tracker.frodo_tracker import FRODO_Tracker, FRODO_Tracker_State
+from robots.frodo.applications.testbed.tracker.definitions import TrackedStatic, TrackedFRODO
+from robots.frodo.applications.testbed.tracker.frodo_tracker import FRODO_Tracker, FRODO_Tracker_State
 from core.utils.callbacks import CallbackContainer, callback_definition
 from core.utils.events import event_definition, Event, EventFlag
 from core.utils.exit import register_exit_callback
@@ -17,10 +17,10 @@ from core.utils.network.network import getHostIP
 from core.utils.sound.sound import speak
 from core.utils.states import State
 from core.utils.time import TimeoutTimer, IntervalTimer
-from robots.frodo.frodo import FRODO
-from robots.frodo.frodo_definitions import FRODO_DynamicState, FRODO_ArucoMeasurement, getObjectFromArucoId
-from robots.frodo.frodo_manager import FRODO_Manager
-from robots.frodo.frodo_utilities import vector2LocalFrame
+from robots.frodo.robot.frodo import FRODO
+from robots.frodo.robot.frodo_definitions import FRODO_DynamicState, FRODO_ArucoMeasurement, getObjectFromArucoId
+from robots.frodo.robot.frodo_manager import FRODO_Manager
+from robots.frodo.robot.frodo_utilities import vector2LocalFrame
 
 """
 The testbed manager is responsible for managing the testbed objects and their measurements. It also provides

@@ -1,9 +1,9 @@
 import enum
 
-import extensions.simulation.src.core as core
-from extensions.simulation.src.core.environment import BASE_ENVIRONMENT_ACTIONS
-from extensions.simulation.src.objects.base_environment import BaseEnvironment
-from extensions.simulation.src.objects.frodo import FRODO_DynamicAgent
+import simulation.core as core
+from simulation.core.environment import BASE_ENVIRONMENT_ACTIONS
+from simulation.objects.base_environment import BaseEnvironment
+from robots.frodo.simulation.frodo import FRODO_DynamicAgent
 from core.utils.logging_utils import Logger
 
 

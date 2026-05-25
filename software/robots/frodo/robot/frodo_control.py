@@ -1,8 +1,8 @@
 from core.communication.device_server import Device
-from core.utils.archives.events import pred_flag_equals
+from core.utils.events import pred_flag_equals
 from core.utils.events import event_definition, Event, EventFlag
 from core.utils.logging_utils import Logger
-from robots.frodo.frodo_definitions import FRODO_ControlMode, FRODO_Config
+from robots.frodo.robot.frodo_definitions import FRODO_ControlMode, FRODO_Config
 
 
 class FRODO_Control_Events:

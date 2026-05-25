@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 
-from applications.FRODO.testbed.tracker.definitions import TrackedFRODO, TrackedOrigin, ORIGINS, \
+from robots.frodo.applications.testbed.tracker.definitions import TrackedFRODO, TrackedOrigin, ORIGINS, \
     TrackedStatic, TRACKED_STATICS, TRACKED_FRODO_DEFINITIONS
 from core.utils.events import event_definition, Event
 from core.utils.exit import register_exit_callback

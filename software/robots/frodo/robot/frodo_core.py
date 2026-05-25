@@ -5,7 +5,7 @@ from core.communication.protocol import JSON_Message
 from core.utils.dataclass_utils import from_dict_auto
 from core.utils.logging_utils import Logger, LOG_LEVELS
 from core.utils.sound.sound import speak
-from robots.frodo.frodo_definitions import FRODO_Sample, FRODO_ControlMode, FRODO_Config
+from robots.frodo.robot.frodo_definitions import FRODO_Sample, FRODO_ControlMode, FRODO_Config
 from core.utils.events import pred_flag_equals, event_definition, Event, EventFlag
 
 

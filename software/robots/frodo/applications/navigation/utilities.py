@@ -1,9 +1,9 @@
 import time
 
-import applications.FRODO.navigation.navigator as agent_navigator
-from applications.FRODO.simulation.frodo_simulation import FRODO_VisionAgent
+import robots.frodo.applications.navigation.navigator as agent_navigator
+from robots.frodo.applications.simulation.frodo_simulation import FRODO_VisionAgent
 from core.utils.logging_utils import Logger
-from robots.frodo.frodo import FRODO
+from robots.frodo.robot.frodo import FRODO
 
 
 # ======================================================================================================================
