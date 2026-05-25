@@ -512,7 +512,7 @@ def refine_trajectory(rrt_result: KinodynamicRRTResult,
     theta_reference = rrt_result.x_traj[1:, 2]  # theta at steps 1..N
 
     # Compute ILC learning matrix from closed-loop linear system
-    P = getTransitionMatrixFromSystem(dynamics_linear.system, N=N)
+    P, _m = getTransitionMatrixFromSystem(dynamics_linear.system, N=N)
     L, _ = getLearningMatricesOptimal(P, r=ilc_r, s=ilc_s)
 
     # Start from kinodynamic u_ff (warm start)

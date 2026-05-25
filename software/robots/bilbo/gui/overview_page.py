@@ -669,7 +669,15 @@ class BILBO_GUI_OverviewPage:
 
         # Choose scenario based on testbed ID
         if testbed_id == 'lab':
-            scenario = LabScenario(size=size)
+            scenario = LabScenario(
+                x_range=[self._testbed_size['x'][0], self._testbed_size['x'][1]],
+                y_range=[self._testbed_size['y'][0], self._testbed_size['y'][1]],
+            )
+        elif testbed_id == 'lab-hannover':
+            scenario = LabScenario(
+                x_range=[self._testbed_size['x'][0], self._testbed_size['x'][1]],
+                y_range=[self._testbed_size['y'][0], self._testbed_size['y'][1]],
+            )
         elif testbed_id == 'track':
             scenario = TrackScenario(
                 x_range=[self._testbed_size['x'][0], self._testbed_size['x'][1]],

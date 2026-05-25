@@ -226,7 +226,7 @@ def path_to_trajectory(path: np.ndarray, dynamics_nonlinear, dynamics_linear,
     # --- 4. ILC to find feedforward inputs ---
     # The transition matrix P maps u_ff[0..N-1] -> theta[1..N] for the
     # closed-loop linear system (C selects theta).
-    P = getTransitionMatrixFromSystem(dynamics_linear.system, N=N)
+    P, _m = getTransitionMatrixFromSystem(dynamics_linear.system, N=N)
     L, _ = getLearningMatricesOptimal(P, r=ilc_r, s=ilc_s)
 
     # ILC reference: theta at steps 1..N (output after each input step)

@@ -18,6 +18,9 @@ if TYPE_CHECKING:
 class LabScenario(BabylonScenario):
     """Walled arena with a checkered floor.
 
+    Accepts either rectangular ranges via ``x_range``/``y_range`` or a single
+    ``size`` (square, backward-compatible).
+
     Uses a two-tone checkered floor. Optionally surrounded by walls or a
     floor border line — but not both.  Set ``walls=True`` (default) for
     fancy walls, or ``walls=False`` to fall back to the floor's border.
@@ -27,7 +30,9 @@ class LabScenario(BabylonScenario):
     """
 
     def __init__(self,
-                 size: float = 3.0,
+                 size: float | None = None,
+                 x_range: list | None = None,
+                 y_range: list | None = None,
                  tile_size: float = 0.5,
                  color1: list | None = None,
                  color2: list | None = None,
@@ -48,8 +53,24 @@ class LabScenario(BabylonScenario):
                  scene: BabylonScene | None = None,
                  lights: BabylonLights | None = None):
 
+        # Resolve rectangle: explicit ranges win; otherwise fall back to square `size` (default 3.0)
+        square = size if size is not None else 3.0
+        if x_range is None:
+            x_range = [0, square]
+        if y_range is None:
+            y_range = [0, square]
+
+        length_x = x_range[1] - x_range[0]
+        length_y = y_range[1] - y_range[0]
+        center_x = (x_range[0] + x_range[1]) / 2
+        center_y = (y_range[0] + y_range[1]) / 2
+        max_len = max(length_x, length_y)
+
         if camera is None:
-            camera = BabylonCamera(target=[1.50, 1.50, 0.00], alpha=1.5705, beta=0.8705, radius=3.12, fov=1.1345)
+            # Radius scales with the larger dimension so the whole arena fits in view.
+            camera = BabylonCamera(target=[center_x, center_y, 0.00],
+                                   alpha=1.5705, beta=0.8705,
+                                   radius=1.04 * max_len, fov=1.1345)
 
         if scene is None:
             scene = BabylonScene(add_fog=fog)
@@ -71,7 +92,12 @@ class LabScenario(BabylonScenario):
 
         super().__init__(config=config)
 
-        self.size = size
+        self.x_range = x_range
+        self.y_range = y_range
+        self.length_x = length_x
+        self.length_y = length_y
+        self.center_x = center_x
+        self.center_y = center_y
         self.tile_size = tile_size
         self.color1 = color1 if color1 is not None else [0.5, 0.5, 0.5]
         self.color2 = color2 if color2 is not None else [0.65, 0.65, 0.65]
@@ -89,13 +115,16 @@ class LabScenario(BabylonScenario):
     def setup(self, babylon: BabylonVisualization):
         super().setup(babylon)
 
+        max_len = max(self.length_x, self.length_y)
         self.babylon.add_camera(
-            BabylonCamera(name="Top", target=[1.5, 1.5, 0.0], alpha=1.5708, beta=0.0000, radius=9.09, fov=0.3840))
+            BabylonCamera(name="Top",
+                          target=[self.center_x, self.center_y, 0.0],
+                          alpha=1.5708, beta=0.0000,
+                          radius=3.03 * max_len, fov=0.3840))
 
-        center = self.size / 2
-
-        # Checkered floor — compute tile counts from size
-        tiles = max(1, round(self.size / self.tile_size))
+        # Checkered floor — compute tile counts per dimension
+        tiles_x = max(1, round(self.length_x / self.tile_size))
+        tiles_y = max(1, round(self.length_y / self.tile_size))
 
         # When walls are shown, disable the floor border (and vice versa)
         if self.walls:
@@ -105,9 +134,9 @@ class LabScenario(BabylonScenario):
 
         floor_kwargs = {
             'tile_size': self.tile_size,
-            'tiles_x': tiles,
-            'tiles_y': tiles,
-            'offset': [center, center],
+            'tiles_x': tiles_x,
+            'tiles_y': tiles_y,
+            'offset': [self.center_x, self.center_y],
             'color1': self.color1,
             'color2': self.color2,
             'texture_1': self.texture_1,
@@ -121,16 +150,16 @@ class LabScenario(BabylonScenario):
         babylon.addObject(floor)
         self.objects['floor'] = floor
 
-        # Walls (only when enabled)
+        # Walls (only when enabled). North/south run along X (length_x); east/west along Y (length_y).
         if self.walls:
             wall_defs = [
-                ('wall_north', {'x': center, 'y': self.size}),
-                ('wall_south', {'x': center, 'y': 0}),
-                ('wall_east', {'x': self.size, 'y': center, 'angle': np.pi / 2}),
-                ('wall_west', {'x': 0, 'y': center, 'angle': np.pi / 2}),
+                ('wall_north', {'x': self.center_x, 'y': self.y_range[1], 'length': self.length_x}),
+                ('wall_south', {'x': self.center_x, 'y': self.y_range[0], 'length': self.length_x}),
+                ('wall_east',  {'x': self.x_range[1], 'y': self.center_y, 'length': self.length_y, 'angle': np.pi / 2}),
+                ('wall_west',  {'x': self.x_range[0], 'y': self.center_y, 'length': self.length_y, 'angle': np.pi / 2}),
             ]
             for wall_id, props in wall_defs:
-                wall = WallFancy(wall_id, length=self.size, texture=self.wall_texture,
+                wall = WallFancy(wall_id, length=props['length'], texture=self.wall_texture,
                                  height=self.wall_height, alpha=self.wall_alpha,
                                  include_end_caps=self.include_end_caps)
                 wall.setPosition(x=props.get('x', 0), y=props.get('y', 0))

@@ -119,7 +119,7 @@ class BILBO_2D_Input(State):
 
 
 class BILBO_Dynamics_2D_Linear:
-    system: control.StateSpace = None
+    system: control.StateSpace | None = None
 
     x0: BILBO_2D_State = BILBO_2D_State(s=0, v=0, theta=0, theta_dot=0)
     state: BILBO_2D_State = None
@@ -140,7 +140,7 @@ class BILBO_Dynamics_2D_Linear:
         self.system = control.c2d(system_continuous, Ts)
 
     # === METHODS ======================================================================================================
-    def polePlacement(self, poles: list[float] | np.ndarray, apply_poles_to_system: bool = True) -> np.ndarray:
+    def polePlacement(self, poles: list[float] | np.ndarray | list[complex], apply_poles_to_system: bool = True) -> np.ndarray:
         poles = np.asarray(poles)
 
         K_discrete = np.asarray(control.place(self.system.A, self.system.B, np.exp(poles * self.Ts)))
@@ -242,6 +242,8 @@ class BILBO_Dynamics_2D:
     model: BilboModel
     Ts: float
 
+    linear_dynamics: BILBO_Dynamics_2D_Linear | None = None
+
     # === INIT =========================================================================================================
     def __init__(self, model: BilboModel, Ts=DEFAULT_SAMPLE_TIME, x0: BILBO_2D_State | np.ndarray = None):
         if x0 is not None:
@@ -297,10 +299,12 @@ class BILBO_Dynamics_2D:
     def polePlacement(self, poles, apply_poles_to_system: bool = True):
         # For pole placement, we need to make a linear system first
         linear_dynamics = BILBO_Dynamics_2D_Linear(self.model, self.Ts)
-        K = linear_dynamics.polePlacement(poles, apply_poles_to_system=False)
+        K = linear_dynamics.polePlacement(poles, apply_poles_to_system=True)
 
         if apply_poles_to_system:
             self.setStateFeedbackControl(K)
+
+        self.linear_dynamics = linear_dynamics
         return K
 
     # === PRIVATE METHODS ==============================================================================================

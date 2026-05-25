@@ -2,7 +2,8 @@ paths:
   experiments: ./definitions/tests/
   reference_trajectories: ./definitions/references/
 
-testbed: track
+#testbed:
+testbed: lab-hannover
 
 robots:
   autostart: false
@@ -22,7 +23,8 @@ simulation:
 
 tracker:
   enabled: true
-  server: palantir.lan
+#  server: palantir.lan
+  server: 192.168.8.163
   sample_rate: 50
   outlier_filter:
     enabled: true

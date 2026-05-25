@@ -20,7 +20,7 @@ def example_ilc():
     bilbo_dynamics_linear = BILBO_Dynamics_2D_Linear(model=DEFAULT_BILBO_MODEL, Ts=0.01)
     bilbo_dynamics_linear.polePlacement(poles=BILBO_2D_POLES, apply_poles_to_system=True)
     # Get the transition matrix P
-    P = getTransitionMatrixFromSystem(bilbo_dynamics_linear.system, N=N)
+    P, _m = getTransitionMatrixFromSystem(bilbo_dynamics_linear.system, N=N)
 
     # Reference trajectory
     reference_trajectory = BILBO_BUMPED_REFERENCE_TRAJECTORY

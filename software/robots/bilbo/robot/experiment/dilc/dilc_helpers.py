@@ -12,7 +12,7 @@ import numpy as np
 
 from core.utils.plotting.plot import (
     Plot, PlotConfig,
-    Axis, AxisConfig, LegendConfig,
+    Axis, AxisConfig,
     SeriesConfig,
 )
 
