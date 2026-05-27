@@ -9,7 +9,10 @@ import threading
 import logging
 from typing import Any
 
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 
 from core.utils.exit import register_exit_callback
 from core.utils.network.network import getHostIP
@@ -125,7 +128,11 @@ def scan_cameras(max_index: int = 10) -> dict:
     macOS:  system_profiler SPCameraDataType (real camera names, no duplicates)
     Linux:  /sys/class/video4linux (real names, deduplicated per physical device)
     Other:  OpenCV index probing as fallback
+
+    Returns an empty dict if OpenCV is not installed.
     """
+    if cv2 is None:
+        return {}
     system = platform.system()
     if system == 'Darwin':
         return _scan_cameras_macos()
@@ -177,12 +184,18 @@ class CameraWidget(Widget):
         self._selected_camera: str | None = None
         self._lock = threading.Lock()
 
-        # Scan on init
-        self._cameras = self._scan_and_filter()
-
-        if self._auto_start and self._cameras:
-            default_key = self._pick_default()
-            self._start_stream(default_key)
+        self._enabled = cv2 is not None
+        if not self._enabled:
+            self.logger.warning(
+                f"[CameraWidget:{self.id}] opencv-python not installed — widget disabled. "
+                f"Install with `pip install opencv-python` to enable camera streaming."
+            )
+            self._cameras = {}
+        else:
+            self._cameras = self._scan_and_filter()
+            if self._auto_start and self._cameras:
+                default_key = self._pick_default()
+                self._start_stream(default_key)
 
         register_exit_callback(self.close_popout, priority=20)
 
@@ -270,6 +283,8 @@ class CameraWidget(Widget):
     # ------------------------------------------------------------------------------------------------------------------
     def rescan(self):
         """Re-scan cameras and push updated list to the frontend."""
+        if not self._enabled:
+            return
         self.logger.info(f"[CameraWidget:{self.id}] Rescanning cameras...")
         self._cameras = self._scan_and_filter()
         self.logger.warning(f"[CameraWidget:{self.id}] Found {len(self._cameras)} camera(s): {[c['label'] for c in self._cameras.values()]}")

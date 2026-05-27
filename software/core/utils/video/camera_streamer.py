@@ -1,4 +1,7 @@
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 import logging
 import threading
 import time
@@ -38,6 +41,9 @@ class VideoStreamer:
         if self.stream_type == 'rtsp':
             raise NotImplementedError(
                 "[RTSP] Note: RTSP support is a placeholder. You would need to implement a GStreamer or live555 server.")
+
+        if cv2 is None:
+            raise RuntimeError("VideoStreamer requires opencv-python; install with `pip install opencv-python`")
 
         # VideoCapture
         self.cap = cv2.VideoCapture(self.camera_source)
