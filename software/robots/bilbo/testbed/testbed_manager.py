@@ -28,7 +28,7 @@ from robots.bilbo.testbed.tracker.tracked_objects import OptiTrackOutlierFilterC
 from robots.bilbo.testbed.tracker.tracker import BILBO_Tracker, BILBO_Tracker_Config, BILBO_Tracker_Status
 
 # Config directories
-_CONFIGS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'definitions'))
+_CONFIGS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'configs'))
 _TRACKED_OBJECTS_DIR = os.path.join(_CONFIGS_DIR, 'tracked_objects')
 _ROBOTS_DIR = os.path.join(_CONFIGS_DIR, 'robots')
 _TESTBEDS_DIR = os.path.join(_CONFIGS_DIR, 'testbeds')

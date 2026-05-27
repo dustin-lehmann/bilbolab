@@ -2,11 +2,13 @@ stm32:
   reset: false
 
 testbed:
-  id: track
+#  id: track
+  id: lab-hannover
 
 tracker:
   enabled: true
-  server: palantir.lan
+#  server: palantir.lan
+  server: 192.168.8.163
 
 joystick:
   enabled: true
