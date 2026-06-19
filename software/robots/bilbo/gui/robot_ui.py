@@ -40,6 +40,11 @@ from extensions.gui.src.lib.plot.realtime.rt_plot import TimeSeries, RT_Plot_Wid
 from robots.bilbo.gui.applications.dilc_app import DILC_APP
 from robots.bilbo.gui.applications.dilc_page import DILC_ExperimentPage
 from robots.bilbo.gui.applications.limbobar_dilc_app import LimboBar_DILC_APP
+from robots.bilbo.gui.applications.cooperative_dilc_app import CooperativeDILC_APP
+from robots.bilbo.gui.applications.iitl_app import IITL_APP
+from robots.bilbo.gui.applications.iitl_page import IITL_ExperimentPage
+from robots.bilbo.gui.applications.iml_app import IML_APP
+from robots.bilbo.gui.applications.iml_page import IML_ExperimentPage
 from robots.bilbo.robot.bilbo import BILBO
 from robots.bilbo.robot.bilbo_data import BILBO_Sample
 from robots.bilbo.robot.bilbo_definitions import BILBO_Control_Mode, BILBO_ControlConfig
@@ -100,6 +105,12 @@ class RobotUI:
                 self.on_dilc_experiment_initialized, spawn_new_threads=True),
             self.robot.experiment_handler.events.limbobar_dilc_experiment_initialized.on(
                 self.on_limbobar_dilc_experiment_initialized, spawn_new_threads=True),
+            self.robot.experiment_handler.events.cooperative_dilc_experiment_initialized.on(
+                self.on_cooperative_dilc_experiment_initialized, spawn_new_threads=True),
+            self.robot.experiment_handler.events.iitl_experiment_initialized.on(
+                self.on_iitl_experiment_initialized, spawn_new_threads=True),
+            self.robot.experiment_handler.events.iml_experiment_initialized.on(
+                self.on_iml_experiment_initialized, spawn_new_threads=True),
             self.robot.experiment_handler.events.experiment_started.on(self._on_experiment_started),
             self.robot.experiment_handler.events.experiment_finished.on(lambda *a, **kw: self._on_experiment_finished(*a, status=ExperimentStatus.FINISHED, **kw)),
             self.robot.experiment_handler.events.experiment_error.on(lambda *a, **kw: self._on_experiment_finished(*a, status=ExperimentStatus.ERROR, **kw)),
@@ -2394,6 +2405,18 @@ class RobotUI:
         self.dilc_page = DILC_ExperimentPage(robot=self.robot)
         self.app_folder.addPage(self.dilc_page.page)
 
+        # ==============================================================================================================
+        # PAGE 6: IITL EXPERIMENT (shown when an IITL experiment is initialized)
+        # ==============================================================================================================
+        self.iitl_page = IITL_ExperimentPage(robot=self.robot)
+        self.app_folder.addPage(self.iitl_page.page)
+
+        # ==============================================================================================================
+        # PAGE 7: IML EXPERIMENT (shown when an IML experiment is initialized)
+        # ==============================================================================================================
+        self.iml_page = IML_ExperimentPage(robot=self.robot)
+        self.app_folder.addPage(self.iml_page.page)
+
         self.app.addFolder(self.app_folder)
 
         # Navigate to experiment page when an experiment is loaded on the robot
@@ -3019,6 +3042,44 @@ class RobotUI:
             self.app.function('setPage', [self.dilc_page.page.uid])
 
     # ------------------------------------------------------------------------------------------------------------------
+    def on_iitl_experiment_initialized(self, data, *args, **kwargs):
+        self.logger.info("IITL experiment initialized — opening IITL app")
+        iitl_experiment = data.get('experiment')
+        if iitl_experiment is None:
+            self.logger.error("No IITL experiment handle in event data")
+            return
+        self.iitl_app = IITL_APP(
+            gui=self.gui,
+            robot=self.robot,
+            experiment=iitl_experiment,
+        )
+        self.iitl_app.open(self.gui)
+
+        # Bind and navigate to IITL page in the app
+        if hasattr(self, 'iitl_page'):
+            self.iitl_page.bind_experiment(iitl_experiment)
+            self.app.function('setPage', [self.iitl_page.page.uid])
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def on_iml_experiment_initialized(self, data, *args, **kwargs):
+        self.logger.info("IML experiment initialized — opening IML app")
+        iml_experiment = data.get('experiment')
+        if iml_experiment is None:
+            self.logger.error("No IML experiment handle in event data")
+            return
+        self.iml_app = IML_APP(
+            gui=self.gui,
+            robot=self.robot,
+            experiment=iml_experiment,
+        )
+        self.iml_app.open(self.gui)
+
+        # Bind and navigate to IML page in the app
+        if hasattr(self, 'iml_page'):
+            self.iml_page.bind_experiment(iml_experiment)
+            self.app.function('setPage', [self.iml_page.page.uid])
+
+    # ------------------------------------------------------------------------------------------------------------------
     def on_limbobar_dilc_experiment_initialized(self, data, *args, **kwargs):
         self.logger.info("LimboBar DILC experiment initialized — opening LimboBar DILC app")
         experiment = data.get('experiment')
@@ -3036,6 +3097,20 @@ class RobotUI:
         if hasattr(self, 'dilc_page'):
             self.dilc_page.bind_experiment(experiment)
             self.app.function('setPage', [self.dilc_page.page.uid])
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def on_cooperative_dilc_experiment_initialized(self, data, *args, **kwargs):
+        self.logger.info("Cooperative DILC experiment initialized — opening Cooperative DILC app")
+        experiment = data.get('experiment')
+        if experiment is None:
+            self.logger.error("No cooperative DILC experiment handle in event data")
+            return
+        self.cooperative_dilc_app = CooperativeDILC_APP(
+            gui=self.gui,
+            robot=self.robot,
+            experiment=experiment,
+        )
+        self.cooperative_dilc_app.open(self.gui)
 
     # ------------------------------------------------------------------------------------------------------------------
     def _initialize_control_table_from_config(self):

@@ -14,6 +14,7 @@ from core.utils.plotting.plot import (
     Plot, PlotConfig,
     Axis, AxisConfig,
     SeriesConfig,
+    LegendConfig,
 )
 
 

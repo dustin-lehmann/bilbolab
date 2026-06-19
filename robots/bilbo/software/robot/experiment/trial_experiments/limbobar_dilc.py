@@ -41,7 +41,7 @@ from robot.interfaces.bilbo_interfaces import BILBO_Interfaces
 from robot.config import BILBO_Config
 from robot.control.bilbo_control_definitions import BILBO_ControlConfig
 from robot.testbed.obstacles import LimboBarGeometry
-from core.utils.control_lib.lib_control.il.q_filter import FIR_Design_Params
+from core.utils.control_lib.lib_control.learning.q_filter import FIR_Design_Params
 
 
 # === Data Structures ==============================================================================================

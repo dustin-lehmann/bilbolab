@@ -154,6 +154,8 @@ class BILBO_ExperimentHandler:
         self.action_event = Event(flags=EventFlag('id', str))
         self.markers = {}
         self._active_dilc_experiment = None
+        self._active_iitl_experiment = None
+        self._active_iml_experiment = None
 
         self.common.callbacks.end_of_step.register(self._end_of_step_callback)
 
@@ -236,6 +238,34 @@ class BILBO_ExperimentHandler:
         )
 
         self.communication.wifi.newCommand(
+            identifier='run_snr_dilc_experiment',
+            function=self._run_snr_dilc_experiment_external,
+            arguments=[
+                CommandArgument(
+                    name='settings',
+                    type=dict,
+                    optional=False,
+                    description="SNR DILC experiment settings"
+                )
+            ],
+            description="Start an SNR-adaptive DILC experiment (blocking, runs in thread)",
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='run_cooperative_dilc_experiment',
+            function=self._run_cooperative_dilc_experiment_external,
+            arguments=[
+                CommandArgument(
+                    name='settings',
+                    type=dict,
+                    optional=False,
+                    description="Cooperative DILC experiment settings"
+                )
+            ],
+            description="Start a cooperative (multi-agent) DILC experiment (blocking, runs in thread)",
+        )
+
+        self.communication.wifi.newCommand(
             identifier='set_dilc_auto_start_trials',
             function=self._set_dilc_auto_start_trials,
             arguments=[
@@ -253,6 +283,74 @@ class BILBO_ExperimentHandler:
                                 description="Enable or disable auto-accept of trials")
             ],
             description="Set DILC auto_accept_trials during experiment",
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='run_iitl_experiment',
+            function=self._run_iitl_experiment_external,
+            arguments=[
+                CommandArgument(
+                    name='settings',
+                    type=dict,
+                    optional=False,
+                    description="IITL experiment settings"
+                )
+            ],
+            description="Start an IITL experiment (blocking, runs in thread)",
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='set_iitl_auto_start_trials',
+            function=self._set_iitl_auto_start_trials,
+            arguments=[
+                CommandArgument(name='value', type=bool, optional=False,
+                                description="Enable or disable auto-start of trials")
+            ],
+            description="Set IITL auto_start_trials during experiment",
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='set_iitl_auto_accept_trials',
+            function=self._set_iitl_auto_accept_trials,
+            arguments=[
+                CommandArgument(name='value', type=bool, optional=False,
+                                description="Enable or disable auto-accept of trials")
+            ],
+            description="Set IITL auto_accept_trials during experiment",
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='run_iml_experiment',
+            function=self._run_iml_experiment_external,
+            arguments=[
+                CommandArgument(
+                    name='settings',
+                    type=dict,
+                    optional=False,
+                    description="IML experiment settings"
+                )
+            ],
+            description="Start an IML (model identification) experiment (blocking, runs in thread)",
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='set_iml_auto_start_trials',
+            function=self._set_iml_auto_start_trials,
+            arguments=[
+                CommandArgument(name='value', type=bool, optional=False,
+                                description="Enable or disable auto-start of trials")
+            ],
+            description="Set IML auto_start_trials during experiment",
+        )
+
+        self.communication.wifi.newCommand(
+            identifier='set_iml_auto_accept_trials',
+            function=self._set_iml_auto_accept_trials,
+            arguments=[
+                CommandArgument(name='value', type=bool, optional=False,
+                                description="Enable or disable auto-accept of trials")
+            ],
+            description="Set IML auto_accept_trials during experiment",
         )
 
     # === LIFECYCLE ====================================================================================================
@@ -292,9 +390,17 @@ class BILBO_ExperimentHandler:
                 self.trajectory_status = BILBO_ExperimentHandler_TrajectoryStatus.IDLE
                 return None
 
-            # 2) Start on the low level
+            # 2) Start on the low level. This returns False only on genuine
+            # validation failures (nothing loaded / wrong id); a missing START
+            # ACK is no longer treated as failure (see method docstring). Send a
+            # STOP on failure so the STM32 can never be left running a sequence
+            # the CM5 believes failed.
             if not self._start_loaded_trajectory_on_lowlevel(trajectory.id):
                 self.logger.warning(f"Failed to start trajectory {trajectory.id}")
+                try:
+                    self._send_trajectory_stop_signal_to_lowlevel()
+                except Exception as e:
+                    self.logger.error(f"Failed to send stop signal to low-level: {e}")
                 self.trajectory_status = BILBO_ExperimentHandler_TrajectoryStatus.IDLE
                 return None
 
@@ -735,6 +841,210 @@ class BILBO_ExperimentHandler:
         finally:
             self.status = BILBO_ExperimentHandler_Status.IDLE
 
+    # === SNR DILC EXPERIMENTS =========================================================================================
+    def run_snr_dilc_experiment(self, settings):
+        """Run an SNR-adaptive DILC experiment. BLOCKING."""
+        from robot.experiment.trial_experiments.snr_dilc import SNR_DILC_Experiment
+
+        experiment = SNR_DILC_Experiment(
+            common=self.common,
+            estimation=self.estimation,
+            control=self.control,
+            communication=self.communication,
+            interfaces=self.interfaces,
+            experiment_handler=self,
+            settings=settings,
+        )
+        self._active_dilc_experiment = experiment
+        try:
+            return experiment.run()
+        finally:
+            self._active_dilc_experiment = None
+
+    def _run_snr_dilc_experiment_external(self, settings: dict) -> bool:
+        if self.status != BILBO_ExperimentHandler_Status.IDLE:
+            self.logger.warning(f"Cannot start SNR DILC experiment: handler is {self.status}")
+            return False
+
+        from robot.experiment.trial_experiments.snr_dilc import SNR_DILC_Experiment_Settings
+
+        try:
+            snr_settings = from_dict_auto(SNR_DILC_Experiment_Settings, settings)
+            self.logger.info(f"Received SNR DILC experiment request: {snr_settings.id}")
+        except Exception as e:
+            self.logger.error(f"Failed to parse SNR DILC experiment settings: {e}")
+            return False
+
+        self.status = BILBO_ExperimentHandler_Status.EXPERIMENT
+        run_in_thread(self._run_snr_dilc_experiment_thread, snr_settings)
+        return True
+
+    def _run_snr_dilc_experiment_thread(self, settings):
+        try:
+            self.run_snr_dilc_experiment(settings)
+        finally:
+            self.status = BILBO_ExperimentHandler_Status.IDLE
+
+    # === COOPERATIVE DILC EXPERIMENTS =================================================================================
+    def run_cooperative_dilc_experiment(self, settings):
+        """Run a cooperative (multi-agent, single-robot) DILC experiment. BLOCKING."""
+        from robot.experiment.trial_experiments.cooperative_dilc import CooperativeDILC_Experiment
+
+        experiment = CooperativeDILC_Experiment(
+            common=self.common,
+            estimation=self.estimation,
+            control=self.control,
+            communication=self.communication,
+            interfaces=self.interfaces,
+            experiment_handler=self,
+            settings=settings,
+        )
+        self._active_dilc_experiment = experiment
+        try:
+            return experiment.run()
+        finally:
+            self._active_dilc_experiment = None
+
+    def _run_cooperative_dilc_experiment_external(self, settings: dict) -> bool:
+        if self.status != BILBO_ExperimentHandler_Status.IDLE:
+            self.logger.warning(f"Cannot start cooperative DILC experiment: handler is {self.status}")
+            return False
+
+        from robot.experiment.trial_experiments.cooperative_dilc import CooperativeDILC_Experiment_Settings
+
+        try:
+            coop_settings = from_dict_auto(CooperativeDILC_Experiment_Settings, settings)
+            self.logger.info(f"Received cooperative DILC experiment request: {coop_settings.id}")
+        except Exception as e:
+            self.logger.error(f"Failed to parse cooperative DILC experiment settings: {e}")
+            return False
+
+        self.status = BILBO_ExperimentHandler_Status.EXPERIMENT
+        run_in_thread(self._run_cooperative_dilc_experiment_thread, coop_settings)
+        return True
+
+    def _run_cooperative_dilc_experiment_thread(self, settings):
+        try:
+            self.run_cooperative_dilc_experiment(settings)
+        finally:
+            self.status = BILBO_ExperimentHandler_Status.IDLE
+
+    # === IITL EXPERIMENTS =============================================================================================
+    def run_iitl_experiment(self, settings):
+        """Run an IITL experiment. BLOCKING."""
+        from robot.experiment.trial_experiments.iitl import IITL_Experiment
+
+        experiment = IITL_Experiment(
+            common=self.common,
+            estimation=self.estimation,
+            control=self.control,
+            communication=self.communication,
+            interfaces=self.interfaces,
+            experiment_handler=self,
+            settings=settings,
+        )
+        self._active_iitl_experiment = experiment
+        try:
+            return experiment.run()
+        finally:
+            self._active_iitl_experiment = None
+
+    def _set_iitl_auto_start_trials(self, value: bool) -> bool:
+        if self._active_iitl_experiment is None:
+            self.logger.warning("No active IITL experiment — cannot set auto_start_trials")
+            return False
+        self._active_iitl_experiment.set_auto_start_trials(value)
+        return True
+
+    def _set_iitl_auto_accept_trials(self, value: bool) -> bool:
+        if self._active_iitl_experiment is None:
+            self.logger.warning("No active IITL experiment — cannot set auto_accept_trials")
+            return False
+        self._active_iitl_experiment.set_auto_accept_trials(value)
+        return True
+
+    def _run_iitl_experiment_external(self, settings: dict) -> bool:
+        if self.status != BILBO_ExperimentHandler_Status.IDLE:
+            self.logger.warning(f"Cannot start IITL experiment: handler is {self.status}")
+            return False
+
+        from robot.experiment.trial_experiments.iitl import IITL_Experiment_Settings
+
+        try:
+            iitl_settings = from_dict_auto(IITL_Experiment_Settings, settings)
+            self.logger.info(f"Received IITL experiment request: {iitl_settings.id}")
+        except Exception as e:
+            self.logger.error(f"Failed to parse IITL experiment settings: {e}")
+            return False
+
+        self.status = BILBO_ExperimentHandler_Status.EXPERIMENT
+        run_in_thread(self._run_iitl_experiment_thread, iitl_settings)
+        return True
+
+    def _run_iitl_experiment_thread(self, settings):
+        try:
+            self.run_iitl_experiment(settings)
+        finally:
+            self.status = BILBO_ExperimentHandler_Status.IDLE
+
+    # === IML EXPERIMENTS ==============================================================================================
+    def run_iml_experiment(self, settings):
+        """Run an IML (model identification) experiment. BLOCKING."""
+        from robot.experiment.trial_experiments.iml import IML_Experiment
+
+        experiment = IML_Experiment(
+            common=self.common,
+            estimation=self.estimation,
+            control=self.control,
+            communication=self.communication,
+            interfaces=self.interfaces,
+            experiment_handler=self,
+            settings=settings,
+        )
+        self._active_iml_experiment = experiment
+        try:
+            return experiment.run()
+        finally:
+            self._active_iml_experiment = None
+
+    def _set_iml_auto_start_trials(self, value: bool) -> bool:
+        if self._active_iml_experiment is None:
+            self.logger.warning("No active IML experiment — cannot set auto_start_trials")
+            return False
+        self._active_iml_experiment.set_auto_start_trials(value)
+        return True
+
+    def _set_iml_auto_accept_trials(self, value: bool) -> bool:
+        if self._active_iml_experiment is None:
+            self.logger.warning("No active IML experiment — cannot set auto_accept_trials")
+            return False
+        self._active_iml_experiment.set_auto_accept_trials(value)
+        return True
+
+    def _run_iml_experiment_external(self, settings: dict) -> bool:
+        if self.status != BILBO_ExperimentHandler_Status.IDLE:
+            self.logger.warning(f"Cannot start IML experiment: handler is {self.status}")
+            return False
+
+        from robot.experiment.trial_experiments.iml import IML_Experiment_Settings
+
+        try:
+            iml_settings = from_dict_auto(IML_Experiment_Settings, settings)
+            self.logger.info(f"Received IML experiment request: {iml_settings.id}")
+        except Exception as e:
+            self.logger.error(f"Failed to parse IML experiment settings: {e}")
+            return False
+
+        self.status = BILBO_ExperimentHandler_Status.EXPERIMENT
+        run_in_thread(self._run_iml_experiment_thread, iml_settings)
+        return True
+
+    def _run_iml_experiment_thread(self, settings):
+        try:
+            self.run_iml_experiment(settings)
+        finally:
+            self.status = BILBO_ExperimentHandler_Status.IDLE
+
     def _run_limbobar_dilc_experiment_external(self, settings: dict) -> bool:
         if self.status != BILBO_ExperimentHandler_Status.IDLE:
             self.logger.warning(f"Cannot start LimboBar DILC experiment: handler is {self.status}")
@@ -860,8 +1170,16 @@ class BILBO_ExperimentHandler:
         success = self._send_trajectory_start_signal_to_lowlevel(trajectory_id)
 
         if not success:
-            self.logger.warning("Failed to start trajectory on STM32. Aborting.")
-            return False
+            # The START register on the STM32 only validates and *queues* a start
+            # request; the actual start is aligned to the 10 Hz grid and confirmed
+            # asynchronously via the STARTED sequencer event. A missing/late ACK
+            # (e.g. the register reply stuck behind other UART traffic) therefore
+            # does NOT mean the start failed -- the firmware may well go on to run
+            # the trajectory. Don't abort here; let the caller decide based on the
+            # STARTED/ABORTED event (which is the authoritative signal).
+            self.logger.warning(
+                "START acknowledgment from STM32 missing/late; "
+                "waiting for sequencer event to confirm start.")
 
         return True
 

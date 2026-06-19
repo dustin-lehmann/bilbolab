@@ -82,6 +82,16 @@ HAL_StatusTypeDef SimplexMotion_RS485::init(
 	if (status) {
 		return HAL_ERROR;
 	}
+#else
+	// Watchdog disabled: actively tear down any events left armed by a
+	// previously-flashed watchdog-enabled firmware. The events live in the
+	// motor's volatile RAM and are NOT cleared by an STM32-only reflash
+	// (SWD flashing does not power-cycle the motor), so without this the
+	// stale countdown/quickstop events keep running and force a Quickstop.
+	status = this->disableWatchdog();
+	if (status) {
+		return HAL_ERROR;
+	}
 #endif
 
 	return HAL_OK;
@@ -543,6 +553,45 @@ HAL_StatusTypeDef SimplexMotion_RS485::configureWatchdog() {
 HAL_StatusTypeDef SimplexMotion_RS485::feedWatchdog() {
 	uint16_t reload = BILBO_DRIVE_WATCHDOG_RELOAD;
 	return this->writeRegisters(SIMPLEXMOTION_RS485_REG_APPLDATA0, 1, &reload);
+}
+
+/* ================================================================================= */
+/**
+ * @brief Tears down the motor-internal watchdog events.
+ *
+ * Clears EventControl for the countdown (slot 2) and quickstop (slot 3)
+ * events programmed by configureWatchdog(). Called during motor init when
+ * BILBO_DRIVE_WATCHDOG_ENABLE is 0.
+ *
+ * The events live in the motor's volatile RAM and are NOT cleared by an
+ * STM32-only reflash (SWD flashing does not power-cycle the motor). Without
+ * this teardown, events armed by a previously-flashed watchdog-enabled
+ * firmware keep counting down and force a Quickstop once the STM32 stops
+ * feeding the counter. To close the small startup window between the motor
+ * RESET in init() and this teardown, the counter is reloaded first (pushing
+ * any imminent timeout far out), then the quickstop event is disarmed before
+ * the countdown event so the watchdog cannot trigger a Quickstop mid-teardown.
+ */
+HAL_StatusTypeDef SimplexMotion_RS485::disableWatchdog() {
+	HAL_StatusTypeDef status;
+	const uint16_t ev_countdown = 2;
+	const uint16_t ev_quickstop = 3;
+	uint16_t zero = 0;
+
+	// Reload the counter so any stale countdown is far from zero while we disarm.
+	uint16_t initial = BILBO_DRIVE_WATCHDOG_INITIAL;
+	status = this->writeRegisters(SIMPLEXMOTION_RS485_REG_APPLDATA0, 1, &initial);
+	if (status != HAL_OK) return HAL_ERROR;
+
+	// Disarm the quickstop event first to immediately neutralize the trigger.
+	status = this->writeRegisters(SIMPLEXMOTION_RS485_REG_EVENT_CONTROL + ev_quickstop, 1, &zero);
+	if (status != HAL_OK) return HAL_ERROR;
+
+	// Then disarm the countdown event.
+	status = this->writeRegisters(SIMPLEXMOTION_RS485_REG_EVENT_CONTROL + ev_countdown, 1, &zero);
+	if (status != HAL_OK) return HAL_ERROR;
+
+	return HAL_OK;
 }
 
 /* ================================================================================= */

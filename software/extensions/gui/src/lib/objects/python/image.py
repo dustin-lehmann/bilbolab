@@ -1,6 +1,7 @@
 import io
 import base64
 import os
+import threading
 from typing import Any, Optional
 
 from PIL import Image
@@ -12,6 +13,13 @@ from matplotlib.axes import Axes
 
 from core.utils.dict_utils import update_dict
 from extensions.gui.src.lib.objects.objects import Widget
+
+# Matplotlib rendering (mathtext parser, font cache) is process-global and NOT
+# thread-safe. GUI widgets are rendered from per-listener event threads, so two
+# figures rendering at once (e.g. an experiment popup and its page reacting to
+# the same trial-finished event) corrupt the shared mathtext state and raise
+# spurious parse errors. Serialize all figure rendering behind one lock.
+_RENDER_LOCK = threading.Lock()
 
 
 class ImageWidget(Widget):
@@ -199,15 +207,16 @@ class UpdatableImageWidget(Widget):
             fig = plt.gcf()
 
         buf = io.BytesIO()
-        fig.savefig(
-            buf,
-            format=fmt,
-            dpi=dpi,
-            transparent=transparent,
-            facecolor=facecolor,
-            bbox_inches=bbox_inches,
-            pad_inches=pad_inches,
-        )
+        with _RENDER_LOCK:
+            fig.savefig(
+                buf,
+                format=fmt,
+                dpi=dpi,
+                transparent=transparent,
+                facecolor=facecolor,
+                bbox_inches=bbox_inches,
+                pad_inches=pad_inches,
+            )
         uri = _bytes_to_data_uri(buf.getvalue(), mime=f"image/{fmt.lower()}")
         self.updateImage(uri)
         return uri

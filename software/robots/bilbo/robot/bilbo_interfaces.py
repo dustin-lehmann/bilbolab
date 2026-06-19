@@ -544,6 +544,36 @@ class BILBO_CLI_CommandSet(CommandSet):
                                 default=None),
             ])
 
+        snr_dilc_command = Command(
+            name='snr_dilc',
+            function=self._run_snr_dilc,
+            description='Run an SNR-adaptive DILC experiment from a YAML config file. Opens native file picker if no file specified.',
+            allow_positionals=True,
+            execute_in_thread=True,
+            arguments=[
+                CommandArgument(name='file',
+                                short_name='f',
+                                type=str,
+                                description='Path to SNR DILC experiment YAML file. Opens native picker if not specified.',
+                                optional=True,
+                                default=None),
+            ])
+
+        cooperative_dilc_command = Command(
+            name='cooperative_dilc',
+            function=self._run_cooperative_dilc,
+            description='Run a cooperative (multi-agent, single-robot) DILC experiment from a YAML config file. Opens native file picker if no file specified.',
+            allow_positionals=True,
+            execute_in_thread=True,
+            arguments=[
+                CommandArgument(name='file',
+                                short_name='f',
+                                type=str,
+                                description='Path to cooperative DILC experiment YAML file. Opens native picker if not specified.',
+                                optional=True,
+                                default=None),
+            ])
+
         limbobar_dilc_command = Command(
             name='limbobar_dilc',
             function=self._run_limbobar_dilc,
@@ -555,6 +585,36 @@ class BILBO_CLI_CommandSet(CommandSet):
                                 short_name='f',
                                 type=str,
                                 description='Path to LimboBar DILC experiment YAML file. Opens native picker if not specified.',
+                                optional=True,
+                                default=None),
+            ])
+
+        iitl_command = Command(
+            name='iitl',
+            function=self._run_iitl,
+            description='Run an IITL experiment from a YAML config file. Opens native file picker if no file specified.',
+            allow_positionals=True,
+            execute_in_thread=True,
+            arguments=[
+                CommandArgument(name='file',
+                                short_name='f',
+                                type=str,
+                                description='Path to IITL experiment YAML file. Opens native picker if not specified.',
+                                optional=True,
+                                default=None),
+            ])
+
+        iml_command = Command(
+            name='iml',
+            function=self._run_iml,
+            description='Run an IML (model identification) experiment from a YAML config file. Opens native file picker if no file specified.',
+            allow_positionals=True,
+            execute_in_thread=True,
+            arguments=[
+                CommandArgument(name='file',
+                                short_name='f',
+                                type=str,
+                                description='Path to IML experiment YAML file. Opens native picker if not specified.',
                                 optional=True,
                                 default=None),
             ])
@@ -579,7 +639,11 @@ class BILBO_CLI_CommandSet(CommandSet):
                                             commands=[test_trajectory_command,
                                                       plot_last_experiment_command,
                                                       dilc_command,
+                                                      snr_dilc_command,
+                                                      cooperative_dilc_command,
                                                       limbobar_dilc_command,
+                                                      iitl_command,
+                                                      iml_command,
                                                       test_experiment_command,
                                                       stop_experiment_command])
 
@@ -977,6 +1041,44 @@ class BILBO_CLI_CommandSet(CommandSet):
         self.experiments.run_dilc_from_file(file)
 
     # ------------------------------------------------------------------------------------------------------------------
+    def _run_snr_dilc(self, file: str | None = None):
+        """CLI handler for SNR DILC command. Opens file picker if no file given."""
+        if not file:
+            self.core.logger.info("No file specified, opening native file picker...")
+            try:
+                from core.utils.filepicker import pick_file
+                file = pick_file(
+                    title='Select SNR DILC Experiment File',
+                    allowed_extensions=['yaml', 'yml']
+                )
+            except Exception as e:
+                self.core.logger.error(f"File picker failed: {e}. Use -f <path> to specify a file.")
+                return
+            if not file:
+                self.core.logger.info("File selection cancelled.")
+                return
+        self.experiments.run_snr_dilc_from_file(file)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _run_cooperative_dilc(self, file: str | None = None):
+        """CLI handler for cooperative DILC command. Opens file picker if no file given."""
+        if not file:
+            self.core.logger.info("No file specified, opening native file picker...")
+            try:
+                from core.utils.filepicker import pick_file
+                file = pick_file(
+                    title='Select Cooperative DILC Experiment File',
+                    allowed_extensions=['yaml', 'yml']
+                )
+            except Exception as e:
+                self.core.logger.error(f"File picker failed: {e}. Use -f <path> to specify a file.")
+                return
+            if not file:
+                self.core.logger.info("File selection cancelled.")
+                return
+        self.experiments.run_cooperative_dilc_from_file(file)
+
+    # ------------------------------------------------------------------------------------------------------------------
     def _run_limbobar_dilc(self, file: str | None = None):
         """CLI handler for LimboBar DILC command. Opens file picker if no file given."""
         if not file:
@@ -994,6 +1096,44 @@ class BILBO_CLI_CommandSet(CommandSet):
                 self.core.logger.info("File selection cancelled.")
                 return
         self.experiments.run_limbobar_dilc_from_file(file)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _run_iitl(self, file: str | None = None):
+        """CLI handler for IITL command. Opens file picker if no file given."""
+        if not file:
+            self.core.logger.info("No file specified, opening native file picker...")
+            try:
+                from core.utils.filepicker import pick_file
+                file = pick_file(
+                    title='Select IITL Experiment File',
+                    allowed_extensions=['yaml', 'yml']
+                )
+            except Exception as e:
+                self.core.logger.error(f"File picker failed: {e}. Use -f <path> to specify a file.")
+                return
+            if not file:
+                self.core.logger.info("File selection cancelled.")
+                return
+        self.experiments.run_iitl_from_file(file)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _run_iml(self, file: str | None = None):
+        """CLI handler for IML command. Opens file picker if no file given."""
+        if not file:
+            self.core.logger.info("No file specified, opening native file picker...")
+            try:
+                from core.utils.filepicker import pick_file
+                file = pick_file(
+                    title='Select IML Experiment File',
+                    allowed_extensions=['yaml', 'yml']
+                )
+            except Exception as e:
+                self.core.logger.error(f"File picker failed: {e}. Use -f <path> to specify a file.")
+                return
+            if not file:
+                self.core.logger.info("File selection cancelled.")
+                return
+        self.experiments.run_iml_from_file(file)
 
     # ------------------------------------------------------------------------------------------------------------------
     def _run_experiment(self, file: str | None = None, output: str | None = None):

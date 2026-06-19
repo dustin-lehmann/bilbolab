@@ -58,7 +58,9 @@
 // A counter in ApplData[0] is decremented every 64ms by a motor-internal event.
 // If the counter reaches zero, another event writes Quickstop to the Mode register.
 // The STM32 periodically reloads the counter to prevent timeout.
-// Set to 0 to disable.
+// Set to 0 to disable. When disabled, the motor's watchdog events are actively
+// torn down at init (disableWatchdog) so any events left armed by a previously-
+// flashed watchdog-enabled firmware cannot trigger a spurious Quickstop.
 #define BILBO_DRIVE_WATCHDOG_ENABLE 0
 
 // Watchdog counter reload value, written by STM32 each drive task cycle.

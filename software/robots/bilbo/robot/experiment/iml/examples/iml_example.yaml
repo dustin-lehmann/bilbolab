@@ -1,0 +1,131 @@
+id: iml_example
+description: Example IML (Iterative Model Learning) model-identification experiment
+
+# Number of learning trials (iterations).
+# Each trial drives one input trajectory from the learning set (cyclically),
+# measures the output, and runs the IML model update. With one trial per input
+# set J = len(learning_set); use more (J > len(learning_set)) to revisit inputs
+# and keep refining, or fewer to identify from a subset.
+# Typical: equal to (or a small multiple of) the learning-set size.
+J: 6
+
+# Sample period in seconds. Must match the firmware control loop (100 Hz -> 0.01).
+# If omitted, it is inherited from the first learning-set .bitrj file.
+Ts: 0.01
+
+# Learning set: the input trajectories to drive and identify the model from.
+# A list of .bitrj files, resolved relative to this YAML's directory first,
+# then the host's reference_trajectories path. Each file contributes one
+# single-channel input (via InputTrajectory.to_vector(single_input=True)).
+# Every input must share the same horizon N (a multiple of 10).
+# Diverse, well-exciting inputs (different cutoffs/amplitudes) give a better
+# identification than repeating one signal.
+learning_set:
+  - input_1.bitrj
+  - input_2.bitrj
+  - input_3.bitrj
+
+# Starting pose the robot navigates to before each trial.
+# Ensures repeatable initial conditions across trials.
+#   x, y: position in meters (world frame)
+#   psi:  heading in radians (0 = +x axis)
+initial_conditions:
+  x: 0.0
+  y: 0.0
+  psi: 0.0
+
+# Optional: separate starting pose for the first trial only (see DILC template).
+# If omitted, all trials use initial_conditions.
+# initial_conditions_u0:
+#   x: 0.0
+#   y: 0.0
+#   psi: 0.0
+
+# Identification scheme:
+#   iterative : per-trial norm-optimal IML update
+#               m_{j+1} = Q_m (m_j + K_j (y_j - M(u_j) m_j))
+#   rls       : accumulated-information batch least squares
+#               m_{j+1} = Q_m (G_j + s_m I)^{-1} b_j   (G_j = sum U^T U, b_j = sum U^T y)
+# RLS pools information across all trials and is more noise-robust; iterative is
+# the lighter per-trial update. Both methods support an adaptive regulariser.
+method: iterative
+
+# Model regularisation s_m (> 0). It is REQUIRED only when adaptive_s_m is false;
+# with adaptive_s_m: true it is recomputed every trial (leave s_m commented out).
+# This applies to BOTH methods:
+#   - iterative: s_m from the current input's regressor (condition-number cap)
+#   - rls:       s_m = sigma_max(G) / kappa from the accumulated Gramian
+adaptive_s_m: true
+# s_m: 1.0e-3
+
+# Condition-number cap for the adaptive regulariser (only used when adaptive_s_m).
+# Larger = inverts more singular directions (faster, noisier); smaller = more damping.
+kappa: 100.0
+
+# Model Q-filter: zero-phase FIR low-pass that smooths the identified impulse
+# response across its coefficients, suppressing high-frequency noise in the
+# estimate. Omit to leave the model update unfiltered.
+#   fc:     cutoff in cycles/sample (0 < fc < 0.5). Lower = stronger smoothing.
+#   L:      FIR length (odd). Longer = sharper cutoff. Typical 31-61.
+#   window: hann | hamming | blackman.
+model_lowpass:
+  fc: 0.3
+  L: 41
+  window: hann
+
+# Model structure -- control the length of the identified impulse response and
+# how strongly its tail is penalised. For a stable controlled system the
+# impulse response should decay within the settling time; identifying the full
+# trajectory horizon (N taps) leaves a long, under-determined tail that just
+# absorbs noise. Use either/both of the following:
+#
+# 1) Truncate the model to M taps (the rest are exactly zero). Set ONE of:
+#      model_length:    number of taps M (<= N)
+#      model_horizon_s: model length in seconds (M = round(model_horizon_s / Ts))
+#    Pick ~1.5-2x the visible settling time. Example: ~2 s of a 7.2 s horizon.
+# model_horizon_s: 2.0
+#
+# 2) Decay-promoting (tap-weighted) ridge: penalise late taps more so they
+#    shrink toward zero. 0 = off (uniform ridge).
+#      tail_penalty:      strength (try 2-10)
+#      tail_penalty_type: linear (w: 1 .. 1+tail_penalty) | exponential (w: 1 .. e^tail_penalty)
+# tail_penalty: 5.0
+# tail_penalty_type: exponential
+
+# Initial model / impulse-response estimate (m0).
+# If omitted, identification starts from a zero model (no prior).
+#   - a path to a .bmvec file (relative to this YAML or absolute)
+#   - an inline array of floats (length N)
+# m0: prior_model.bmvec
+
+# Optional reference Markov vector m_ref. When given, the per-trial model
+# estimation error ||m_ref - m_j|| is logged and overlaid in the report/GUI.
+#   - a path to a .bmvec / .json list, or an inline array of floats (length N).
+# reference_model: reference_model.bmvec
+
+# Safety cap on the peak driven input |u|. If omitted, it is auto-derived as
+# input_safety_factor * (learning-set peak), which never trips for clean files.
+# max_input_abs: 0.5
+input_safety_factor: 1.5
+
+meta:
+  # Auto-navigate to initial_conditions before each trial (needs position
+  # control + OptiTrack). false = position the robot manually.
+  automatic_initial_conditions_reset: true
+
+  # Wait for the robot to be stationary before driving each input.
+  check_if_robot_is_static: true
+
+  # Auto-start each trial once prepared (no resume needed).
+  # Can be toggled live via the GUI or WiFi command.
+  auto_start_trials: false
+
+  # Auto-accept each trial result (no resume/revert needed).
+  # Can be toggled live via the GUI or WiFi command.
+  auto_accept_trials: false
+
+  # Hold heading (psi) before each trajectory.
+  enable_psi_control: false
+
+  # Disable the OptiTrack tracker during trajectory execution.
+  disable_tracker_during_trajectory: false

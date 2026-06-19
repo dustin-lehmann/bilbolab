@@ -54,6 +54,8 @@ from robots.bilbo.robot.experiment.helpers import generate_random_input_trajecto
 if TYPE_CHECKING:
     from robots.bilbo.robot.experiment import DILC_Experiment
     from robots.bilbo.robot.experiment.limbobar_dilc import LimboBar_DILC_Experiment
+    from robots.bilbo.robot.experiment.iitl import IITL_Experiment
+    from robots.bilbo.robot.experiment.iml import IML_Experiment
 
 logger = Logger("BILBO_ExperimentHandler")
 
@@ -356,6 +358,15 @@ class BILBO_ExperimentHandler_Events:
     # LimboBar DILC experiment events
     limbobar_dilc_experiment_initialized: Event = Event(copy_data_on_set=False)
 
+    # Cooperative (multi-agent) DILC experiment events
+    cooperative_dilc_experiment_initialized: Event = Event(copy_data_on_set=False)
+
+    # IITL experiment events
+    iitl_experiment_initialized: Event = Event(copy_data_on_set=False)
+
+    # IML experiment events
+    iml_experiment_initialized: Event = Event(copy_data_on_set=False)
+
 
 @event_definition
 class BILBO_ExperimentHandler_InternalEvents:
@@ -402,6 +413,8 @@ class BILBO_ExperimentHandler:
 
     dilc_experiment: DILC_Experiment | None = None
     limbobar_dilc_experiment: LimboBar_DILC_Experiment | None = None
+    iitl_experiment: "IITL_Experiment | None" = None
+    iml_experiment: "IML_Experiment | None" = None
 
     # === INIT =========================================================================================================
     def __init__(self, core: BILBO_Core, control: BILBO_Control):
@@ -477,6 +490,280 @@ class BILBO_ExperimentHandler:
             self.dilc_experiment = None
             return
         self.dilc_experiment.start()
+
+    # === SNR DILC ======================================================================
+    def run_snr_dilc_from_file(self, file: str):
+        """Run an SNR-adaptive DILC experiment from a YAML config file.
+
+        Args:
+            file: Path to an SNR DILC experiment YAML file.
+        """
+        from robots.bilbo.robot.experiment.dilc import DILC_Experiment_State
+        from robots.bilbo.robot.experiment.snr_dilc import SNR_DILC_Experiment
+
+        # Guard against starting a second experiment (shares the dilc slot)
+        if (self.dilc_experiment is not None
+                and self.dilc_experiment.state == DILC_Experiment_State.RUNNING):
+            self.logger.warning("A DILC experiment is already running")
+            return
+
+        if not file.endswith(('.yaml', '.yml')):
+            file += '.yaml'
+
+        if not os.path.isfile(file):
+            file_in_experiments = os.path.join(EXPERIMENT_DIR, file)
+            if not os.path.isfile(file_in_experiments):
+                self.logger.error(f"SNR DILC config file not found: {file}")
+                return
+            file = file_in_experiments
+
+        # Clean up previous experiment instance to avoid duplicate event handlers
+        if self.dilc_experiment is not None:
+            self.dilc_experiment.close()
+
+        self.logger.info(f"Loading SNR DILC experiment from: {file}")
+        self.dilc_experiment = SNR_DILC_Experiment(core=self.core)
+        self.dilc_experiment.callbacks.experiment_initialized.register(
+            lambda: self.events.dilc_experiment_initialized.set(
+                data={'experiment': self.dilc_experiment}
+            )
+        )
+        try:
+            self.dilc_experiment.configure_from_yaml(file)
+        except Exception as e:
+            self.logger.error(f"Failed to load SNR DILC settings: {e}")
+            self.dilc_experiment = None
+            return
+        self.dilc_experiment.start()
+
+    # === Cooperative DILC ==============================================================
+    def run_cooperative_dilc_from_file(self, file: str):
+        """Run a cooperative (multi-agent) DILC experiment from a YAML config file.
+
+        Args:
+            file: Path to a cooperative DILC experiment YAML file.
+        """
+        from robots.bilbo.robot.experiment.dilc import DILC_Experiment_State
+        from robots.bilbo.robot.experiment.cooperative_dilc import CooperativeDILC_Experiment
+
+        # Guard against starting a second experiment (shares the dilc slot)
+        if (self.dilc_experiment is not None
+                and self.dilc_experiment.state == DILC_Experiment_State.RUNNING):
+            self.logger.warning("A DILC experiment is already running")
+            return
+
+        if not file.endswith(('.yaml', '.yml')):
+            file += '.yaml'
+
+        if not os.path.isfile(file):
+            file_in_experiments = os.path.join(EXPERIMENT_DIR, file)
+            if not os.path.isfile(file_in_experiments):
+                self.logger.error(f"Cooperative DILC config file not found: {file}")
+                return
+            file = file_in_experiments
+
+        # Clean up previous experiment instance to avoid duplicate event handlers
+        if self.dilc_experiment is not None:
+            self.dilc_experiment.close()
+
+        self.logger.info(f"Loading cooperative DILC experiment from: {file}")
+        self.dilc_experiment = CooperativeDILC_Experiment(core=self.core)
+        self.dilc_experiment.callbacks.experiment_initialized.register(
+            lambda: self.events.cooperative_dilc_experiment_initialized.set(
+                data={'experiment': self.dilc_experiment}
+            )
+        )
+        try:
+            self.dilc_experiment.configure_from_yaml(file)
+        except Exception as e:
+            self.logger.error(f"Failed to load cooperative DILC settings: {e}")
+            self.dilc_experiment = None
+            return
+        self.dilc_experiment.start()
+
+    # === IITL =========================================================================
+    def run_iitl_from_dataset(self, dataset_path: str, initial_conditions, **kwargs):
+        """Run an IITL experiment, building the learning set from a source dataset.
+
+        Args:
+            dataset_path: Path to a ``source_dataset.json`` produced by the
+                transfer experiment generator.
+            initial_conditions: IITL_InitialConditions (or x/y/psi) for each trial.
+            **kwargs: Forwarded to ``IITL_Experiment.configure_from_dataset``
+                (e.g. ``J``, ``model_free``, ``outer_design``, ``s``,
+                ``model_lowpass``, ``reference_transfer_vector``, ``f_target``).
+        """
+        from robots.bilbo.robot.experiment.iitl import (
+            IITL_Experiment, IITL_Experiment_State, IITL_InitialConditions,
+        )
+
+        if (self.iitl_experiment is not None
+                and self.iitl_experiment.state == IITL_Experiment_State.RUNNING):
+            self.logger.warning("An IITL experiment is already running")
+            return
+
+        if not os.path.isfile(dataset_path):
+            self.logger.error(f"IITL dataset file not found: {dataset_path}")
+            return
+
+        if not isinstance(initial_conditions, IITL_InitialConditions):
+            initial_conditions = IITL_InitialConditions(*initial_conditions)
+
+        if self.iitl_experiment is not None:
+            self.iitl_experiment.close()
+
+        self.logger.info(f"Loading IITL experiment from dataset: {dataset_path}")
+        self.iitl_experiment = IITL_Experiment(core=self.core)
+        self.iitl_experiment.callbacks.experiment_initialized.register(
+            lambda: self.events.iitl_experiment_initialized.set(
+                data={'experiment': self.iitl_experiment}
+            )
+        )
+        try:
+            self.iitl_experiment.configure_from_dataset(
+                dataset_path, initial_conditions, **kwargs)
+        except Exception as e:
+            self.logger.error(f"Failed to load IITL settings: {e}")
+            self.iitl_experiment = None
+            return
+        self.iitl_experiment.start()
+
+    def run_iitl_from_file(self, file: str):
+        """Run an IITL experiment from a YAML config file.
+
+        The yaml references the learning set by path (``learning_set: foo.blset``)
+        and may reference the reference vectors (``f_target``,
+        ``reference_transfer_vector``, ...) as JSON-list paths; all are resolved
+        relative to the yaml's directory.
+
+        Args:
+            file: Path to an IITL experiment YAML file.
+        """
+        from robots.bilbo.robot.experiment.iitl import (
+            IITL_Experiment, IITL_Experiment_State,
+        )
+
+        if (self.iitl_experiment is not None
+                and self.iitl_experiment.state == IITL_Experiment_State.RUNNING):
+            self.logger.warning("An IITL experiment is already running")
+            return
+
+        if not file.endswith(('.yaml', '.yml')):
+            file += '.yaml'
+
+        if not os.path.isfile(file):
+            file_in_experiments = os.path.join(EXPERIMENT_DIR, file)
+            if not os.path.isfile(file_in_experiments):
+                self.logger.error(f"IITL config file not found: {file}")
+                return
+            file = file_in_experiments
+
+        if self.iitl_experiment is not None:
+            self.iitl_experiment.close()
+
+        self.logger.info(f"Loading IITL experiment from: {file}")
+        self.iitl_experiment = IITL_Experiment(core=self.core)
+        self.iitl_experiment.callbacks.experiment_initialized.register(
+            lambda: self.events.iitl_experiment_initialized.set(
+                data={'experiment': self.iitl_experiment}
+            )
+        )
+        try:
+            self.iitl_experiment.configure_from_yaml(file)
+        except Exception as e:
+            self.logger.error(f"Failed to load IITL settings: {e}")
+            self.iitl_experiment = None
+            return
+        self.iitl_experiment.start()
+
+    # === IML ==========================================================================
+    def run_iml_from_file(self, file: str):
+        """Run an IML (model identification) experiment from a YAML config file.
+
+        The yaml references the learning set as a list of ``.bitrj`` files
+        (``learning_set: [a.bitrj, b.bitrj]``) and may reference ``m0`` /
+        ``reference_model`` as JSON-list paths; all are resolved relative to the
+        yaml's directory.
+
+        Args:
+            file: Path to an IML experiment YAML file.
+        """
+        from robots.bilbo.robot.experiment.iml import (
+            IML_Experiment, IML_Experiment_State,
+        )
+
+        if (self.iml_experiment is not None
+                and self.iml_experiment.state == IML_Experiment_State.RUNNING):
+            self.logger.warning("An IML experiment is already running")
+            return
+
+        if not file.endswith(('.yaml', '.yml')):
+            file += '.yaml'
+
+        if not os.path.isfile(file):
+            file_in_experiments = os.path.join(EXPERIMENT_DIR, file)
+            if not os.path.isfile(file_in_experiments):
+                self.logger.error(f"IML config file not found: {file}")
+                return
+            file = file_in_experiments
+
+        if self.iml_experiment is not None:
+            self.iml_experiment.close()
+
+        self.logger.info(f"Loading IML experiment from: {file}")
+        self.iml_experiment = IML_Experiment(core=self.core)
+        self.iml_experiment.callbacks.experiment_initialized.register(
+            lambda: self.events.iml_experiment_initialized.set(
+                data={'experiment': self.iml_experiment}
+            )
+        )
+        try:
+            self.iml_experiment.configure_from_yaml(file)
+        except Exception as e:
+            self.logger.error(f"Failed to load IML settings: {e}")
+            self.iml_experiment = None
+            return
+        self.iml_experiment.start()
+
+    def run_iml_from_files(self, files: list[str], initial_conditions, **kwargs):
+        """Run an IML experiment, building the learning set from ``.bitrj`` files.
+
+        Args:
+            files: Paths to ``.bitrj`` input trajectory files (the learning set).
+            initial_conditions: IML_InitialConditions (or x/y/psi) for each trial.
+            **kwargs: Forwarded to ``IML_Experiment.configure_from_files``
+                (e.g. ``J``, ``method``, ``s_m``, ``adaptive_s_m``,
+                ``model_lowpass``, ``m0``, ``reference_model``).
+        """
+        from robots.bilbo.robot.experiment.iml import (
+            IML_Experiment, IML_Experiment_State, IML_InitialConditions,
+        )
+
+        if (self.iml_experiment is not None
+                and self.iml_experiment.state == IML_Experiment_State.RUNNING):
+            self.logger.warning("An IML experiment is already running")
+            return
+
+        if not isinstance(initial_conditions, IML_InitialConditions):
+            initial_conditions = IML_InitialConditions(*initial_conditions)
+
+        if self.iml_experiment is not None:
+            self.iml_experiment.close()
+
+        self.logger.info(f"Loading IML experiment from {len(files)} input file(s)")
+        self.iml_experiment = IML_Experiment(core=self.core)
+        self.iml_experiment.callbacks.experiment_initialized.register(
+            lambda: self.events.iml_experiment_initialized.set(
+                data={'experiment': self.iml_experiment}
+            )
+        )
+        try:
+            self.iml_experiment.configure_from_files(files, initial_conditions, **kwargs)
+        except Exception as e:
+            self.logger.error(f"Failed to load IML settings: {e}")
+            self.iml_experiment = None
+            return
+        self.iml_experiment.start()
 
     # === LIMBOBAR DILC ================================================================
     def run_limbobar_dilc_from_file(self, file: str):

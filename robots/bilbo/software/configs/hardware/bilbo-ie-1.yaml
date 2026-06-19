@@ -1,0 +1,74 @@
+# ======================================================================
+# BILBO Configuration Template
+# Fill in all <placeholders> before use.
+# ======================================================================
+
+general:
+  id: "bilbo-ie-1"                # e.g. "bilbo_01"
+  short_id: "1"        # e.g. "b01"
+  type: "normal"            # e.g. "normal"
+  version: "rev4"   # e.g. "rev1"
+  color: [0.8, 0.0, 0.0]          # RGB color or null
+
+network:
+  address: "bilbo-ie-1.lan"
+  data_stream_port: 5555
+  gui_port: 8000
+  ssid: "bilbo2_ap"
+  username: "admin"
+  password: "beutlin"
+
+optitrack:
+  points: [1, 2, 3, 4, 5]            # Marker IDs used for tracking
+  point_x_axis_start: 2
+  point_x_axis_end: 1
+  point_y_axis_start: 5
+  point_y_axis_end: 3
+  marker_size: 0.01               # Marker size in m
+
+#optitrack:
+#  points: [1, 2, 3, 4, 5]            # Marker IDs used for tracking
+#  point_x_axis_start: 3
+#  point_x_axis_end: 1
+#  point_y_axis_start: 5
+#  point_y_axis_end: 2
+#  marker_size: 0.01               # Marker size in m
+
+
+model:
+  type: "normal"   # e.g. "bilbo_default"
+  wheel_diameter: 0.12383         # meters
+  vertical_offset: 0.137          # meters
+  mass: 0.0                       # kilograms
+  height: 0.15                    # meters
+  width: 0.14                     # meters
+  depth: 0.085                     # meters
+  distance_wheels: 0.16           # meters between wheels
+  l_cg: 0.00                      # center of gravity distance (m)
+  theta_offset: 0.06             # radians
+  trajectory_delta: 0.0           # Asymmetric torque split: left = u*(0.5+delta), right = u*(0.5-delta)
+
+electronics:
+  board_revision: "4"                    # e.g. "3", "4", "4.1"
+  shield: "bilbo_shield_rev2"            # or "none"
+  compute_module: "cm5"
+  display:
+    active: true
+    resolution: [128, 64]                # [width, height] or null
+
+  sound:
+    active: true
+    gain: 0.8                            # or null
+
+  battery_cells: 4                       # number of Li-ion cells
+
+  buttons:
+    primary:
+      type: "internal"                   # "internal", "sx1508", "sx1509", or "none"
+      pin: 5
+    secondary:
+      type: "internal"
+      pin: 4
+
+estimation:
+  enable_dead_reckoning: true

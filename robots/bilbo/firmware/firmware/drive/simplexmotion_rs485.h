@@ -116,6 +116,7 @@ public:
 	HAL_StatusTypeDef configureShutdownInput();
 	HAL_StatusTypeDef configureWatchdog() override;
 	HAL_StatusTypeDef feedWatchdog() override;
+	HAL_StatusTypeDef disableWatchdog() override;
 	HAL_StatusTypeDef readMotorMode(simplexmotion_mode_t &mode) override;
 
 	void resetBus() override;

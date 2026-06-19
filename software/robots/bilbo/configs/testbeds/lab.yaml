@@ -24,16 +24,16 @@ obstacles:
     size: [ 0.05, 1 ]
     state: [ 2.5, 1.5, -1.5708 ]
 
-lines:
-  - id: line-1
-    start: [ 0, 1.5 ]
-    end: [ 0.75, 1.5 ]
-  - id: line-2
-    start: [ 1.5, 3 ]
-    end: [ 1.5, 2.25 ]
-
-points:
-  - id: point-1
-    position: [ 0.375, 1 ]
-  - id: point-2
-    position: [ 0.75, 2.625 ]
+#lines:
+#  - id: line-1
+#    start: [ 0, 1.5 ]
+#    end: [ 0.75, 1.5 ]
+#  - id: line-2
+#    start: [ 1.5, 3 ]
+#    end: [ 1.5, 2.25 ]
+#
+#points:
+#  - id: point-1
+#    position: [ 0.375, 1 ]
+#  - id: point-2
+#    position: [ 0.75, 2.625 ]

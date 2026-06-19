@@ -823,9 +823,6 @@ class NatNetClient:
         if self._keep_alive_thread and self._keep_alive_thread.is_alive():
             self._keep_alive_thread.join(timeout=1.0)
 
-
-
-
     def request_model_definitions(self):
         """Request model definitions from the server."""
         if self.command_socket:

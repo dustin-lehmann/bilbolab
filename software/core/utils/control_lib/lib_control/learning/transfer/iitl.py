@@ -10,7 +10,7 @@ from core.utils.control_lib.lib_control.learning.iml.iml import (
     iml_get_learning_gain,
     iml_update,
 )
-from research.iitl.iitl_utils import TrajectoryPair
+from core.utils.control_lib.lib_control.learning.transfer.iitl_utils import TrajectoryPair
 
 
 # ======================================================================================================================

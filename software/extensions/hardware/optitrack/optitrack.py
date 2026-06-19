@@ -155,7 +155,6 @@ class OptiTrack:
             self.running = False
             return False
 
-
         return True
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -440,9 +439,17 @@ class OptiTrack:
 
 
 if __name__ == '__main__':
-    optitrack = OptiTrack(server_address='palantir.lan', max_sample_rate=100)
+    optitrack = OptiTrack(server_address='192.168.8.235', max_sample_rate=100)
     optitrack.init()
     ok = optitrack.start()
+
+
+    def sample_callback(sample):
+        print("Sample:")
+        print(sample)
+
+
+    optitrack.events.sample.on(sample_callback, max_rate=10)
 
     if ok:
         try:

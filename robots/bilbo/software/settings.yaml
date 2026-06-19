@@ -3,12 +3,12 @@ stm32:
 
 testbed:
 #  id: track
-  id: lab-hannover
+  id: lab
 
 tracker:
   enabled: true
-#  server: palantir.lan
-  server: 192.168.8.163
+  server: palantir.lan
+#  server: 192.168.8.163
 
 joystick:
   enabled: true

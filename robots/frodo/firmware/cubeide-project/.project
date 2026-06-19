@@ -34,17 +34,17 @@
 		<link>
 			<name>firmware_frodo_v1</name>
 			<type>2</type>
-			<location>/Users/lehmann/Seafile/work/projects/testbed/bilbolab/robots/frodo/firmware/firmware</location>
+			<location>/Users/lehmann/Seafile/work/projects/bilbolab/robots/frodo/firmware/firmware</location>
 		</link>
 		<link>
 			<name>robot-control_std_lib</name>
 			<type>2</type>
-			<location>/Users/lehmann/Seafile/work/projects/testbed/bilbolab/libraries/software/cpp/stm32/robot-control_std_lib</location>
+			<location>/Users/lehmann/Seafile/work/projects/bilbolab/libraries/software/cpp/stm32/robot-control_std_lib</location>
 		</link>
 		<link>
 			<name>stm32_core_cpp_lib</name>
 			<type>2</type>
-			<location>/Users/lehmann/Seafile/work/projects/testbed/bilbolab/libraries/software/cpp/stm32/stm32_core_cpp_lib</location>
+			<location>/Users/lehmann/Seafile/work/projects/bilbolab/libraries/software/cpp/stm32/stm32_core_cpp_lib</location>
 		</link>
 	</linkedResources>
 </projectDescription>

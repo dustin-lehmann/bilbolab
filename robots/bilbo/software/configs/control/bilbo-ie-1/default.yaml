@@ -1,0 +1,158 @@
+name: 'bilbo-ie-1 default control'
+description: ''
+general:
+  max_wheel_speed: 60.0              # [rad/s] Motor speed limit
+  max_wheel_torque: 0.5               # [Nm] Motor torque limit
+  enable_external_inputs: true        # Allow external torque inputs in balancing mode
+  torque_offset: [ 0,0 ]              # [Nm] Static torque offset [left, right]
+inputs:
+  balancing:
+    forward:
+      max: 0.3                        # [Nm] Max normalized forward torque input
+    turn:
+      max: 0.12                       # [Nm] Max normalized turn torque input
+  velocity:
+    forward:
+      max: 0.75                        # [m/s] Max forward velocity from normalized input
+    turn:
+      max: 3.0                        # [rad/s] Max yaw rate from normalized input
+balancing_control:
+#  K: [ 0.25, 0.2, 0.03, 0.025, 0.25, 0.2, 0.03, -0.025 ]  # LQR gains: [v, theta, theta_dot, psi_dot] x [left, right]
+  #  K: [ 0.25, 0.2, 0.05, 0.025, 0.25, 0.2, 0.05, -0.025 ]  # LQR gains: [v, theta, theta_dot, psi_dot] x [left, right]
+  K: [ 0.25, 0.32, 0.035, 0.025, 0.25, 0.32, 0.035, -0.025 ]  # LQR gains: [v, theta, theta_dot, psi_dot] x [left, right]
+  tic:
+    enabled: true                     # Enable theta integral controller (pitch drift compensation)
+    ki: 0.4                           # [Nm/(rad*s)] Integral gain
+    max_torque: 0.05                  # [Nm] Output saturation
+    theta_limit: 0.16                 # [rad] Auto-disable above this pitch (~9 deg)
+  vic:
+    enabled: true                     # Enable velocity integral controller (creep compensation)
+    ki: 0.2                           # [Nm/((m/s)*s)] Integral gain
+    max_torque: 0.02                  # [Nm] Output saturation
+    v_limit: 0.05                     # [m/s] Only active below this speed
+    theta_limit: 0.16                 # [rad] Auto-disable above this pitch
+  psi:
+    enabled: false                    # Enable yaw angle PI controller (heading drift compensation)
+    kp: -0.2                           # [Nm/rad] Proportional gain
+    ki: -0.35                          # [Nm/(rad*s)] Integral gain
+    max_torque: 0.05                  # [Nm] Output saturation (differential)
+velocity_control:
+  v: # Forward velocity controller
+    pid:
+      Kp: -0.00                       # [rad/(m/s)] Proportional gain (disabled)
+      Kd: -0.0                        # [rad*s/(m/s)] Derivative gain (disabled)
+      Ki: -0.05                       # [rad/(m/s*s)] Integral gain
+      enable_i_limit: false           # Enable integral windup limit
+      i_term_limit: 0.0               # [rad] Integral term saturation
+      enable_input_limit: false       # Enable input saturation
+      input_limit: 0.0                # [m/s] Input saturation value
+      enable_output_limit: false      # Enable output saturation
+      output_limit: 0.0               # [rad] Output saturation value
+      enable_d_filter: false          # Enable derivative low-pass filter
+      Td_filter: 0.0                  # [s] Derivative filter time constant
+      enable_rate_limit: false        # Enable output rate limiting
+      rate_limit: 0.0                 # [rad/s] Output rate limit
+      enable_setpoint_rate_limit: false  # Enable setpoint slew rate limiting
+      setpoint_rate_limit: 0.0        # [m/s^2] Setpoint slew rate limit
+    feedforward:
+      Kv: -0.25                       # [rad/(m/s)] Viscous friction compensation
+      Ka: -0.02                       # [rad/(m/s^2)] Inertia compensation
+      Kc: -0.0                        # [rad] Coulomb/stiction compensation (adjusted by roughness)
+      enable_vref_slew: true          # Enable velocity reference slew rate limiting
+      vref_slew_rate: 5.0             # [m/s^2] Max reference acceleration
+      enable_a_filter: false          # Enable acceleration estimate low-pass filter
+      Ta_filter: 0.0                  # [s] Acceleration filter time constant
+      enable_stiction: true           # Enable stiction compensation (tanh model)
+      v0_stiction: 0.08              # [m/s] Tanh transition width near zero velocity
+      v_decay_stiction: 0.15         # [m/s] Stribeck decay speed (0 = no decay)
+      enable_output_limit: false      # Enable feedforward output saturation
+      output_limit: 0.0               # [Nm] Feedforward output saturation
+      enable_output_slew: false       # Enable feedforward output slew rate limiting
+      output_slew_rate: 0.0           # [Nm/s] Feedforward output slew rate
+  psidot: # Yaw rate controller
+    pid:
+      Kp: 0.01                        # [rad/(rad/s)] Proportional gain
+      Kd: 0.0                         # Derivative gain (disabled)
+      Ki: 0.05                        # [rad/((rad/s)*s)] Integral gain
+      enable_i_limit: false
+      i_term_limit: 0.0
+      enable_input_limit: false
+      input_limit: 0.0
+      enable_output_limit: false
+      output_limit: 0.0
+      enable_d_filter: false
+      Td_filter: 0.0
+      enable_rate_limit: false
+      rate_limit: 0.0
+      enable_setpoint_rate_limit: false
+      setpoint_rate_limit: 0.0
+    feedforward:
+      Kv: 0.03                        # [rad/(rad/s)] Yaw rate feedforward
+      Ka: 0.0                         # Acceleration feedforward (disabled)
+      Kc: 0.0                         # Stiction compensation (not needed for yaw)
+      enable_vref_slew: false
+      vref_slew_rate: 0.0
+      enable_a_filter: false
+      Ta_filter: 0.0
+      enable_stiction: false          # No stiction needed for differential steering
+      v0_stiction: 0.0
+      v_decay_stiction: 0.15         # [m/s] Stribeck decay speed
+      enable_output_limit: false
+      output_limit: 0.0
+      enable_output_slew: false
+      output_slew_rate: 0.0
+position_control: # Dense path following (pure pursuit)
+  kp_angular: 4.0                     # [(rad/s)/rad] Heading error proportional gain
+  ki_angular: 0.25                    # [(rad/s)/(rad*s)] Heading error integral gain
+  kp_angular_heading: 6.0            # [(rad/s)/rad] Heading-only kp for turn_to_heading (0 = use kp_angular)
+  ki_angular_heading: 0.25            # [(rad/s)/(rad*s)] Heading-only ki for turn_to_heading (0 = use ki_angular)
+  kp_linear: 0.0                      # [1/s] Speed proportional gain (unused when decel_limit > 0)
+  ki_linear: 0.012                    # [1/s^2] Speed integral gain
+  kd_linear: 0.4                      # [-] Velocity damping factor
+  max_speed: 0.6                      # [m/s] Maximum forward velocity
+  max_turn_rate: 5.0                  # [rad/s] Maximum yaw rate
+  lookahead_base: 0.15                # [m] Base lookahead distance (scaled by speed for path following)
+  lookahead_min: 0.03                 # [m] Minimum lookahead distance for path following
+  arrival_tolerance: 0.05             # [m] Distance to consider arrived
+  arrival_dwell_time: 0.5             # [s] Hold time at path end
+  stop_dwell_time: 1.0                # [s] Hold time at STOP waypoints
+  reverse_enter_angle: 2.1            # [rad] Enter reverse mode (~120 deg)
+  reverse_exit_angle: 1.05            # [rad] Exit reverse mode (~60 deg)
+  decel_limit: 0.4                    # [m/s^2] Sqrt deceleration profile (0 = use kp_linear instead)
+  curvature_gain: 0.2                # [-] Curvature→speed: v = max_speed / (1 + gain * κ). Higher = slower in curves.
+  curvature_lookahead: 0.1            # [m] How far ahead to estimate curvature from path points
+planning:
+  method: prm                          # 'rrt' or 'prm'. RRT builds a new tree per query — good for dynamic obstacles.
+                                       # PRM pre-builds a roadmap once, then queries are near-instant — ideal for
+                                       # static testbed environments with many sequential path requests.
+  smoothing: 0.85                      # [0-1] Spline smoothing of the collision-free polyline. 0 = tight (follows
+                                       # waypoints closely), 1 = maximally smooth. Typical: 0.5-1.0. Lower values
+                                       # track the planned polyline more precisely but produce jerkier paths.
+  safety_margin: 0.1                  # [m] Obstacle inflation — obstacles are grown by this amount before planning.
+                                       # This is the primary clearance knob. The planner adds a 5 cm internal baseline
+                                       # on top. Range: 0.05-0.25. Increase if the robot clips corners.
+  clearance_weight: 0.0                # [-] Obstacle proximity penalty in path cost (0 = off). When > 0, the planner
+                                       # penalizes edges that pass close to obstacles, pushing paths toward open space.
+                                       # Typical: 0.0 (off) or 0.5-2.0. Higher = more conservative but longer paths.
+  clearance_threshold: 0.5             # [m] Distance below which clearance_weight penalty activates. Only matters when
+                                       # clearance_weight > 0. Typical: 0.3-0.6. Larger = penalty zone extends further.
+  rrt:
+    rrt_star: true                     # Use RRT* (optimal) instead of basic RRT. RRT* rewires the tree to find shorter
+                                       # paths but is ~3x slower. Almost always preferred for robot navigation.
+    #max_iterations:                   # Max RRT iterations per segment (null = defaults: 10k RRT / 30k RRT*).
+                                       # Increase for very cluttered environments; decrease for faster but less optimal paths.
+    step_size: 0.10                    # [m] Tree extension step size per iteration. Smaller = finer resolution but slower.
+                                       # Range: 0.05-0.20. Should be smaller than the narrowest passage the robot must cross.
+    goal_bias: 0.10                    # [0-1] Fraction of RRT samples aimed directly at the goal. Higher = faster
+                                       # convergence but less exploration. Range: 0.05-0.30.
+    rewire_radius: 0.30               # [m] RRT* neighborhood radius for rewiring (~3x step_size is a good rule of thumb).
+                                       # Larger = better path quality but slower. Range: 0.15-0.50.
+  prm:
+    n_samples: 800                     # Number of random nodes sampled into the roadmap. More = better coverage but
+                                       # slower build. 300-500 for small testbeds, 800-1500 for larger/cluttered spaces.
+    k_neighbors: 15                    # Max neighbors to connect per node. Higher = denser graph, better paths, slower
+                                       # build. Range: 8-20. Must be high enough to keep the graph connected.
+    connection_radius: 0.6             # [m] Max edge length. Edges longer than this are skipped. Should be large enough
+                                       # to span open areas but small enough to avoid long edges through narrow gaps.
+                                       # Range: 0.3-1.0. Rule of thumb: ~2-3x the typical obstacle spacing.
+    seed: 42                           # RNG seed for reproducible roadmap construction. Set to null for random each time.

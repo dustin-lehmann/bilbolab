@@ -1,0 +1,54 @@
+# IdeenExpo 2026 lighted tile floor configuration.
+#
+# `grid`    -> TileGridConfig.from_yaml()        (tile_controller.py)
+# `mapping` -> QuinLEDTileDriver.from_yaml()     (tile_mapping.py)
+#
+# World frame: tile (0,0) bottom-left, x->right, y->up. Edges N/E/S/W in
+# the world frame, segments 0..4 along +x (N/S) / +y (E/W).
+# Verify this file against the real floor with the `identify_tiles` and
+# `identify_edges` patterns in the tile viewer webapp.
+
+grid:
+  modules_x: 4       # modules in x (each module = 2x2 tiles)
+  modules_y: 2
+  tile_size: 0.5     # m
+  max_brightness: 255  # global output ceiling 0..255 (power/eye safety)
+
+mapping:
+  # How every module is wired internally, described AS BUILT in the
+  # module's own frame (before placement rotation).
+  # Module-frame tile coords: [0,0]=bottom-left .. [1,1]=top-right.
+  wiring:
+    tile_order: [[0, 0], [1, 0], [1, 1], [0, 1]]  # chain order from input connector
+    start_edge: S      # first wired edge of each tile: N|E|S|W (tile frame)
+    winding: ccw       # strip direction around each tile, viewed from above
+                       # (start corner = where the winding enters start_edge;
+                       #  S+ccw starts at the SW corner, S+cw at the SE corner)
+
+  controllers:
+    - name: quinled1
+      host: led_controller_1.local
+      # udp_port: 21324        # WLED realtime port (default)
+      # max_channel_sum: 765   # per-LED power cap, 765 = no limit
+      # IMPORTANT: list outputs in the same order as WLED's LED outputs —
+      # chain offsets are computed from this order.
+      outputs:
+        - { strip: strip1, module: [0, 0], rotation: 0 }
+        - { strip: strip2, module: [1, 0], rotation: 0 }
+        - { strip: strip3, module: [2, 0], rotation: 0 }
+        - { strip: strip4, module: [3, 0], rotation: 0 }
+    - name: quinled2
+      host: led_controller_2.local
+      outputs:
+        - { strip: strip1, module: [0, 1], rotation: 0 }
+        - { strip: strip2, module: [1, 1], rotation: 0 }
+        - { strip: strip3, module: [2, 1], rotation: 0 }
+        - { strip: strip4, module: [3, 1], rotation: 0 }
+        # A module built differently can override the shared wiring:
+        # - strip: strip4
+        #   module: [3, 1]
+        #   rotation: 90
+        #   wiring:
+        #     tile_order: [[1, 0], [0, 0], [0, 1], [1, 1]]
+        #     start_edge: E
+        #     winding: cw

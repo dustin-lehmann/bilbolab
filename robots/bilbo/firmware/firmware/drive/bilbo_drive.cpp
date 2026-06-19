@@ -80,8 +80,14 @@ HAL_StatusTypeDef BILBO_Drive::start() {
 	HAL_GPIO_WritePin(MOTOR_SHUTDOWN_LINE_RIGHT_PORT, MOTOR_SHUTDOWN_LINE_RIGHT_PIN, GPIO_PIN_SET);
 #endif
 
-	this->motor_left->start();
-	this->motor_right->start();
+	HAL_StatusTypeDef start_left = this->motor_left->start();
+	HAL_StatusTypeDef start_right = this->motor_right->start();
+	if (start_left != HAL_OK || start_right != HAL_OK) {
+		// Motor did not enter torque mode (e.g. stuck in BEEP). Surface it —
+		// otherwise every setTorque() in the drive task fails silently.
+		send_error("Motor start failed to enter torque mode (L=%d R=%d)",
+				start_left, start_right);
+	}
 
 	osThreadNew(startDriveTask, (void*) this, &drive_task_attributes);
 

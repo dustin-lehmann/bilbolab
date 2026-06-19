@@ -277,6 +277,7 @@ class BILBO_ExperimentResult(ExperimentResult):
 INPUT_TRAJECTORY_FILE_EXTENSION = '.bitrj'
 OUTPUT_TRAJECTORY_FILE_EXTENSION = '.botrj'
 MODEL_VECTOR_FILE_EXTENSION = '.bmvec'
+LEARNING_SET_FILE_EXTENSION = '.blset'
 
 
 @dataclasses.dataclass
@@ -413,3 +414,71 @@ def read_model_vector_file(file_path: str) -> ModelVectorFileData:
         raise FileNotFoundError(f"Model vector file not found: {file_path}")
     data_dict = readJSON(file_path)
     return from_dict_auto(ModelVectorFileData, data_dict)
+
+
+# === LEARNING SET (IITL) ==============================================================
+@dataclasses.dataclass
+class LearningSetPair:
+    """One source learning-set pair: an excitation input and the source output
+    it produced. Field names match ``research.iitl.TrajectoryPair`` and the host
+    ``IITL_TrajectoryPair`` so the pair deserializes directly into IITL settings.
+    """
+    input: list[float]
+    output: list[float]
+
+    @property
+    def length(self) -> int:
+        return len(self.input)
+
+
+@dataclasses.dataclass
+class LearningSetFileData:
+    """File wrapper for an IITL learning set: a collection of source
+    input/output pairs recorded on the source agent.
+
+    A single ``.blset`` file holds the whole learning set so an IITL experiment
+    yaml can reference it by path instead of inlining the (large) trajectories.
+
+    Attributes:
+        id: Identifier for this learning set.
+        description: Human-readable description.
+        pairs: The source input/output pairs (each input excitation and the
+            source output it produced).
+        dt: Sampling period in seconds (shared by every pair).
+        cutoff_cps: Optional band-limit of the excitations, in cycles/sample
+            (provenance metadata; not used by the learning update).
+    """
+    id: str
+    description: str
+    pairs: list[LearningSetPair]
+    dt: float = BILBO_CONTROL_DT
+    cutoff_cps: float | None = None
+
+    @property
+    def size(self) -> int:
+        return len(self.pairs)
+
+    @property
+    def horizon(self) -> int:
+        return self.pairs[0].length if self.pairs else 0
+
+
+def write_learning_set_file(file_path: str, data: LearningSetFileData):
+    writeJSON(file_path, dataclasses.asdict(data))
+
+
+def read_learning_set_file(file_path: str) -> LearningSetFileData:
+    if not file_exists(file_path):
+        raise FileNotFoundError(f"Learning set file not found: {file_path}")
+    data_dict = readJSON(file_path)
+    # Build pairs directly (cheaper and order-stable) rather than relying on
+    # per-element reflection for the (large) trajectory lists.
+    pairs = [LearningSetPair(input=p["input"], output=p["output"])
+             for p in data_dict.get("pairs", [])]
+    return LearningSetFileData(
+        id=data_dict.get("id", ""),
+        description=data_dict.get("description", ""),
+        pairs=pairs,
+        dt=data_dict.get("dt", BILBO_CONTROL_DT),
+        cutoff_cps=data_dict.get("cutoff_cps"),
+    )

@@ -122,7 +122,7 @@ class BILBO_ModelVector:
 
     The m-vector represents the impulse response of the system. It can be
     converted to a lifted lower-triangular Toeplitz matrix (LTTM) via
-    vec2liftedMatrix() for use in the ILC/IML learning updates.
+    vector_to_lifted_matrix() for use in the ILC/IML learning updates.
 
     Attributes:
         name: Human-readable name for this model vector.
@@ -148,8 +148,8 @@ class BILBO_ModelVector:
 
     def to_lifted_matrix(self) -> np.ndarray:
         """Convert the m-vector to a lifted lower-triangular Toeplitz matrix."""
-        from core.utils.control_lib.lib_control.lifted_systems import vec2liftedMatrix
-        return vec2liftedMatrix(self.to_array())
+        from core.utils.control_lib.lib_control.learning.lifted import vector_to_lifted_matrix
+        return vector_to_lifted_matrix(self.to_array())
 
     @classmethod
     def from_vector(cls, vector: np.ndarray, name: str, id: int, dt: float = None) -> BILBO_ModelVector:
@@ -158,8 +158,8 @@ class BILBO_ModelVector:
     @classmethod
     def from_lifted_matrix(cls, matrix: np.ndarray, name: str, id: int, dt: float = None) -> BILBO_ModelVector:
         """Create a BILBO_ModelVector from a lifted lower-triangular Toeplitz matrix."""
-        from core.utils.control_lib.lib_control.lifted_systems import liftedMatrix2Vec
-        vec = liftedMatrix2Vec(matrix)
+        from core.utils.control_lib.lib_control.learning.lifted import lifted_matrix_to_vector
+        vec = lifted_matrix_to_vector(matrix)
         return cls.from_vector(vec, name=name, id=id, dt=dt)
 
 
@@ -244,8 +244,8 @@ class BILBO_ModelVectorFileData:
 
     def to_lifted_matrix(self) -> np.ndarray:
         """Convert the stored m-vector to a lifted lower-triangular Toeplitz matrix."""
-        from core.utils.control_lib.lib_control.lifted_systems import vec2liftedMatrix
-        return vec2liftedMatrix(self.to_array())
+        from core.utils.control_lib.lib_control.learning.lifted import vector_to_lifted_matrix
+        return vector_to_lifted_matrix(self.to_array())
 
     def to_model_vector(self, name: str = '', model_id: int = 0) -> BILBO_ModelVector:
         """Extract a BILBO_ModelVector (drops file metadata)."""

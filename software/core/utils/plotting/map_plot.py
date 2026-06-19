@@ -316,19 +316,28 @@ class MapPlot:
         return self
 
     # === RENDER =======================================================================================================
-    def render(self) -> tuple[plt.Figure, plt.Axes]:
-        """Render the map and return (figure, axes)."""
-        # Calculate figure size if not specified
-        if self.config.figsize is None:
-            width = self._x_max - self._x_min + 2 * self.config.padding
-            height = self._y_max - self._y_min + 2 * self.config.padding
-            # Scale to reasonable figure size (target ~6 inches for larger dimension)
-            scale = 6 / max(width, height)
-            figsize = (width * scale, height * scale)
-        else:
-            figsize = self.config.figsize
+    def render(self, ax: plt.Axes | None = None) -> tuple[plt.Figure, plt.Axes]:
+        """Render the map and return (figure, axes).
 
-        self._fig, self._ax = plt.subplots(figsize=figsize, dpi=self.config.dpi)
+        If ``ax`` is given, the map is drawn into that existing axes (and its
+        parent figure) instead of creating a new figure -- useful for embedding
+        the map alongside other panels in a composite figure.
+        """
+        if ax is not None:
+            self._ax = ax
+            self._fig = ax.figure
+        else:
+            # Calculate figure size if not specified
+            if self.config.figsize is None:
+                width = self._x_max - self._x_min + 2 * self.config.padding
+                height = self._y_max - self._y_min + 2 * self.config.padding
+                # Scale to reasonable figure size (target ~6 inches for larger dimension)
+                scale = 6 / max(width, height)
+                figsize = (width * scale, height * scale)
+            else:
+                figsize = self.config.figsize
+
+            self._fig, self._ax = plt.subplots(figsize=figsize, dpi=self.config.dpi)
 
         # Apply font settings for math text
         if self.config.mathtext_fontset:
@@ -367,7 +376,8 @@ class MapPlot:
         if self.config.title:
             self._ax.set_title(self.config.title, fontsize=self.config.title_fontsize)
 
-        self._fig.tight_layout()
+        if ax is None:
+            self._fig.tight_layout()
         return self._fig, self._ax
 
     # === DISPLAY/SAVE =================================================================================================

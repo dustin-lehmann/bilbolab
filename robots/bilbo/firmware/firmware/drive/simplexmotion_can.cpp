@@ -78,6 +78,16 @@ HAL_StatusTypeDef SimplexMotion_CAN::init(simplexmotion_can_config_t config) {
 	if (status) {
 		return HAL_ERROR;
 	}
+#else
+	// Watchdog disabled: actively tear down any events left armed by a
+	// previously-flashed watchdog-enabled firmware. The events live in the
+	// motor's volatile RAM and are NOT cleared by an STM32-only reflash
+	// (SWD flashing does not power-cycle the motor), so without this the
+	// stale countdown/quickstop events keep running and force a Quickstop.
+	status = this->disableWatchdog();
+	if (status) {
+		return HAL_ERROR;
+	}
 #endif
 
 	return HAL_OK;
@@ -93,7 +103,20 @@ HAL_StatusTypeDef SimplexMotion_CAN::start() {
 		return HAL_ERROR;
 	}
 
-	status = this->setMode(SIMPLEXMOTION_CAN_MODE_TORQUE);
+	// Switch to torque mode. checkMotor() leaves the motor in BEEP mode, and
+	// setMode() writes the mode register then reads it straight back — because
+	// the CAN write is queued asynchronously, the first readback can race
+	// ahead of the applied change and still report BEEP, so setMode() fails
+	// and the cached mode stays BEEP. Nothing else ever retries the switch, so
+	// every subsequent setTorque() would fail. Retry here until the motor
+	// actually reports TORQUE.
+	status = HAL_ERROR;
+	for (int attempt = 0; attempt < 10 && status != HAL_OK; attempt++) {
+		status = this->setMode(SIMPLEXMOTION_CAN_MODE_TORQUE);
+		if (status != HAL_OK) {
+			osDelay(10);
+		}
+	}
 
 	if (status) {
 		return HAL_ERROR;
@@ -666,6 +689,44 @@ HAL_StatusTypeDef SimplexMotion_CAN::configureWatchdog() {
 /* --------------------------------------------------------------------- */
 HAL_StatusTypeDef SimplexMotion_CAN::feedWatchdog() {
 	return this->write(SIMPLEXMOTION_CAN_REG_APPLDATA0, (uint16_t)BILBO_DRIVE_WATCHDOG_RELOAD);
+}
+
+/* --------------------------------------------------------------------- */
+/**
+ * @brief Tears down the motor-internal watchdog events.
+ *
+ * Clears EventControl for the countdown (slot 2) and quickstop (slot 3)
+ * events programmed by configureWatchdog(). Called during motor init when
+ * BILBO_DRIVE_WATCHDOG_ENABLE is 0.
+ *
+ * The events live in the motor's volatile RAM and are NOT cleared by an
+ * STM32-only reflash (SWD flashing does not power-cycle the motor). Without
+ * this teardown, events armed by a previously-flashed watchdog-enabled
+ * firmware keep counting down and force a Quickstop once the STM32 stops
+ * feeding the counter. To close the small startup window between the motor
+ * RESET in init() and this teardown, the counter is reloaded first (pushing
+ * any imminent timeout far out), then the quickstop event is disarmed before
+ * the countdown event so the watchdog cannot trigger a Quickstop mid-teardown.
+ */
+HAL_StatusTypeDef SimplexMotion_CAN::disableWatchdog() {
+	HAL_StatusTypeDef status;
+	const uint16_t ev_countdown = 2;
+	const uint16_t ev_quickstop = 3;
+	uint16_t zero = 0;
+
+	// Reload the counter so any stale countdown is far from zero while we disarm.
+	status = this->write(SIMPLEXMOTION_CAN_REG_APPLDATA0, (uint16_t)BILBO_DRIVE_WATCHDOG_INITIAL);
+	if (status != HAL_OK) return HAL_ERROR;
+
+	// Disarm the quickstop event first to immediately neutralize the trigger.
+	status = this->write((uint16_t)(SIMPLEXMOTION_CAN_REG_EVENT_CONTROL + ev_quickstop), zero);
+	if (status != HAL_OK) return HAL_ERROR;
+
+	// Then disarm the countdown event.
+	status = this->write((uint16_t)(SIMPLEXMOTION_CAN_REG_EVENT_CONTROL + ev_countdown), zero);
+	if (status != HAL_OK) return HAL_ERROR;
+
+	return HAL_OK;
 }
 
 /* --------------------------------------------------------------------- */

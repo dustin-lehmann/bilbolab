@@ -1,0 +1,85 @@
+id: cooperative_dilc_test
+description: Template cooperative (multi-agent) DILC experiment on one robot
+
+# ============================================================================
+# The multi-agent cooperative DG Dual-ILC method, emulated on a SINGLE robot.
+# Each trial runs the robot once per agent (agent 1, then agent 2, ... agent A),
+# each with that agent's own input, and only AFTER all A runs does the
+# cooperative update fire (pooled RLS identification + SNR-adaptive NO-ILC +
+# best-performance fusion + decoupled-gain update). All agents track the same
+# reference; the bank heterogeneity is in het_gain_factors.
+# ============================================================================
+
+J: 10
+Ts: 0.01
+
+# Desired output trajectory (theta/pitch). Path to a .botrj file or inline
+# array. Length must be a multiple of 10. The same reference is tracked by
+# every agent.
+reference: bumped_reference.botrj
+
+initial_conditions:
+  x: 0.0
+  y: 0.0
+  psi: 0.0
+
+# --- Bank / cooperation ------------------------------------------------------
+# Number of agents replayed per trial (the robot runs this many times per trial).
+n_agents: 3
+# Per-agent regulariser factor gamma_i (s_i = gamma_i * s). A log-uniform spread
+# gives an aggressive / balanced / conservative bank. Length >= n_agents.
+het_gain_factors: [0.001, 0.1, 10.0]
+# Shared cooperative gain factor (s_coop = gamma_safe * s).
+gamma_safe: 0.01
+# Own/cooperative blend (stubbornness) in [0, 1].
+alpha: 0.5
+# Best-performance fusion: selectivity (large -> hard max) and history window.
+bp_sharpness: 1000000.0
+bp_window: 2
+
+# --- SNR-adaptive NO-ILC update ---------------------------------------------
+c_snr: 0.1
+s_min: 0.0001
+s_max: 10.0
+# Warm-up regulariser floor: conservative until the model is identified.
+s_warm: 0.3
+warm_decay: 0.4
+# Per-agent input-magnitude weight r -> own-term Q-filter (0 = off). Length >= n_agents.
+group_r: [0.0, 0.0, 0.0]
+
+# --- Pooled RLS identification ----------------------------------------------
+iml_gain: 1.5
+iml_forgetting: 0.95
+rho_iml: 0.00001
+
+# --- Initial excitation (per agent) -----------------------------------------
+# Trial-0 impulse kick (tap shifted by agent index) and a decaying rotating
+# exploration probe added to every agent's input for persistent excitation.
+kappa_kick: 1.0
+kappa_explore: 0.3
+explore_decay: 0.85
+
+# IML model Q-filter (FIR low-pass on the identified model update).
+model_lowpass:
+  fc: 0.4
+  L: 41
+  window: hann
+
+# Shared initial input for every agent (path to .bitrj or inline). If omitted,
+# a random trajectory is generated from u0_params.
+# u0: my_input.bitrj
+u0_params:
+  f_cutoff: 1.5
+  sigma: 0.2
+  bias: -0.03
+
+# Shared initial model (path to .bmvec or inline). If omitted, starts at zero.
+# m0: my_model.bmvec
+
+meta:
+  automatic_initial_conditions_reset: true
+  check_if_robot_is_static: true
+  auto_start_trials: false
+  auto_accept_trials: false
+  enable_psi_control: false
+  disable_tracker_during_trajectory: false

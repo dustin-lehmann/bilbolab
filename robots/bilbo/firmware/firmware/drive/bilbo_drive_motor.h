@@ -66,6 +66,12 @@ public:
 	// Called every drive task cycle. Default: no-op.
 	virtual HAL_StatusTypeDef feedWatchdog() { return HAL_OK; }
 
+	// Motor watchdog: tears down the countdown + quickstop events.
+	// Called during motor init when the watchdog is disabled, to clear any
+	// events left armed by a previously-flashed watchdog-enabled firmware.
+	// Default: no-op (for motors without event support).
+	virtual HAL_StatusTypeDef disableWatchdog() { return HAL_OK; }
+
 	// Read the current motor mode from the motor controller.
 	// Default: not supported.
 	virtual HAL_StatusTypeDef readMotorMode(simplexmotion_mode_t &mode) {

@@ -138,6 +138,7 @@ class DILC_Experiment_Settings:
     meta: DILC_Experiment_Meta_Settings = dataclasses.field(default_factory=DILC_Experiment_Meta_Settings)
     u0_params: DILC_U0_Params = dataclasses.field(default_factory=DILC_U0_Params)
     u0: np.ndarray | list | str | None = None
+    u0_scale: float = 1.0  # multiplies the initial input u0 (applied on the robot)
     m0: np.ndarray | list | str | None = None
 
 
@@ -295,6 +296,12 @@ class DILC_Experiment:
     state: DILC_Experiment_State
     trials: list[DILC_Trial_Data]
 
+    # Overridable seams for DILC variants (e.g. SNR_DILC). Subclasses point
+    # these at their own robot-side container / RPC / settings type.
+    _WIFI_CONTAINER: str = 'dilc_experiment'
+    _RUN_FUNCTION: str = 'run_dilc_experiment'
+    _SETTINGS_TYPE: type = DILC_Experiment_Settings
+
     def __init__(self, core):
         self.core = core
         self.device = core.device
@@ -323,7 +330,7 @@ class DILC_Experiment:
         # Subscribe to WiFi events from the robot's DILC experiment
         self._event_listener = self.device.events.event.on(
             self._handle_dilc_event,
-            predicate=pred_flag_equals('container', 'dilc_experiment'),
+            predicate=pred_flag_equals('container', self._WIFI_CONTAINER),
         )
 
     # === Configuration =================================================================
@@ -423,7 +430,7 @@ class DILC_Experiment:
             file_path: Path to the YAML configuration file.
         """
         yaml_data = load_yaml(file_path)
-        settings = from_dict_auto(DILC_Experiment_Settings, yaml_data)
+        settings = from_dict_auto(self._SETTINGS_TYPE, yaml_data)
 
         yaml_dir = os.path.dirname(os.path.abspath(file_path))
 
@@ -572,7 +579,7 @@ class DILC_Experiment:
         self.logger.info("Sending experiment settings to robot...")
 
         self.device.executeFunction(
-            function_name='run_dilc_experiment',
+            function_name=self._RUN_FUNCTION,
             arguments={'settings': settings_dict},
         )
         self.logger.info("Experiment start command sent")

@@ -35,9 +35,9 @@ from core.communication.wifi.bilbolab_wifi_interface import (
     wifi_event_definition, WifiEventContainer, WifiEvent, WifiEventFlag,
 )
 from core.utils.callbacks import callback_definition, CallbackContainer
-from core.utils.control_lib.lib_control.il.q_filter import FIR_Design_Params, design_zero_phase_fir, \
+from core.utils.control_lib.lib_control.learning.q_filter import FIR_Design_Params, design_zero_phase_fir, \
     build_Qf_zero_padded
-from core.utils.control_lib.lib_control.lifted_systems import vec2liftedMatrix
+from core.utils.control_lib.lib_control.learning.lifted import vector_to_lifted_matrix
 from core.utils.data import generate_time_vector_by_length, generate_random_input
 from core.utils.events import event_definition, Event, wait_for_events, OR, TIMEOUT
 from core.utils.logging_utils import Logger, enable_redirection, disable_redirection
@@ -161,6 +161,7 @@ class DILC_Experiment_Settings:
     requirements: DILC_Requirements = dataclasses.field(default_factory=DILC_Requirements)
     u0_params: DILC_U0_Params = dataclasses.field(default_factory=DILC_U0_Params)
     u0: np.ndarray | None = None
+    u0_scale: float = 1.0  # scalar multiplier applied to the initial input u0
     m0: np.ndarray | None = None
 
 
@@ -597,6 +598,11 @@ class DILC_Experiment:
             self.logger.info("Using provided initial input trajectory u0")
             self._u = self.settings.u0.copy()
 
+        # Apply the u0 scaling factor (multiplies the initial input only).
+        if self.settings.u0_scale != 1.0:
+            self.logger.info(f"Scaling u0 by u0_scale={self.settings.u0_scale}")
+            self._u = self._u * self.settings.u0_scale
+
         # --- Initial model m_0 (impulse response estimate) ---
         if self.settings.m0 is None:
             self.logger.info("No initial model m0 provided. Starting with zero model.")
@@ -611,7 +617,7 @@ class DILC_Experiment:
         # These zero-phase FIR low-pass filters suppress high-frequency noise
         # that would otherwise amplify across learning iterations.
         self._Q_iml = self._build_q_filter(self.settings.model_lowpass, "IML model")
-        self._Q_ilc = self._build_q_filter(self.settings.input_lowpass, "ILC input")
+        self._Q_ilc = self._build_ilc_q_filter()
 
         self._finished = False
         self._abort_requested = False
@@ -676,8 +682,8 @@ class DILC_Experiment:
         self.logger.info(f"  Auto initial conditions: {self.settings.meta.automatic_initial_conditions_reset}")
         self.logger.info(f"  Auto start trials: {self._auto_start_trials}")
         self.logger.info(f"  Auto accept trials: {self._auto_accept_trials}")
-        self.logger.info(f"  ILC gain: {self.settings.ilc_gain}")
-        self.logger.info(f"  IML gain: {self.settings.iml_gain}")
+        self.logger.info(f"  ILC gain: {getattr(self.settings, 'ilc_gain', 'n/a (SNR-adaptive)')}")
+        self.logger.info(f"  IML gain: {getattr(self.settings, 'iml_gain', 'n/a')}")
         self.logger.info(f"  u0: {self._u}")
         self.logger.info("=" * 60)
 
@@ -1135,7 +1141,7 @@ class DILC_Experiment:
 
             # IML update: improve the model using the prediction error
             # e_iml = y_j - M(m_j) * u_j  where M is the lifted Toeplitz matrix
-            error_iml = theta_trajectory - vec2liftedMatrix(self._m) @ self._u
+            error_iml = theta_trajectory - vector_to_lifted_matrix(self._m) @ self._u
             L_iml = self._compute_iml_learning_matrix(self._u)
             # m_{j+1} = Q_iml * (m_j + L_iml(u_j) * e_iml)
             mp1 = self._Q_iml @ (self._m + L_iml @ error_iml)
@@ -1143,9 +1149,10 @@ class DILC_Experiment:
             # ILC update: improve the input using the tracking error
             # Note: uses the *updated* model m_{j+1} for the learning gain (dual coupling)
             error_ilc = tracking_error
-            L_ilc = self._compute_ilc_learning_matrix(mp1)
-            # u_{j+1} = Q_ilc * (u_j + L_ilc(m_{j+1}) * e_ilc)
-            up1 = self._Q_ilc @ (self._u + L_ilc @ error_ilc)
+            # ILC input update (overridable). Base law:
+            #   u_{j+1} = Q_ilc * (u_j + L_ilc(m_{j+1}) * e_ilc).
+            # Subclasses (e.g. SNR_DILC) replace the update law here.
+            up1, L_ilc = self._compute_ilc_update(self._u, mp1, error_ilc, error_iml)
 
             e_norm_ilc = float(np.linalg.norm(error_ilc))
             e_norm_iml = float(np.linalg.norm(error_iml))
@@ -1579,13 +1586,40 @@ class DILC_Experiment:
         Returns:
             N x N learning gain matrix L_iml.
         """
-        U = vec2liftedMatrix(u_j)
+        U = vector_to_lifted_matrix(u_j)
         W = np.eye(self.N)
         S = self.settings.iml_gain * (U.T @ U + 1e-6 * np.eye(self.N))  # Regularization
         jitter = 1e-8 * np.eye(self.N)  # Numerical stability
         A = U @ W @ U.T + S + jitter
         gain = np.linalg.solve(A, U @ W)
         return gain.T
+
+    # ----------------------------------------------------------------------------------------------------------
+    def _build_ilc_q_filter(self) -> np.ndarray:
+        """Build the ILC input Q-filter matrix (overridable).
+
+        Base behaviour: a zero-phase FIR low-pass from ``settings.input_lowpass``.
+        Subclasses whose Q-filter is model-derived and rebuilt per trial (e.g.
+        SNR_DILC) override this to return identity.
+        """
+        return self._build_q_filter(self.settings.input_lowpass, "ILC input")
+
+    # ----------------------------------------------------------------------------------------------------------
+    def _compute_ilc_update(self, u_j: np.ndarray, mp1: np.ndarray,
+                            error_ilc: np.ndarray, error_iml: np.ndarray):
+        """Compute the next input ``u_{j+1}`` and the ILC learning matrix used.
+
+        Base law: ``u_{j+1} = Q_ilc (u_j + L_ilc(m_{j+1}) e_ilc)`` with the
+        regularized model pseudo-inverse ``L_ilc`` and the fixed FIR ``Q_ilc``.
+        ``error_iml`` is passed for subclasses that need an online noise
+        estimate. Override to change the update law.
+
+        Returns:
+            ``(up1, L_ilc)``.
+        """
+        L_ilc = self._compute_ilc_learning_matrix(mp1)
+        up1 = self._Q_ilc @ (u_j + L_ilc @ error_ilc)
+        return up1, L_ilc
 
     # ----------------------------------------------------------------------------------------------------------
     def _compute_ilc_learning_matrix(self, m_j: np.ndarray) -> np.ndarray:
@@ -1605,7 +1639,7 @@ class DILC_Experiment:
         Returns:
             N x N learning gain matrix L_ilc.
         """
-        M = vec2liftedMatrix(m_j)
+        M = vector_to_lifted_matrix(m_j)
         W = np.eye(self.N)
         S = self.settings.ilc_gain * (M.T @ M + 1e-6 * np.eye(self.N))  # Regularization
         jitter = 1e-8 * np.eye(self.N)  # Numerical stability

@@ -18,21 +18,21 @@ network:
   username: "admin"
   password: "beutlin"
 
-#optitrack:
-#  points: [1, 2, 3, 4, 5]            # Marker IDs used for tracking
-#  point_x_axis_start: 2
-#  point_x_axis_end: 1
-#  point_y_axis_start: 5
-#  point_y_axis_end: 3
-#  marker_size: 0.01               # Marker size in m
-
 optitrack:
   points: [1, 2, 3, 4, 5]            # Marker IDs used for tracking
-  point_x_axis_start: 3
+  point_x_axis_start: 2
   point_x_axis_end: 1
   point_y_axis_start: 5
-  point_y_axis_end: 2
+  point_y_axis_end: 3
   marker_size: 0.01               # Marker size in m
+
+#optitrack:
+#  points: [1, 2, 3, 4, 5]            # Marker IDs used for tracking
+#  point_x_axis_start: 3
+#  point_x_axis_end: 1
+#  point_y_axis_start: 5
+#  point_y_axis_end: 2
+#  marker_size: 0.01               # Marker size in m
 
 
 model:
