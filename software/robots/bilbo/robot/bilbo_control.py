@@ -77,6 +77,21 @@ class BILBO_Control:
                                     arguments={'forward': v, 'turn': psi_dot})
 
     # ------------------------------------------------------------------------------------------------------------------
+    def nudge(self, distance: float = 0.2):
+        """One-shot position nudge to free the robot from a wall. Works only in OFF
+        mode and when the robot is lying over; the firmware picks the direction
+        (away from the fall, from theta) and bounds the move so it cannot run away.
+        distance is the travel magnitude in meters."""
+        accepted = self.device.executeFunction('nudge', arguments={'distance': distance},
+                                                return_type=bool, request_response=True, timeout=2)
+        if accepted:
+            self.logger.info(f"Robot {self.id}: nudge {distance} m accepted")
+        else:
+            self.logger.warning(
+                f"Robot {self.id}: nudge rejected (needs OFF mode and the robot lying over)")
+        return accepted
+
+    # ------------------------------------------------------------------------------------------------------------------
     def get_velocity_control_config(self) -> VelocityControl_Config:
         v_config_dict = self.device.executeFunction('get_velocity_config_forward',
                                                     arguments=None,

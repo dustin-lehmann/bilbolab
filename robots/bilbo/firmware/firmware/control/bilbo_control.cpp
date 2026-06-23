@@ -7,6 +7,8 @@
 
 #include "bilbo_control.h"
 #include "bilbo_communication.h"
+#include "firmware_settings.h"
+#include "bilbo_model.h"
 
 BILBO_Control *control = nullptr;
 
@@ -177,12 +179,20 @@ bool BILBO_Control::set_mode(bilbo_control_mode_t mode) {
 		return false;
 	}
 
-	// Block any active mode when the drive is in error state
+	// If the drive is in error, attempt to auto-recover before engaging any
+	// active mode (e.g. after an overspeed emergency stop). This lets the user
+	// re-arm balancing/velocity/position directly without a separate manual
+	// drive reset. OFF never needs a healthy drive, so it is left untouched.
 	if (mode != bilbo_control_mode_t::OFF
 			&& this->config.drive->status == BILBO_DRIVE_STATUS_ERROR) {
-		send_error("Cannot set mode to %d while drive is in error state. Tick: %d",
-				(int) mode, tick_global);
-		return false;
+		send_info("Drive in error on mode change to %d — attempting auto-reset. "
+				"Tick: %d", (int) mode, tick_global);
+		this->config.drive->resetDrive();
+		if (this->config.drive->status == BILBO_DRIVE_STATUS_ERROR) {
+			send_error("Auto-reset failed; cannot set mode to %d while drive is "
+					"in error state. Tick: %d", (int) mode, tick_global);
+			return false;
+		}
 	}
 
 	if (this->mode == mode) {
@@ -318,6 +328,47 @@ bool BILBO_Control::set_velocity_command(
 		bilbo_velocity_control_command_t command) {
 	this->_velocity_command = command;
 	return true;
+}
+/* -------------------------------------------------------------------------------------- */
+bool BILBO_Control::nudge(float distance_m) {
+	// Recovery move: only from OFF mode, only when the robot is clearly lying
+	// over. Rolls the wheels a bounded distance (motor position move) away from
+	// the direction it fell. distance_m is the travel distance magnitude.
+	if (this->status != bilbo_control_status_t::RUNNING) {
+		return false;
+	}
+	if (this->mode != bilbo_control_mode_t::OFF) {
+		send_error("Nudge only allowed in OFF mode. Tick: %d", tick_global);
+		return false;
+	}
+
+	float theta = this->config.estimation->getState().theta;
+	float abs_theta = (theta < 0.0f) ? -theta : theta;
+	if (abs_theta < BILBO_NUDGE_MIN_THETA) {
+		send_error("Nudge refused: |theta|=%d mrad below threshold (not lying over). Tick: %d",
+				(int) (abs_theta * 1000), tick_global);
+		return false;
+	}
+
+	// Move the body AWAY from the fall. theta > 0 (fell forward) rolls one way,
+	// theta < 0 (fell backward) the other. If it moves toward the wall instead
+	// of away on the bench, flip this single sign.
+	float sign = (theta > 0.0f) ? -1.0f : 1.0f;
+	// Travel distance (m) -> wheel revolutions via the model wheel circumference
+	// (d = pi * WHEEL_DIAMETER * revolutions).
+	const float pi_f = 3.14159265358979f;
+	float magnitude_m = (distance_m < 0.0f) ? -distance_m : distance_m;
+	float signed_rev = sign * magnitude_m / (pi_f * WHEEL_DIAMETER);
+
+	bool ok = this->config.drive->nudge(signed_rev);
+	if (ok) {
+		send_info("Nudge: %d mm -> %d milli-rev (theta=%d mrad). Tick: %d",
+				(int) (sign * magnitude_m * 1000), (int) (signed_rev * 1000),
+				(int) (theta * 1000), tick_global);
+	} else {
+		send_error("Nudge rejected by drive (busy or not OK). Tick: %d", tick_global);
+	}
+	return ok;
 }
 /* -------------------------------------------------------------------------------------- */
 bool BILBO_Control::set_vic_enabled(bool state) {

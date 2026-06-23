@@ -45,7 +45,8 @@
 #define REG_ADDRESS_F_CONTROL_SET_CONFIGURATION 0x29
 
 #define REG_ADDRESS_RW_MAX_WHEEL_SPEED          0x2A
-// 0x2B - 0x2F reserved
+#define REG_ADDRESS_F_CONTROL_NUDGE             0x2B
+// 0x2C - 0x2F reserved
 
 // ================================
 // 0x30 - 0x3F : CONTROL (CONFIG + ENABLES)

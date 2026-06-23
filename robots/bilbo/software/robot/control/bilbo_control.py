@@ -139,6 +139,12 @@ class BILBO_Control:
         self.inputs.reset()
         self._mode_transition_pending = False
         self._mode_mismatch_count = 0
+        # "Turbo" boosts: additive multipliers on the forward / turn input scaling
+        # (0 = no boost). Set live by the host from the master joystick's triggers
+        # (R2 → forward, L2 → turn) so the commands can exceed the configured
+        # forward.max / turn.max.
+        self._input_boost = 0.0
+        self._input_boost_turn = 0.0
 
     # === METHODS ======================================================================================================
     def init(self) -> bool:
@@ -394,8 +400,8 @@ class BILBO_Control:
                     f"External input must be between -1 and 1. Got forward: {forward} and turn: {turn}"
                 )
                 return
-            forward = forward * self._config.inputs.balancing.forward.max
-            turn = turn * self._config.inputs.balancing.turn.max
+            forward = forward * self._config.inputs.balancing.forward.max * (1.0 + self._input_boost)
+            turn = turn * self._config.inputs.balancing.turn.max * (1.0 + self._input_boost_turn)
 
             torque_left = -(forward + turn)
             torque_right = -(forward - turn)
@@ -418,11 +424,23 @@ class BILBO_Control:
                     f"Velocity inputs must be between -1 and 1. Got forward: {forward} and turn: {turn}"
                 )
                 return
-            forward = forward * self._config.inputs.velocity.forward.max
-            turn = turn * self._config.inputs.velocity.turn.max
+            forward = forward * self._config.inputs.velocity.forward.max * (1.0 + self._input_boost)
+            turn = turn * self._config.inputs.velocity.turn.max * (1.0 + self._input_boost_turn)
 
         self.inputs.velocity.forward = forward
         self.inputs.velocity.turn = turn
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def set_input_boost(self, forward: float, turn: float = 0.0) -> None:
+        """Set the "turbo" boost factors (additive, ``>= 0``) for forward and turn.
+
+        The next command is scaled by ``forward.max * (1 + forward)`` and
+        ``turn.max * (1 + turn)``, so the inputs can exceed the configured maxima.
+        Driven live by the host from the master joystick's triggers (R2 → forward,
+        L2 → turn); ``0`` restores the normal max for that axis.
+        """
+        self._input_boost = max(0.0, float(forward))
+        self._input_boost_turn = max(0.0, float(turn))
 
     # ------------------------------------------------------------------------------------------------------------------
     def set_statefeedback_gain(self, K: list | np.ndarray) -> bool:
@@ -751,6 +769,11 @@ class BILBO_Control:
                                            function=self.set_velocity,
                                            arguments=['forward', 'turn', 'normalized'],
                                            description='Sets the Speed')
+
+        self.communication.wifi.newCommand(identifier='nudge',
+                                           function=self.nudge,
+                                           arguments=['distance'],
+                                           description='One-shot position nudge to free the robot from a wall (OFF mode only)')
 
         self.communication.wifi.newCommand(identifier='enable_tic',
                                            function=self.enable_tic_control,
@@ -1384,6 +1407,28 @@ class BILBO_Control:
         )
         if result is None or not result:
             self.logger.error("Failed to set max torque")
+            return False
+        return True
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def nudge(self, distance: float = 0.2) -> bool:
+        """One-shot position nudge ("free from wall"): roll the robot a defined
+        travel distance (meters) to free it from a wall. Only works in OFF mode and
+        only when the robot is clearly lying over — the firmware picks the direction
+        (away from the fall, from theta) and bounds the move so it can't run away."""
+        return self._set_lowlevel_nudge(float(distance))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _set_lowlevel_nudge(self, distance: float) -> bool:
+        result = self.communication.serial.executeFunction(
+            module=BILBO_AddressTables.REGISTER_TABLE_GENERAL,
+            address=BILBO_ControlAddresses.NUDGE,
+            input_type=ctypes.c_float,
+            output_type=ctypes.c_bool,
+            data=distance
+        )
+        if result is None or not result:
+            self.logger.warning("Nudge rejected by firmware (needs OFF mode and robot lying over)")
             return False
         return True
 

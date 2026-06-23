@@ -149,6 +149,14 @@ class BILBO_Interfaces:
         )
 
         self.communication.wifi.newCommand(
+            identifier='set_input_boost',
+            function=self.control.set_input_boost,
+            arguments=[CommandArgument(name='forward', type=float),
+                       CommandArgument(name='turn', type=float)],
+            description='Set the turbo boost factors (additive on forward.max / turn.max; 0 = none)'
+        )
+
+        self.communication.wifi.newCommand(
             identifier='set_input_source',
             function=self.set_input_source,
             arguments=[CommandArgument(name='source', type=str)],

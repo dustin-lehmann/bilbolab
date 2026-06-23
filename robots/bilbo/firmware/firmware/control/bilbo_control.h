@@ -163,6 +163,10 @@ public:
 	bilbo_control_data_t get_data();
 	bool set_external_input(bilbo_control_input_ext_t input);
 	bool set_velocity_command(bilbo_velocity_control_command_t command);
+	// One-shot position nudge ("free from wall"), OFF mode only. distance_m is the
+	// travel magnitude (meters); the direction is chosen from theta to roll away
+	// from the fall.
+	bool nudge(float distance_m);
 
 	bool set_balancing_gain(float K[8]);
 

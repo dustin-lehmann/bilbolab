@@ -294,6 +294,131 @@ HAL_StatusTypeDef SimplexMotion_CAN::setTorque(float torque) {
 	return this->setTarget((int32_t) torque_value_int);
 }
 /* --------------------------------------------------------------------- */
+HAL_StatusTypeDef SimplexMotion_CAN::readPosition(int32_t &position) {
+	// MotorPosition (200/201): int32, multi-turn, counts per the encoder resolution.
+	return this->read(SIMPLEXMOTION_CAN_REG_POSITION, position);
+}
+/* --------------------------------------------------------------------- */
+HAL_StatusTypeDef SimplexMotion_CAN::enterPwmMode() {
+	HAL_StatusTypeDef status;
+
+	// Open-loop PWM (mode 10): TargetInput is written straight to the motor
+	// voltage — no regulator, no ramp, so nothing can ring. Start at 0 so enabling
+	// does not jump, and select the register as the target source.
+	this->setTarget(0);
+	this->write(SIMPLEXMOTION_CAN_REG_TARGET_SELECT, (uint16_t) 0);
+
+	status = HAL_ERROR;
+	for (int attempt = 0; attempt < 10 && status != HAL_OK; attempt++) {
+		status = this->setMode(SIMPLEXMOTION_CAN_MODE_PWM);
+		if (status != HAL_OK) {
+			osDelay(10);
+		}
+	}
+	return status;
+}
+/* --------------------------------------------------------------------- */
+HAL_StatusTypeDef SimplexMotion_CAN::enterTorqueMode() {
+	HAL_StatusTypeDef status;
+
+	// Ensure the normal torque-mode overspeed limit (RampSpeedMax) is set, then
+	// return to torque control. Called to end a nudge / restore balancing.
+#if SIMPLEXMOTION_OVERSPEED_RPM > 0
+	this->setSpeedLimit(SIMPLEXMOTION_OVERSPEED_RPM);
+#endif
+	this->setTarget(0);
+
+	status = HAL_ERROR;
+	for (int attempt = 0; attempt < 10 && status != HAL_OK; attempt++) {
+		status = this->setMode(SIMPLEXMOTION_CAN_MODE_TORQUE);
+		if (status != HAL_OK) {
+			osDelay(10);
+		}
+	}
+	return status;
+}
+/* --------------------------------------------------------------------- */
+HAL_StatusTypeDef SimplexMotion_CAN::startPwmNudge(float wheel_revolutions,
+		int16_t pwm) {
+	// Must already be in open-loop PWM mode.
+	if (this->mode != SIMPLEXMOTION_CAN_MODE_PWM) {
+		return HAL_ERROR;
+	}
+	int32_t position = 0;
+	if (this->readPosition(position) != HAL_OK) {
+		return HAL_ERROR;
+	}
+	// Target = current + signed distance. counts/rev from the encoder resolution
+	// (13 -> 8192); direction maps the robot-frame revolutions to this motor.
+	const float counts_per_rev = (float) (1 << SIMPLEXMOTION_ENCODER_RESOLUTION);
+	int32_t delta = (int32_t) (this->config.direction * wheel_revolutions
+			* counts_per_rev);
+	this->_nudge_target = position + delta;
+	// Drive open-loop toward the target; the PWM sign follows the move direction.
+	this->_nudge_pwm = (delta >= 0) ? pwm : (int16_t) (-pwm);
+	this->_nudge_start = position;
+	this->_nudge_last_pos = position;
+	this->_nudge_progress_pos = position;
+	this->_nudge_progress_tick = osKernelGetTickCount();
+	return this->setTarget((int32_t) this->_nudge_pwm);
+}
+/* --------------------------------------------------------------------- */
+pwm_nudge_state_t SimplexMotion_CAN::updatePwmNudge() {
+	int32_t position = 0;
+	if (this->readPosition(position) != HAL_OK) {
+		// Transient read error: keep driving, re-check next cycle.
+		return PWM_NUDGE_MOVING;
+	}
+	this->_nudge_last_pos = position;
+
+	// Reached the commanded distance? (direction-aware) -> cut the PWM.
+	bool reached = (this->_nudge_pwm >= 0) ? (position >= this->_nudge_target)
+			: (position <= this->_nudge_target);
+	if (reached) {
+		this->setTarget(0);
+		return PWM_NUDGE_REACHED;
+	}
+
+	// Stall guard. PWM mode does NOT limit torque, so a blocked wheel would draw
+	// large current — if it has not advanced enough within the check window, cut
+	// the PWM and report a stall.
+	uint32_t now = osKernelGetTickCount();
+	if (now - this->_nudge_progress_tick >= BILBO_NUDGE_STALL_CHECK_MS) {
+		int32_t progress = position - this->_nudge_progress_pos;
+		if (progress < 0) {
+			progress = -progress;
+		}
+		if (progress < BILBO_NUDGE_STALL_MIN_COUNTS) {
+			this->setTarget(0);
+			return PWM_NUDGE_STALLED;
+		}
+		this->_nudge_progress_pos = position;
+		this->_nudge_progress_tick = now;
+	}
+	return PWM_NUDGE_MOVING;
+}
+/* --------------------------------------------------------------------- */
+int32_t SimplexMotion_CAN::getRobotProgress() {
+	// Robot-frame distance rolled since the nudge started (counts, forward > 0);
+	// direction maps this motor's mounting back to the robot frame. Cached from
+	// the last updatePwmNudge() read (no extra bus traffic).
+	return (int32_t) (this->config.direction
+			* (this->_nudge_last_pos - this->_nudge_start));
+}
+/* --------------------------------------------------------------------- */
+void SimplexMotion_CAN::setSyncTrim(int16_t robot_trim) {
+	// Adjust the open-loop PWM by a robot-frame trim (to keep the two wheels
+	// matched). Convert the trim to this motor's frame and clamp the result.
+	int32_t cmd = (int32_t) this->_nudge_pwm
+			+ (int32_t) this->config.direction * (int32_t) robot_trim;
+	if (cmd > BILBO_NUDGE_PWM_MAX) {
+		cmd = BILBO_NUDGE_PWM_MAX;
+	} else if (cmd < -BILBO_NUDGE_PWM_MAX) {
+		cmd = -BILBO_NUDGE_PWM_MAX;
+	}
+	this->setTarget(cmd);
+}
+/* --------------------------------------------------------------------- */
 HAL_StatusTypeDef SimplexMotion_CAN::readSpeed(float &speed) {
 	int16_t speed_int = 0;
 	HAL_StatusTypeDef status;

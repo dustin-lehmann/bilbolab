@@ -35,7 +35,7 @@ def main():
     while True:
         for uuid, joystick in jm.joysticks.items():
             # print(f"Joystick {joystick.id}, Axis 0: {joystick.axis[0]}")
-            axes_formatted = " ".join(f"Axis {i}: {axis: 5.2f}" for i, axis in enumerate(joystick.axis))
+            axes_formatted = " ".join(f"Axis {i}: {axis: 5.2f}" for i, axis in enumerate(joystick.axes))
             print(f"Joystick {joystick.id}, {axes_formatted}")
 
         time.sleep(0.1)

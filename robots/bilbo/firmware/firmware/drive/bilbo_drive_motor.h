@@ -32,6 +32,13 @@ typedef enum simplexmotion_mode_t : uint8_t {
 	SM_MODE_UNKNOWN = 255,
 } simplexmotion_mode_t;
 
+// Result of polling an in-progress open-loop nudge (see startPwmNudge()).
+typedef enum pwm_nudge_state_t : uint8_t {
+	PWM_NUDGE_MOVING = 0,   // still rolling toward the target
+	PWM_NUDGE_REACHED = 1,  // reached the commanded distance (PWM cut)
+	PWM_NUDGE_STALLED = 2,  // stopped progressing / blocked (PWM cut)
+} pwm_nudge_state_t;
+
 class BILBO_Drive_Motor {
 public:
 
@@ -45,6 +52,25 @@ public:
 
 	virtual HAL_StatusTypeDef beep(uint16_t amplitude) = 0;
 	virtual HAL_StatusTypeDef setTorque(float torque) = 0;
+
+	// Open-loop "nudge" support (default: unsupported). Rolls the wheels a bounded,
+	// defined distance to free the robot from a wall WITHOUT a position loop (which
+	// rings on this high-inertia load). enterPwmMode() switches to open-loop PWM;
+	// startPwmNudge() begins rolling the given signed wheel revolutions (robot
+	// frame; the motor applies its own mounting direction) at the given PWM duty;
+	// updatePwmNudge() is polled each cycle and cuts the PWM once the wheel reaches
+	// the target (REACHED) or stops progressing (STALLED). enterTorqueMode()
+	// returns to torque control.
+	virtual HAL_StatusTypeDef enterTorqueMode() { return HAL_ERROR; }
+	virtual HAL_StatusTypeDef enterPwmMode() { return HAL_ERROR; }
+	virtual HAL_StatusTypeDef startPwmNudge(float wheel_revolutions, int16_t pwm) {
+		return HAL_ERROR;
+	}
+	virtual pwm_nudge_state_t updatePwmNudge() { return PWM_NUDGE_STALLED; }
+	// Robot-frame distance rolled since the nudge started (encoder counts), and a
+	// PWM trim (robot frame) applied to keep the two wheels matched (straight nudge).
+	virtual int32_t getRobotProgress() { return 0; }
+	virtual void setSyncTrim(int16_t robot_trim) {}
 	virtual HAL_StatusTypeDef getTemperature(float &temperature) = 0;
 	virtual HAL_StatusTypeDef getVoltage(float &voltage) = 0;
 

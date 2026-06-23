@@ -1,0 +1,106 @@
+# ======================================================================================================================
+# IdeenExpo 2026 application settings
+#
+# Extends the standard BILBO application settings (robots/bilbo/settings.yaml) with
+# a `master_joystick` block. See settings.py (IdeenExpo2026_Settings) for the schema.
+# ======================================================================================================================
+
+paths:
+  experiments: ../../definitions/tests/
+  reference_trajectories: ../../definitions/references/
+
+testbed: ideenexpo
+
+robots:
+  autostart: false
+  autostop: false
+
+extensions:
+  display: true
+  limbobar: true
+  timecode: true
+  joystick: true
+  joystick_auto_assign: true
+
+simulation:
+  enabled: true
+  Ts: 0.01
+  robots: null
+
+tracker:
+  enabled: true
+  server: palantir.lan
+  sample_rate: 50
+  outlier_filter:
+    enabled: true
+    window_size: 3
+  tracked_robots:
+    - bilbo2
+
+mdns:
+  enabled: true
+  hostname: bilbolab          # Accessible as bilbolab.local
+  use_port_80: true           # Serve on port 80 (requires running with sudo)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Testbed camera (big "Camera" GUI page)
+#
+# Streams a camera connected to the host (testbed machine). `excluded` / `priority` are
+# case-insensitive regexes matched against the camera label; the defaults skip the Mac's
+# built-in / iPhone Continuity cameras so a connected USB camera is auto-selected. The GUI
+# dropdown still lets you switch cameras at runtime.
+# ----------------------------------------------------------------------------------------------------------------------
+camera:
+  enabled: true
+  width: 1280
+  height: 720
+  fps: 30
+  excluded:
+    - iPhone
+    - FaceTime
+  priority: []                # e.g. ["Logitech", "USB"] to prefer a specific USB camera
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Master joystick
+#
+# The master joystick is identified by its pygame GUID. Run the application and use the
+# CLI command `joysticks list-guids` to print connected joysticks with their GUIDs, then
+# paste the master's GUID below.
+#
+# While `enabled: false` the application behaves like the standard one (all joysticks are
+# treated as regular user controllers).
+# ----------------------------------------------------------------------------------------------------------------------
+master_joystick:
+  enabled: true
+  guid: 03008fe54c050000c405000000016800                  # e.g. "030000004c050000c405000000010000"
+  name: PS4 Controller        # optional fallback match by joystick name
+  assist_gain: 1.0            # master authority in Assist mode (0 = no help, 1 = equal to the user)
+  # How the master's axis is mixed with the user's in Assist mode:
+  #   additive  : output = clamp(user + gain*master)  — old behaviour; opposite inputs cancel.
+  #   authority : master gets more say the harder it pushes. At gain 1.0, master 100% one way
+  #               wins outright; master 50% against a full-opposite user ties; master at rest
+  #               leaves the user in full control. Lower assist_gain caps how much it can override.
+  assist_mix_mode: authority
+  # Trigger turbo boosts, active in Assist/Full when the robot is BALANCING/VELOCITY.
+  # R2 (RIGHT_TRIGGER) boosts forward, L2 (LEFT_TRIGGER) boosts turn: the robot scales that
+  # axis by max * (1 + trigger * scale), so the command can exceed the configured max. Tune
+  # per mode (forward/turn are torque in BALANCING, velocity/yaw-rate in VELOCITY).
+  boost_scale_balancing: 1.0        # R2 → forward, BALANCING
+  boost_scale_velocity: 2.0         # R2 → forward, VELOCITY
+  boost_scale_turn_balancing: 2   # L2 → turn, BALANCING
+  boost_scale_turn_velocity: 3.0    # L2 → turn, VELOCITY
+  restore_user_on_release: true
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Input "speed" (per robot, switchable from the App's Master folder)
+# ----------------------------------------------------------------------------------------------------------------------
+# Each connected robot gets a Slow/Medium/Fast selector that scales its visitor joystick's
+# forward and turn axes (Fast = full ±1 range). Turn is scaled less than forward so steering
+# stays responsive when slowed. The master's Full override always drives at full range.
+speed:
+  enabled: true
+  default_level: Medium          # level applied to a robot when it connects (Slow | Medium | Fast)
+  levels:
+    - { name: Slow,   forward: 0.50, turn: 0.70 }
+    - { name: Medium, forward: 0.75, turn: 0.85 }
+    - { name: Fast,   forward: 1.00, turn: 1.00 }

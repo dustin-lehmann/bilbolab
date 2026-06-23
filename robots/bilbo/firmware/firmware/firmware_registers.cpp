@@ -86,6 +86,10 @@ core_utils_RegisterEntry<bool, bilbo_velocity_control_command_t> reg_set_speed(
 		&register_map, REG_ADDRESS_F_CONTROL_SET_SPEED_INPUT,
 		&bilbo_firmware.control, &BILBO_Control::set_velocity_command);
 
+core_utils_RegisterEntry<bool, float> reg_nudge(
+		&register_map, REG_ADDRESS_F_CONTROL_NUDGE,
+		&bilbo_firmware.control, &BILBO_Control::nudge);
+
 core_utils_RegisterEntry<bilbo_control_config_t, void> reg_get_ctrl_conf(
 		&register_map, REG_ADDRESS_F_CONTROL_GET_CONFIGURATION,
 		&bilbo_firmware.control, &BILBO_Control::get_config);

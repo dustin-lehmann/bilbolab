@@ -40,7 +40,8 @@ class BILBO_ControlAddresses(enum.IntEnum):
     SET_CONFIGURATION = 0x29
 
     RW_MAX_WHEEL_SPEED = 0x2A
-    # 0x2B - 0x2F reserved
+    NUDGE = 0x2B
+    # 0x2C - 0x2F reserved
 
     # 0x30 - 0x3F : CONTROL (CONFIG + ENABLES)
     SET_VELOCITY_CONFIG_V = 0x30

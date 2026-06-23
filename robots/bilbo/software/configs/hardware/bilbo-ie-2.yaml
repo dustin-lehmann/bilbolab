@@ -4,14 +4,14 @@
 # ======================================================================
 
 general:
-  id: "bilbo-ie-1"                # e.g. "bilbo_01"
-  short_id: "1"        # e.g. "b01"
+  id: "bilbo-ie-2"                # e.g. "bilbo_01"
+  short_id: "2"        # e.g. "b01"
   type: "normal"            # e.g. "normal"
   version: "rev4"   # e.g. "rev1"
-  color: [0.8, 0.0, 0.0]          # RGB color or null
+  color: [0.0, 0.8, 0.0]          # RGB color or null
 
 network:
-  address: "bilbo-ie-1.lan"
+  address: "bilbo-ie-2.lan"
   data_stream_port: 5555
   gui_port: 8000
   ssid: "bilbo2_ap"
@@ -45,7 +45,7 @@ model:
   depth: 0.085                     # meters
   distance_wheels: 0.16           # meters between wheels
   l_cg: 0.00                      # center of gravity distance (m)
-  theta_offset: 0.0             # radians
+  theta_offset: 0.06             # radians
   trajectory_delta: 0.0           # Asymmetric torque split: left = u*(0.5+delta), right = u*(0.5-delta)
 
 electronics:

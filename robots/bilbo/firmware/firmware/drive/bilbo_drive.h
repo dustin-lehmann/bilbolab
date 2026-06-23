@@ -82,6 +82,10 @@ public:
 
 	bilbo_drive_speed_t getSpeed();
 	void setTorque(bilbo_drive_input_t input);
+	// Trigger a one-shot position nudge: roll the wheels by the given signed
+	// robot-frame revolutions. The move is performed by the drive task (it owns
+	// the bus). Returns false if a nudge is already in progress.
+	bool nudge(float wheel_revolutions);
 	float getVoltage();
 	bilbo_logging_drive_t getSample();
 
@@ -99,6 +103,14 @@ private:
 	bilbo_drive_speed_t _speed = {0};
 	bilbo_drive_input_t _input = {0};
 	volatile bool _reset_requested = false;
+
+	// One-shot open-loop nudge (handled by the drive task, which owns the bus).
+	volatile bool _nudge_requested = false;
+	volatile float _nudge_revolutions = 0;
+	bool _nudging = false;
+	bool _nudge_left_done = false;
+	bool _nudge_right_done = false;
+	uint32_t _nudge_deadline = 0;
 
 	simplexmotion_mode_t _motor_mode_left = SM_MODE_UNKNOWN;
 	simplexmotion_mode_t _motor_mode_right = SM_MODE_UNKNOWN;

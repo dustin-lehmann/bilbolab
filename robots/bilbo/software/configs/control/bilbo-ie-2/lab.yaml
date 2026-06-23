@@ -1,0 +1,15 @@
+name: 'bilbo2 lab control'
+description: 'For the blue carpet tiles in the lab'
+velocity_control:
+  v:
+    feedforward:
+      Ka: -0.0                          # [rad/(m/s^2)] Inertia compensation
+position_control:
+  curvature_gain: 0.12                   # [-] Curvature→speed: v = max_speed / (1 + gain * κ). Higher = slower in curves.
+  curvature_lookahead: 0.1             # [m] How far ahead to estimate curvature from path points
+planning:
+  smoothing: 0.7
+  clearance_weight: 1.0
+  clearance_threshold: 0.4
+  rrt:
+    rrt_star: true

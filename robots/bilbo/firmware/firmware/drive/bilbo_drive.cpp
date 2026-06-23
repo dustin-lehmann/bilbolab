@@ -170,6 +170,19 @@ void BILBO_Drive::setTorque(bilbo_drive_input_t input) {
 }
 
 /* ======================================================================= */
+bool BILBO_Drive::nudge(float wheel_revolutions) {
+	// Reject if a nudge is already running or the drive is not healthy. The
+	// actual position move is executed by the drive task (it owns the bus).
+	if (this->_nudging || this->_nudge_requested
+			|| this->status != BILBO_DRIVE_STATUS_OK) {
+		return false;
+	}
+	this->_nudge_revolutions = wheel_revolutions;
+	this->_nudge_requested = true;
+	return true;
+}
+
+/* ======================================================================= */
 float BILBO_Drive::getVoltage() {
 	osSemaphoreAcquire(voltage_semaphore, portMAX_DELAY);
 	float voltage = this->_voltage;
@@ -370,6 +383,81 @@ void BILBO_Drive::task() {
 			this->motor_right->feedWatchdog();
 			osDelay(2);
 #endif
+
+			// --- One-shot open-loop nudge (free-from-wall) ---
+			// Start a requested nudge: switch both motors to open-loop PWM and begin
+			// rolling toward the target. Done here because the task owns the bus.
+			if (this->_nudge_requested) {
+				HAL_StatusTypeDef np_l = this->motor_left->enterPwmMode();
+				osDelay(2);
+				HAL_StatusTypeDef np_r = this->motor_right->enterPwmMode();
+				if (np_l == HAL_OK && np_r == HAL_OK) {
+					this->motor_left->startPwmNudge(this->_nudge_revolutions,
+							BILBO_NUDGE_PWM);
+					osDelay(2);
+					this->motor_right->startPwmNudge(this->_nudge_revolutions,
+							BILBO_NUDGE_PWM);
+					this->_nudging = true;
+					this->_nudge_left_done = false;
+					this->_nudge_right_done = false;
+					this->_nudge_deadline = osKernelGetTickCount()
+							+ BILBO_NUDGE_TIMEOUT_MS;
+					send_info("Nudge started: %d milli-rev (open-loop PWM)",
+							(int) (this->_nudge_revolutions * 1000));
+				} else {
+					send_error("Nudge failed to enter PWM mode (L=%d R=%d)",
+							np_l, np_r);
+					this->motor_left->enterTorqueMode();
+					osDelay(2);
+					this->motor_right->enterTorqueMode();
+				}
+				this->_nudge_requested = false;
+				continue;
+			}
+			// While a nudge runs, poll each wheel: the motor cuts its own PWM when it
+			// reaches the target distance or stalls. Skip the normal speed-read /
+			// torque-write cycle. End when both are done or on timeout.
+			if (this->_nudging) {
+				if (!this->_nudge_left_done
+						&& this->motor_left->updatePwmNudge() != PWM_NUDGE_MOVING) {
+					this->_nudge_left_done = true;
+				}
+				osDelay(2);
+				if (!this->_nudge_right_done
+						&& this->motor_right->updatePwmNudge() != PWM_NUDGE_MOVING) {
+					this->_nudge_right_done = true;
+				}
+				// Keep both wheels matched so the robot rolls straight: open-loop PWM
+				// gives the two motors slightly different speeds, so trim each wheel's
+				// PWM by their position difference (a stable first-order correction).
+				// Only while both are still driving — a finished/stalled wheel stays
+				// at PWM 0.
+				if (!this->_nudge_left_done && !this->_nudge_right_done) {
+					int32_t err = this->motor_left->getRobotProgress()
+							- this->motor_right->getRobotProgress();
+					int32_t trim = err * BILBO_NUDGE_SYNC_KP;
+					if (trim > BILBO_NUDGE_PWM) {
+						trim = BILBO_NUDGE_PWM;
+					} else if (trim < -BILBO_NUDGE_PWM) {
+						trim = -BILBO_NUDGE_PWM;
+					}
+					this->motor_left->setSyncTrim((int16_t) (-trim));
+					this->motor_right->setSyncTrim((int16_t) (trim));
+				}
+				bool timed_out = osKernelGetTickCount() >= this->_nudge_deadline;
+				if ((this->_nudge_left_done && this->_nudge_right_done)
+						|| timed_out) {
+					this->motor_left->enterTorqueMode();
+					osDelay(2);
+					this->motor_right->enterTorqueMode();
+					this->motor_left->setTorque(0.0f);
+					this->motor_right->setTorque(0.0f);
+					this->_nudging = false;
+					send_info("Nudge complete%s", timed_out ? " (timeout)" : "");
+				}
+				osDelay(6);
+				continue;
+			}
 
 			// Read the voltage (non-critical, no retry needed)
 			if (voltage_timer > 2000) {

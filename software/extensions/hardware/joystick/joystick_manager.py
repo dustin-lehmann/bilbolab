@@ -403,7 +403,7 @@ class JoystickManager:
         name = data['name']
         num_axes = data['num_axes']
 
-        self.logger.debug(f"New joystick connected. Type: {name}. ID: {instance_id}")
+        self.logger.debug(f"New joystick connected. Type: {name}. ID: {instance_id}. GUID: {guid}")
 
         # Get host mapping and convert to internal format
         if name in joystick_mappings:

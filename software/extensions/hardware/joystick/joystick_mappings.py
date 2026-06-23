@@ -79,6 +79,32 @@ if os_name == "Darwin":
                 'RIGHT_TRIGGER': 5
             }
         },
+        'Xbox Series X Controller': {
+            'BUTTONS': {
+                'A': 1,
+                'B': 0,
+                'X': 3,
+                'Y': 2,
+                'L1': 9,
+                'R1': 10,
+                'L3': 7,
+                'R3': 8,
+                'START': 6,
+                'SELECT': 4,
+                'DPAD_RIGHT': 14,
+                'DPAD_LEFT': 13,
+                'DPAD_UP': 11,
+                'DPAD_DOWN': 12,
+            },
+            'AXES': {
+                'LEFT_VERTICAL': 1,
+                'LEFT_HORIZONTAL': 0,
+                'RIGHT_VERTICAL': 3,
+                'RIGHT_HORIZONTAL': 2,
+                'LEFT_TRIGGER': 4,
+                'RIGHT_TRIGGER': 5
+            }
+        },
         '8BitDo Lite 2': {
             'BUTTONS': {
                 'A': 0,

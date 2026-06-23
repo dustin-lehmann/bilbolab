@@ -25,6 +25,43 @@ from robots.bilbo.robot.bilbo_utilities import BILBO_Utilities
 JOYSTICK_UPDATE_TIME = 0.075
 
 
+def _clamp(value: float, low: float = -1.0, high: float = 1.0) -> float:
+    return low if value < low else high if value > high else value
+
+
+# Assist-mixing strategies (how the master's axis is combined with the user's). See
+# _mix_assist. Selectable per robot via set_assist_joystick(..., mode=...).
+ASSIST_MIX_ADDITIVE = 'additive'    # output = clamp(user + gain * master)  — legacy
+ASSIST_MIX_AUTHORITY = 'authority'  # master authority grows with its own deflection
+ASSIST_MIX_MODES = (ASSIST_MIX_ADDITIVE, ASSIST_MIX_AUTHORITY)
+
+
+def _mix_assist(user: float, master: float, gain: float, mode: str) -> float:
+    """Combine a primary (``user``) axis with the master's ``assist`` axis, in [-1, 1].
+
+    additive (legacy):
+        ``clamp(user + gain*master)``. Equal-and-opposite inputs simply cancel, so a
+        full-deflection user can tie a full-deflection master regardless of intent.
+
+    authority:
+        The master's authority scales with how hard *it* pushes. With its gain-scaled
+        command ``m = clamp(gain*master)`` and weight ``w = |m|``::
+
+            output = clamp((1 - w) * user + m)
+
+        So the master crossfades the user out as it pushes harder and injects its own
+        command: at full master deflection (×gain) it overrides the user entirely; at
+        rest the user has full control. With gain=1, master 100% one way → that way;
+        master 50% vs a full-opposite user → they tie. ``gain`` (assist_gain) caps the
+        master's reachable authority: 1.0 lets it fully override, 0.5 only neutralise.
+    """
+    if mode == ASSIST_MIX_AUTHORITY:
+        m = _clamp(gain * master)
+        return _clamp((1.0 - abs(m)) * user + m)
+    # Default / legacy additive mixing.
+    return _clamp(user + gain * master)
+
+
 # ======================================================================================================================
 @callback_definition
 class BILBO_Interfaces_Callbacks:
@@ -43,6 +80,22 @@ class BILBO_Interfaces:
     app_joystick_widgets: dict[str, JoystickWidget] | None
 
     joystick: Joystick | None
+    # Optional low-authority "assist" input (e.g. the expo master joystick) whose
+    # axes are mixed into the primary input. See _joystick_task / set_assist_joystick.
+    assist_joystick: Joystick | None
+    assist_gain: float
+    assist_mix_mode: str  # how the assist axis is mixed with the user's — see _mix_assist
+    # Per-robot input "speed": scales the primary (user) input axes before they are sent.
+    # 1.0 = full range; forward and turn scale independently. Bypassed while the master
+    # fully overrides this robot so the operator always has full range. See _joystick_task.
+    input_scale_forward: float
+    input_scale_turn: float
+    bypass_input_scale: bool
+    # Optional "boost" input (e.g. the expo master joystick): its RIGHT_TRIGGER (R2)
+    # multiplies the forward command in BALANCING/VELOCITY. See _joystick_task / set_boost.
+    boost_joystick: Joystick | None
+    boost_scale_balancing: float
+    boost_scale_velocity: float
     live_plots: list[dict]
 
     _joystick_thread: threading.Thread | None
@@ -72,6 +125,19 @@ class BILBO_Interfaces:
 
         self.joystick = None
         self.app_joystick_widgets = None
+        self.assist_joystick = None
+        self.assist_gain = 0.5
+        self.assist_mix_mode = ASSIST_MIX_ADDITIVE
+        self.input_scale_forward = 1.0
+        self.input_scale_turn = 1.0
+        self.bypass_input_scale = False
+        self.boost_joystick = None
+        self.boost_scale_balancing = 0.0
+        self.boost_scale_velocity = 0.0
+        self.boost_scale_turn_balancing = 0.0
+        self.boost_scale_turn_velocity = 0.0
+        # Last (forward, turn) boost factors pushed to the robot (so we only send on change).
+        self._last_boost_sent: tuple[float, float] | None = None
 
         self._joystick_thread = None
         self._joystick_stop_event = threading.Event()
@@ -81,6 +147,8 @@ class BILBO_Interfaces:
 
     # ------------------------------------------------------------------------------------------------------------------
     def close(self, *args, **kwargs):
+        self.clear_boost()
+        self.clear_assist_joystick()
         self.removeJoystick()
         self.remove_app_joystick_widgets()
 
@@ -95,50 +163,56 @@ class BILBO_Interfaces:
 
         self.joystick = joystick
 
-        # Button mappings (matching on-robot bilbo_interfaces):
-        # A press      → BALANCING mode
-        # A long press → VELOCITY mode
-        # B press      → OFF mode
-        # X press      → beep
-        # Y press      → POSITION mode
-        # DPAD_UP      → enable TIC
-        # DPAD_DOWN    → disable TIC
-        # DPAD_RIGHT   → resume
-        # DPAD_LEFT    → revert
-        # L1           → reset drive
-
-        self.joystick.buttons['A'].callbacks.pressed.register(
-            self.control.setControlMode, mode=BILBO_Control_Mode.BALANCING)
-        self.joystick.buttons['A'].callbacks.long_pressed.register(
-            self.control.setControlMode, mode=BILBO_Control_Mode.VELOCITY)
-
-        self.joystick.buttons['B'].callbacks.pressed.register(
-            self.control.setControlMode, mode=BILBO_Control_Mode.OFF)
-
-        self.joystick.buttons['X'].callbacks.pressed.register(self.core.beep)
-
-        self.joystick.buttons['Y'].callbacks.pressed.register(
-            self.control.setControlMode, mode=BILBO_Control_Mode.POSITION)
-
-        self.joystick.buttons['L1'].callbacks.pressed.register(self.core.reset_drive)
-
-        # DPAD: on macOS these are buttons, on Linux they are hat events.
-        # Register on both so it works regardless of platform.
-        if 'DPAD_UP' in self.joystick.buttons:
-            self.joystick.buttons['DPAD_UP'].callbacks.pressed.register(
-                self.control.enableTIC, state=True)
-            self.joystick.buttons['DPAD_DOWN'].callbacks.pressed.register(
-                self.control.enableTIC, state=False)
-            self.joystick.buttons['DPAD_RIGHT'].callbacks.pressed.register(self.core.set_resume_event_robot)
-            self.joystick.buttons['DPAD_LEFT'].callbacks.pressed.register(self.core.set_repeat_event_robot)
-
-        self.joystick.hat['up'].callbacks.pressed.register(self.control.enableTIC, state=True)
-        self.joystick.hat['down'].callbacks.pressed.register(self.control.enableTIC, state=False)
-        self.joystick.hat['right'].callbacks.pressed.register(self.core.set_resume_event_robot)
-        self.joystick.hat['left'].callbacks.pressed.register(self.core.set_repeat_event_robot)
+        self.bind_buttons(joystick)
 
         self.set_input_source('WIFI_JOYSTICK')
         self._start_joystick_thread()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def bind_buttons(self, joystick: Joystick):
+        """Wire a joystick's buttons to this robot's control actions.
+
+        Used for a robot's own assigned joystick (via :meth:`addJoystick`) and for
+        the expo master joystick when it targets this robot — so the master can
+        actuate the robot's buttons (A/B/X/Y/...) without being its primary driver.
+        Only registers button callbacks; it does not touch the input source or the
+        drive thread.
+
+        Button mappings (matching on-robot bilbo_interfaces):
+          A press      → BALANCING mode      A long press → VELOCITY mode
+          B press      → OFF mode            X press      → beep
+          Y press      → POSITION mode       L1           → reset drive
+          DPAD_UP/DOWN → enable/disable TIC  DPAD_RIGHT/LEFT → resume/revert
+        """
+        joystick.buttons['A'].callbacks.pressed.register(
+            self.control.setControlMode, mode=BILBO_Control_Mode.BALANCING)
+        joystick.buttons['A'].callbacks.long_pressed.register(
+            self.control.setControlMode, mode=BILBO_Control_Mode.VELOCITY)
+
+        joystick.buttons['B'].callbacks.pressed.register(
+            self.control.setControlMode, mode=BILBO_Control_Mode.OFF)
+
+        joystick.buttons['X'].callbacks.pressed.register(self.core.beep)
+
+        joystick.buttons['Y'].callbacks.pressed.register(
+            self.control.setControlMode, mode=BILBO_Control_Mode.POSITION)
+
+        joystick.buttons['L1'].callbacks.pressed.register(self.core.reset_drive)
+
+        # DPAD: on macOS these are buttons, on Linux they are hat events.
+        # Register on both so it works regardless of platform.
+        if 'DPAD_UP' in joystick.buttons:
+            joystick.buttons['DPAD_UP'].callbacks.pressed.register(
+                self.control.enableTIC, state=True)
+            joystick.buttons['DPAD_DOWN'].callbacks.pressed.register(
+                self.control.enableTIC, state=False)
+            joystick.buttons['DPAD_RIGHT'].callbacks.pressed.register(self.core.set_resume_event_robot)
+            joystick.buttons['DPAD_LEFT'].callbacks.pressed.register(self.core.set_repeat_event_robot)
+
+        joystick.hat['up'].callbacks.pressed.register(self.control.enableTIC, state=True)
+        joystick.hat['down'].callbacks.pressed.register(self.control.enableTIC, state=False)
+        joystick.hat['right'].callbacks.pressed.register(self.core.set_resume_event_robot)
+        joystick.hat['left'].callbacks.pressed.register(self.core.set_repeat_event_robot)
 
     # ------------------------------------------------------------------------------------------------------------------
     def set_app_joystick_widgets(self, widgets: dict[str, JoystickWidget]):
@@ -161,9 +235,119 @@ class BILBO_Interfaces:
         self.app_joystick_widgets = None
 
         # Stop joystick thread if no input source remains
-        if self.joystick is None:
+        if self.joystick is None and self.assist_joystick is None:
             self._stop_joystick_thread()
             self.set_input_source('NONE')
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def set_assist_joystick(self, joystick: Joystick, gain: float | None = None,
+                            mode: str | None = None):
+        """Add a low-authority *assist* input that is mixed into the primary input.
+
+        Used by the expo master joystick's "Assist" override mode: the master can
+        nudge a robot that is otherwise driven by its own (user) joystick or app
+        widgets. ``mode`` selects how the master's axis is combined with the user's
+        (``'additive'`` legacy or ``'authority'`` — see :meth:`_mix_assist`); ``gain``
+        is the master's authority. If the robot currently has no primary input source,
+        the assist input becomes the only contributor (scaled by ``gain``).
+        """
+        self.assist_joystick = joystick
+        if gain is not None:
+            self.assist_gain = gain
+        if mode is not None:
+            if mode not in ASSIST_MIX_MODES:
+                self.core.logger.warning(
+                    f"Unknown assist mix mode '{mode}', keeping '{self.assist_mix_mode}'")
+            else:
+                self.assist_mix_mode = mode
+        self.core.logger.info(
+            f"Assist joystick {joystick.id} set (gain={self.assist_gain}, mix={self.assist_mix_mode})")
+
+        self.set_input_source('WIFI_JOYSTICK')
+        self._start_joystick_thread()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def clear_assist_joystick(self):
+        if self.assist_joystick is None:
+            return
+
+        self.core.logger.info("Clear assist joystick")
+        self.assist_joystick = None
+
+        # Stop joystick thread if no input source remains
+        if self.joystick is None and self.app_joystick_widgets is None:
+            self._stop_joystick_thread()
+            self.set_input_source('NONE')
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def set_input_scale(self, forward: float, turn: float):
+        """Set this robot's input "speed": scale the primary (user) joystick axes.
+
+        ``forward`` / ``turn`` in [0, 1] (1.0 = full range, scaled independently). Applied
+        to whatever currently drives the robot (physical joystick or app widgets), except
+        while the master fully overrides it (see :meth:`set_input_scale_bypass`).
+        """
+        self.input_scale_forward = _clamp(forward, 0.0, 1.0)
+        self.input_scale_turn = _clamp(turn, 0.0, 1.0)
+        self.core.logger.info(
+            f"Input speed set (forward={self.input_scale_forward}, turn={self.input_scale_turn})")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def set_input_scale_bypass(self, bypass: bool):
+        """Temporarily ignore the input speed and drive at full range.
+
+        Used when the master joystick takes a robot over completely (Full override), so the
+        operator always has full authority regardless of the robot's selected speed.
+        """
+        self.bypass_input_scale = bool(bypass)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def set_boost(self, joystick: Joystick, scale_balancing: float, scale_velocity: float,
+                  scale_turn_balancing: float = 0.0, scale_turn_velocity: float = 0.0):
+        """Use ``joystick``'s triggers as "turbo" boosts: R2 → forward, L2 → turn.
+
+        While set, :meth:`_joystick_task` pushes boost factors ``trigger * scale`` (per-mode)
+        to the robot, which scales that axis by ``max * (1 + boost)`` — so the forward / turn
+        commands can exceed their configured maxima. Does not by itself keep the joystick
+        thread alive — it is meant to accompany a primary/assist input (the expo master's
+        Assist/Full).
+        """
+        self.boost_joystick = joystick
+        self.boost_scale_balancing = scale_balancing
+        self.boost_scale_velocity = scale_velocity
+        self.boost_scale_turn_balancing = scale_turn_balancing
+        self.boost_scale_turn_velocity = scale_turn_velocity
+        self.core.logger.info(
+            f"Boost joystick {joystick.id} set (fwd balancing={scale_balancing}, fwd velocity={scale_velocity}, "
+            f"turn balancing={scale_turn_balancing}, turn velocity={scale_turn_velocity})")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def clear_boost(self):
+        if self.boost_joystick is None:
+            return
+        self.core.logger.info("Clear boost joystick")
+        self.boost_joystick = None
+        # Make sure the robot drops back to its normal forward / turn maxima.
+        self._send_input_boost(0.0, 0.0)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def _send_input_boost(self, forward: float, turn: float):
+        """Push the (forward, turn) turbo boost factors to the robot, only when they change.
+
+        Factors are rounded so analog-trigger jitter doesn't spam the link; the robot
+        keeps the last values until the next change, so a final ``0`` on release is
+        required (handled here and in :meth:`clear_boost`).
+        """
+        forward = round(max(0.0, forward), 2)
+        turn = round(max(0.0, turn), 2)
+        if (forward, turn) == self._last_boost_sent:
+            return
+        self._last_boost_sent = (forward, turn)
+        try:
+            self.core.device.executeFunction(function_name='set_input_boost',
+                                             arguments={'forward': forward, 'turn': turn})
+        except Exception as e:
+            self.core.logger.warning(f"Could not send input boost: {e}")
 
     # ------------------------------------------------------------------------------------------------------------------
     def enable_joystick(self):
@@ -209,7 +393,7 @@ class BILBO_Interfaces:
         self.joystick = None
 
         # Stop joystick thread if no input source remains
-        if self.app_joystick_widgets is None:
+        if self.app_joystick_widgets is None and self.assist_joystick is None:
             self._stop_joystick_thread()
             self.set_input_source('NONE')
 
@@ -255,17 +439,59 @@ class BILBO_Interfaces:
     # ------------------------------------------------------------------------------------------------------------------
     def _joystick_task(self):
         while not self._joystick_stop_event.is_set():
-            # Get input from physical joystick (priority) or app widgets
+            # Primary input: physical joystick (priority) or app widgets.
             if self.joystick:
                 raw_forward = -self.joystick.getAxis('LEFT_VERTICAL')
                 raw_turn = -self.joystick.getAxis('RIGHT_HORIZONTAL')
             elif self.app_joystick_widgets:
                 raw_forward = self.app_joystick_widgets['forward'].y
                 raw_turn = -self.app_joystick_widgets['turn'].x
+            elif self.assist_joystick is not None:
+                # No primary source, but a master is assisting → primary contributes nothing.
+                raw_forward = 0.0
+                raw_turn = 0.0
             else:
                 # No input source available, exit thread
                 self.core.logger.info("Joystick thread exiting: no input source available.")
                 return
+
+            # Per-robot "speed": scale the primary (user) input. Skipped while bypassed
+            # (master Full override drives at full range); the assist/master input mixed
+            # in below is never throttled by the user's speed setting.
+            if not self.bypass_input_scale:
+                raw_forward *= self.input_scale_forward
+                raw_turn *= self.input_scale_turn
+
+            # Mix in the assist (master) joystick, if any. The strategy is selectable
+            # (see _mix_assist): 'additive' adds gain*master and saturates; 'authority'
+            # gives the master more say the harder it pushes. Either way the result is
+            # clamped to [-1, 1] (the Pi maps this normalized range to the configured
+            # velocity limits, so clamping = "normalize back to their scale").
+            if self.assist_joystick is not None:
+                assist_forward = -self.assist_joystick.getAxis('LEFT_VERTICAL')
+                assist_turn = -self.assist_joystick.getAxis('RIGHT_HORIZONTAL')
+                raw_forward = _mix_assist(raw_forward, assist_forward, self.assist_gain, self.assist_mix_mode)
+                raw_turn = _mix_assist(raw_turn, assist_turn, self.assist_gain, self.assist_mix_mode)
+
+            # "Turbo" boosts from the master's triggers (R2 → forward, L2 → turn), only in
+            # BALANCING / VELOCITY. The normalized inputs we send are still capped at [-1, 1]
+            # (the robot rejects anything outside that), so the boost can't be applied here
+            # without clamping it away. Instead we push boost *factors* (trigger * per-mode
+            # scale) to the robot, which scales forward.max / turn.max by (1 + boost) — letting
+            # the commands actually exceed the normal maxima. Triggers are floored at 0 to
+            # ignore the released state (reads negative on some pads).
+            boost_forward = 0.0
+            boost_turn = 0.0
+            if self.boost_joystick is not None and self.control.mode in (
+                    BILBO_Control_Mode.BALANCING, BILBO_Control_Mode.VELOCITY):
+                is_balancing = self.control.mode == BILBO_Control_Mode.BALANCING
+                r2 = max(0.0, self.boost_joystick.getAxis('RIGHT_TRIGGER'))
+                l2 = max(0.0, self.boost_joystick.getAxis('LEFT_TRIGGER'))
+                boost_forward = r2 * (self.boost_scale_balancing if is_balancing
+                                      else self.boost_scale_velocity)
+                boost_turn = l2 * (self.boost_scale_turn_balancing if is_balancing
+                                   else self.boost_scale_turn_velocity)
+            self._send_input_boost(boost_forward, boost_turn)
 
             if not self.joystick_enabled:
                 self._joystick_stop_event.wait(JOYSTICK_UPDATE_TIME)
@@ -372,6 +598,17 @@ class BILBO_CLI_CommandSet(CommandSet):
                                ),
                                description='Deactivates the control on the robot',
                                arguments=[])
+
+        nudge_command = Command(
+            name='nudge',
+            function=self.control.nudge,
+            description='One-shot position nudge to free the robot from a wall. OFF mode only, robot must be lying over. Distance in meters; direction auto-picked from theta.',
+            allow_positionals=True,
+            execute_in_thread=True,
+            arguments=[
+                CommandArgument(name='distance', short_name='d', type=float, optional=True, default=0.2,
+                                description='Travel distance in meters (magnitude; direction away from the fall)'),
+            ])
 
         stable_command = Command(name='stable',
                                  description='Checks if the robot is stable',
@@ -834,7 +1071,8 @@ class BILBO_CLI_CommandSet(CommandSet):
                                                            stable_command,
                                                            test_communication,
                                                            external_input_command,
-                                                           reset_drive_command],
+                                                           reset_drive_command,
+                                                           nudge_command],
 
                          children=[control_command_set, experiment_command_set, navigation_command_set])
 

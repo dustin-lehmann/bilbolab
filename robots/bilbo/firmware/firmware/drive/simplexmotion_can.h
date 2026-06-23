@@ -41,6 +41,19 @@
 #define SIMPLEXMOTION_CAN_REG_SPEED_FILTER 121
 #define SIMPLEXMOTION_CAN_REG_MOTOR_OPTIONS 212
 #define SIMPLEXMOTION_CAN_REG_RAMP_SPEED_MAX 351
+#define SIMPLEXMOTION_CAN_REG_RAMP_ACC_MAX 353
+#define SIMPLEXMOTION_CAN_REG_RAMP_DEC_MAX 354
+#define SIMPLEXMOTION_CAN_REG_TARGET_RELATIVE 448
+#define SIMPLEXMOTION_CAN_REG_TARGET_FILTER 461
+
+// Closed-loop regulator / PID gains (shared by speed & position modes; unused in
+// torque mode, so changing them for the nudge does not affect balancing).
+#define SIMPLEXMOTION_CAN_REG_REG_KP 300
+#define SIMPLEXMOTION_CAN_REG_REG_KI 301
+#define SIMPLEXMOTION_CAN_REG_REG_KD 302
+#define SIMPLEXMOTION_CAN_REG_REG_LIMIT 303
+#define SIMPLEXMOTION_CAN_REG_REG_DELAY 304
+#define SIMPLEXMOTION_CAN_REG_REG_INERTIA 306
 
 // Event registers (20 events available, indices 0..19)
 #define SIMPLEXMOTION_CAN_REG_EVENT_CONTROL  680
@@ -57,6 +70,9 @@
 typedef enum simplexmotion_can_mode_t : uint8_t {
 	SIMPLEXMOTION_CAN_MODE_OFF = 0,
 	SIMPLEXMOTION_CAN_MODE_RESET = 1,
+	SIMPLEXMOTION_CAN_MODE_PWM = 10,
+	SIMPLEXMOTION_CAN_MODE_POSITION = 20,
+	SIMPLEXMOTION_CAN_MODE_POSITIONRAMP = 21,
 	SIMPLEXMOTION_CAN_MODE_TORQUE = 40,
 	SIMPLEXMOTION_CAN_MODE_SPEEDRAMP = 33,
 	SIMPLEXMOTION_CAN_MODE_SPEEDLOWRAMP = 34,
@@ -88,6 +104,13 @@ public:
 
 	HAL_StatusTypeDef beep(uint16_t amplitude);
 	HAL_StatusTypeDef setTorque(float torque);
+	HAL_StatusTypeDef enterTorqueMode() override;
+	HAL_StatusTypeDef enterPwmMode() override;
+	HAL_StatusTypeDef startPwmNudge(float wheel_revolutions, int16_t pwm) override;
+	pwm_nudge_state_t updatePwmNudge() override;
+	int32_t getRobotProgress() override;
+	void setSyncTrim(int16_t robot_trim) override;
+	HAL_StatusTypeDef readPosition(int32_t &position);
 
 	HAL_StatusTypeDef readHardwareRev();
 	HAL_StatusTypeDef readSoftwareRev(uint16_t &software_rev);
@@ -121,6 +144,14 @@ public:
 private:
 
 	HAL_StatusTypeDef setTarget(int32_t target);
+
+	// Open-loop nudge (PWM) progress tracking.
+	int32_t _nudge_target = 0;
+	int16_t _nudge_pwm = 0;
+	int32_t _nudge_start = 0;
+	int32_t _nudge_last_pos = 0;
+	int32_t _nudge_progress_pos = 0;
+	uint32_t _nudge_progress_tick = 0;
 
 	HAL_StatusTypeDef write(uint16_t reg, uint8_t* data, uint8_t length);
 	HAL_StatusTypeDef write(uint16_t reg, float data);

@@ -95,6 +95,45 @@
 #define BILBO_FIRMWARE_USE_MOTORS 1
 
 /* ================================================================
+ * MANUAL NUDGE ("free from wall")
+ * ================================================================ */
+
+// One-shot nudge to roll the robot a defined distance when it is lying on the floor
+// (executable only in OFF mode), driven OPEN-LOOP in PWM (mode 10) rather than with
+// a position loop: the position loop rings badly on the robot's reflected inertia,
+// whereas open-loop PWM just rolls the wheel and is speed-bounded (no torque-style
+// runaway). The firmware watches the encoder and cuts the PWM once each wheel has
+// rolled the commanded distance (or stalls).
+
+// PWM duty for the nudge: signed motor-voltage setpoint (TargetInput in mode 10),
+// where +-32767 = +-100% voltage. Low = slow roll. Raise it if the loaded wheel
+// will not break free from stiction; lower it if the move is too fast/jerky.
+// WARNING: torque is NOT limited in PWM mode — keep this modest and never run it
+// against a blocked wheel (the stall guard below cuts it, but start conservative).
+#define BILBO_NUDGE_PWM 3000             // ~9% of full voltage
+
+// Wheel-sync trim: the two open-loop wheels run at slightly different speeds, so
+// the robot would curve. Each wheel's PWM is trimmed by (SYNC_KP * position
+// difference in counts) to keep them matched and roll straight. Higher = straighter
+// but jerkier; lower = smoother but curves more. The trim is clamped to
+// +-BILBO_NUDGE_PWM and the resulting PWM to +-BILBO_NUDGE_PWM_MAX. 8192 cnt = 1 rev.
+#define BILBO_NUDGE_SYNC_KP 4
+#define BILBO_NUDGE_PWM_MAX 7000
+
+// Stall guard: if a wheel advances fewer than _STALL_MIN_COUNTS encoder counts
+// within _STALL_CHECK_MS, it is treated as blocked and its PWM is cut (protects the
+// motor, since PWM mode does not limit current). 8192 counts = one wheel rev.
+#define BILBO_NUDGE_STALL_CHECK_MS 500
+#define BILBO_NUDGE_STALL_MIN_COUNTS 20
+
+// Max time a nudge runs before the motors are released back to torque/OFF (ms).
+#define BILBO_NUDGE_TIMEOUT_MS 8000
+
+// Only nudge when the robot is clearly lying over: |theta| above this (radians,
+// ~20 deg). The move direction is chosen from sign(theta) to roll away from the fall.
+#define BILBO_NUDGE_MIN_THETA 0.35f
+
+/* ================================================================
  * TRAJECTORIES & LOGGING
  * ================================================================ */
 
