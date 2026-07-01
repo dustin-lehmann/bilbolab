@@ -102,5 +102,5 @@ speed:
   default_level: Medium          # level applied to a robot when it connects (Slow | Medium | Fast)
   levels:
     - { name: Slow,   forward: 0.50, turn: 0.70 }
-    - { name: Medium, forward: 0.75, turn: 0.85 }
+    - { name: Medium, forward: 0.80, turn: 0.85 }
     - { name: Fast,   forward: 1.00, turn: 1.00 }
