@@ -2,6 +2,8 @@ import enum
 import threading
 import time
 
+from core.utils.callbacks import CallbackContainer, Callback, callback_definition
+from core.utils.events import EventContainer, Event, event_definition
 from core.utils.network import getInterfaceIP
 
 
@@ -35,6 +37,14 @@ class PyCameraNativeResolutions(enum.Enum):
     V3 = (2304, 1296)
     GS = (1456, 1088)
 
+
+@callback_definition
+class PyCameraCallbacks:
+    frame: CallbackContainer
+
+@event_definition
+class PyCameraEvents(EventContainer):
+    frame: Event
 
 # ======================================================================================================================
 class PyCamera:
@@ -143,6 +153,9 @@ class PyCamera:
         # Cache the configured main size for plane slicing (avoids problems with padded stride)
         self._w, self._h = self.picam_config["main"]["size"]
 
+        self.callbacks = PyCameraCallbacks()
+        self.events = PyCameraEvents()
+
         self.logger.info(
             f"PyCamera initialized: {self.resolution} @ {self.version} (image_format={self.image_format}, auto_focus={auto_focus}, exposure_time={exposure_time}, gain={gain})")
 
@@ -247,9 +260,13 @@ class PyCamera:
     def takeFrame(self):
         with self._camera_lock:
             if self.image_format == "gray":
-                return self._capture_gray_from_yuv420()
+                frame = self._capture_gray_from_yuv420()
             else:  # "rgb"
-                return self._capture_rgb()
+                frame = self._capture_rgb()
+
+        self.callbacks.frame.call(frame)
+        self.events.frame.set(frame)
+        return frame
 
     @staticmethod
     def getImageBuffer(frame):
@@ -289,7 +306,7 @@ if __name__ == '__main__':
         exposure_time=2000,
         gain=10,
         frame_rate=60,
-        image_format="gray",  # <- choose "rgb" or "gray"
+        image_format="rgb",  # <- choose "rgb" or "gray"
     )
 
     camera.init()

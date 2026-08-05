@@ -352,14 +352,14 @@ if __name__ == '__main__':
     camera.init()
     camera.start()
     arc_detector.callbacks.new_measurement.register(print_measurements)
-    # arc_detector.start()
-    arc_detector.testMaximumDetectionRate()
+    arc_detector.start()
+    # arc_detector.testMaximumDetectionRate()
 
-    # streamer = VideoStreamer()
-    # streamer.image_fetcher = arc_detector.getOverlayFrame
-    # streamer.start()
-    # try:
-    #     while True:
-    #         time.sleep(10)
-    # except KeyboardInterrupt:
-    #     arc_detector.close()
+    streamer = VideoStreamer()
+    streamer.image_fetcher = arc_detector.getOverlayFrame
+    streamer.start()
+    try:
+        while True:
+            time.sleep(10)
+    except KeyboardInterrupt:
+        arc_detector.close()

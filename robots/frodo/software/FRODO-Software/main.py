@@ -14,10 +14,11 @@ def main():
     frodo = FRODO()
     frodo.init()
     frodo.start()
+
     # frodo.control.setTrackSpeed(0.0, 0.0)
     # frodo.core.lowlevel.events.sample.on(printData)
 
-    # frodo.core.lowlevel.board.setRGBLEDExtern(color_to_255([1, 0, 0]))
+    frodo.core.lowlevel.board.setRGBLEDExtern(color_to_255([0, 1, 0]))
 
     # time.sleep(1)
     # frodo.control.setSpeed(0.2, 0.2)
