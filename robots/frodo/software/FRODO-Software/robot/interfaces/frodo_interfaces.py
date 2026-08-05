@@ -38,6 +38,7 @@ class FRODO_Interfaces:
         self._joystick_manager.callbacks.joystick_disconnected.register(self._onJoystickDisconnected)
 
         self._joystick = None  # type: ignore
+        self._joystick_thread = None  # type: ignore
 
         register_exit_callback(self.close)
 
@@ -59,8 +60,9 @@ class FRODO_Interfaces:
         self.logger.info(f'Joystick connected: {joystick.name}')
         self._joystick = joystick
 
-        self_joystick_thread = threading.Thread(target=self._joystickTask, daemon=True)
-        self_joystick_thread.start()
+        self._exit_joystick_task = False
+        self._joystick_thread = threading.Thread(target=self._joystickTask, daemon=True)
+        self._joystick_thread.start()
 
     # ------------------------------------------------------------------------------------------------------------------
     def _onJoystickDisconnected(self, joystick, *args, **kwargs):
