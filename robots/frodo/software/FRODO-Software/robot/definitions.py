@@ -153,7 +153,7 @@ class FRODO_Aruco_Settings:
     detection_rate : int
         Desired detection/processing rate [Hz].
     dictionary : int
-        OpenCV ArUco dictionary constant, e.g., cv2.aruco.DICT_4X4_100.
+        OpenCV ArUco dictionary constant, e.g., cv2.aruco.DICT_4X4_1000.
     marker_size : float
         Side length of the printed markers [m].
     marker_front : int
@@ -378,9 +378,17 @@ OPTITRACK_SETTINGS: Dict[str, FRODO_Optitrack_Settings] = {
 
 # === FRODO: Per-robot ArUco settings ==================================================================================
 
+# NOTE: dictionary is DICT_4X4_1000 (not the old DICT_4X4_100) so that these
+# robot-identity markers use the SAME dictionary as the art_project floor grid
+# (see ARUCO_DICT_TYPE in applications/art_project/aruco_utils.py). Different
+# 4x4 dictionary sizes (50/100/250/1000) are NOT nested - the same numeric ID
+# encodes a completely different bit pattern in each one, which is exactly
+# what made marker 52 (allocated to FRODO3 here) undetectable when reused as
+# an art_project grid node under DICT_4X4_1000. Changing this requires
+# reprinting/remounting the physical body markers for all four robots.
 ARUCO_SETTINGS_FRODO1 = FRODO_Aruco_Settings(
     detection_rate=15,
-    dictionary=cv2.aruco.DICT_4X4_100,
+    dictionary=cv2.aruco.DICT_4X4_1000,
     marker_size=0.08,
     marker_front=18,
     marker_back=19,
@@ -388,7 +396,7 @@ ARUCO_SETTINGS_FRODO1 = FRODO_Aruco_Settings(
 
 ARUCO_SETTINGS_FRODO2 = FRODO_Aruco_Settings(
     detection_rate=15,
-    dictionary=cv2.aruco.DICT_4X4_100,
+    dictionary=cv2.aruco.DICT_4X4_1000,
     marker_size=0.08,
     marker_front=50,
     marker_back=51,
@@ -396,7 +404,7 @@ ARUCO_SETTINGS_FRODO2 = FRODO_Aruco_Settings(
 
 ARUCO_SETTINGS_FRODO3 = FRODO_Aruco_Settings(
     detection_rate=15,
-    dictionary=cv2.aruco.DICT_4X4_100,
+    dictionary=cv2.aruco.DICT_4X4_1000,
     marker_size=0.08,
     marker_front=52,
     marker_back=53,
@@ -404,7 +412,7 @@ ARUCO_SETTINGS_FRODO3 = FRODO_Aruco_Settings(
 
 ARUCO_SETTINGS_FRODO4 = FRODO_Aruco_Settings(
     detection_rate=15,
-    dictionary=cv2.aruco.DICT_4X4_100,
+    dictionary=cv2.aruco.DICT_4X4_1000,
     marker_size=0.08,
     marker_front=14,
     marker_back=15,

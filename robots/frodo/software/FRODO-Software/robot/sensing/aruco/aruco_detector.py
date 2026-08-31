@@ -88,7 +88,7 @@ class ArucoDetector:
             self,
             camera: PyCamera,
             image_resolution: tuple | list | None = None,
-            aruco_dict: int = arc.DICT_4X4_100,
+            aruco_dict: int = arc.DICT_4X4_1000,
             marker_size: float = 0.08,
             run_in_thread: bool = True,
             Ts: float = 0.1,
@@ -346,7 +346,7 @@ if __name__ == '__main__':
         camera=camera,
         Ts=0.025,
         image_resolution=camera.resolution,
-        aruco_dict=arc.DICT_4X4_100,
+        aruco_dict=arc.DICT_4X4_1000,
         marker_size=0.08,
     )
     camera.init()

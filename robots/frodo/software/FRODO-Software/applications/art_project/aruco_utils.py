@@ -5,7 +5,9 @@
 import cv2.aruco as aruco
 
 # ArUco dictionary in use. Marker IDs must have been generated with this dictionary.
-ARUCO_DICT_TYPE = aruco.DICT_4X4_50
+# DICT_4X4_1000 (IDs 0-999) so it covers both the grid nodes (0-53) and the
+# servo trigger markers (995-999, see SERVO_TRIGGER_IDS in art_project_frodo.py).
+ARUCO_DICT_TYPE = aruco.DICT_4X4_1000
 
 # detectMarkers() is slow when scanning the whole frame; that delay makes the robot
 # overshoot an intersection and miss the turn. Only scan the bottom region (markers

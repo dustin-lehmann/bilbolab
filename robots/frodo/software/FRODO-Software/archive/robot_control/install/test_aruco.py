@@ -8,7 +8,7 @@ import sys
 os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
 
 MARKER_SIZE = 0.08
-ARUCO_DICT = arc.DICT_4X4_100
+ARUCO_DICT = arc.DICT_4X4_1000
 
 camera_matrix = np.asarray(
     [[559.933357702163, 0.0, 640.5283169916149], [0.0, 556.8863039163979, 362.6814257152788], [0.0, 0.0, 1.0]])

@@ -57,7 +57,7 @@ class ArucoDetector:
     frame_out: np.array = None
 
     def __init__(self, camera_version: PyCameraType = PyCameraType.V3, image_resolution: tuple = None,
-                 aruco_dict: int = arc.DICT_4X4_100,
+                 aruco_dict: int = arc.DICT_4X4_1000,
                  marker_size: float = 0.08, run_in_thread: bool = True, Ts: float = 0.1, exposure_time = None, gain=None):
 
         self.Ts = Ts
