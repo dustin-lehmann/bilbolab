@@ -23,6 +23,7 @@ from aruco_utils import (
     create_aruco_detector, detect_markers, marker_bbox,
 )
 from servo_trigger import ArucoServoTrigger
+from grid_nav import grid_nodes, next_heading, DIRECTIONS
 
 # --- SERVO TRIGGER (on specific ArUco IDs) ---
 # First verify the pin/servo with servo_test.py.
@@ -119,6 +120,40 @@ TURN_TIMEOUT = 10.0
 
 
 # =====================================================================================
+#  MULTI-ROBOT COLLISION AVOIDANCE (Approach A: reactive, no central host)
+# =====================================================================================
+# Floor grid size - MUST match CITY_MAP's layout (id -> (id % COLS, id // COLS)).
+GRID_COLS = 9
+GRID_ROWS = 6
+GRID_NODES = grid_nodes(GRID_COLS, GRID_ROWS)
+
+# Body markers per robot (robot/definitions.py -> ARUCO_SETTINGS_*). These are
+# the VERTICAL markers on the robot bodies; they are detected by frodo.sensors
+# (the floor grid has its own separate detector, see aruco_utils.py). Kept in
+# the 900s so they never collide with the floor grid (0-53) or the metronome
+# servo triggers (995-999).
+ROBOT_BODY_MARKERS = {
+    "frodo1": {900, 901},
+    "frodo2": {902, 903},
+    "frodo3": {904, 905},
+    "frodo4": {906, 907},
+}
+# Right-of-way: earlier = higher priority. A higher-priority robot ignores the
+# others and drives its own shortest path. A lower-priority robot, when it sees
+# a higher-priority robot occupying the cell straight ahead at an intersection,
+# re-routes around it (shortest path with that cell removed). The symmetric
+# EMERGENCY stop below still applies to every robot regardless of priority.
+ROBOT_PRIORITY = ["frodo1", "frodo2", "frodo3", "frodo4"]
+
+# Another robot seen closer than *_BLOCK_DISTANCE_M and within +-*_AHEAD_BEARING
+# of straight-ahead makes the cell ahead "occupied". *_EMERGENCY_DISTANCE_M is a
+# hard stop for any robot (prevents actual contact while the other one clears).
+OTHER_ROBOT_BLOCK_DISTANCE_M = 0.55
+OTHER_ROBOT_EMERGENCY_DISTANCE_M = 0.28
+OTHER_ROBOT_AHEAD_BEARING = np.radians(45)
+
+
+# =====================================================================================
 class ArtProjectAgent:
     """
     Line-following + ArUco grid-navigation + servo-trigger agent.
@@ -185,6 +220,25 @@ class ArtProjectAgent:
         # now this is ONLY shown on screen - it does NOT drive the FSM/turn decisions,
         # that logic still relies on the pixel-based ArUco detection.
         self.pose_est = PoseEstimator(frodo, verbose=False)
+
+        # --- multi-robot collision avoidance ---
+        my_id = frodo.common.id
+        try:
+            self.my_priority = ROBOT_PRIORITY.index(my_id)
+        except ValueError:
+            self.my_priority = len(ROBOT_PRIORITY)      # unknown host -> lowest priority
+        # marker IDs of robots that outrank me -> I route around / yield to these
+        self.higher_priority_markers = set()
+        for other_id in ROBOT_PRIORITY[:self.my_priority]:
+            self.higher_priority_markers |= ROBOT_BODY_MARKERS.get(other_id, set())
+        # every other robot's markers -> used by the symmetric emergency stop
+        self.other_robot_markers = set()
+        for other_id, markers in ROBOT_BODY_MARKERS.items():
+            if other_id != my_id:
+                self.other_robot_markers |= markers
+        frodo.logger.info(
+            f"Collision avoidance: id={my_id!r} priority={self.my_priority} "
+            f"route-around={sorted(self.higher_priority_markers)}")
 
         self._register_wifi_commands()
 
@@ -263,6 +317,45 @@ class ArtProjectAgent:
             if self.frame_out is not None:
                 return self.frodo.sensors.camera.getImageBufferBytes(self.frame_out)
             return None
+
+    # === MULTI-ROBOT SENSING ==========================================================================================
+    def _nearest_robot_ahead(self, marker_ids):
+        """(distance_m, bearing_rad) of the closest body marker in `marker_ids`
+        currently reported by frodo.sensors, or None. bearing: + = left,
+        - = right, 0 = straight ahead. Only markers in front (fwd > 0) count."""
+        if not marker_ids:
+            return None
+        try:
+            sample = self.frodo.sensors.getSample()
+        except Exception:
+            return None
+        best = None
+        for m in sample.aruco_measurements:
+            if m.measured_aruco_id not in marker_ids:
+                continue
+            fwd, left = float(m.position[0]), float(m.position[1])
+            if fwd <= 0.0:
+                continue
+            dist = float(np.hypot(fwd, left))
+            if best is None or dist < best[0]:
+                best = (dist, float(np.arctan2(left, fwd)))
+        return best
+
+    def _robot_emergency_ahead(self) -> bool:
+        """Another robot (any priority) close and straight ahead -> hard stop."""
+        hit = self._nearest_robot_ahead(self.other_robot_markers)
+        return (hit is not None
+                and hit[0] <= OTHER_ROBOT_EMERGENCY_DISTANCE_M
+                and abs(hit[1]) <= OTHER_ROBOT_AHEAD_BEARING)
+
+    def _forward_cell_blocked(self) -> bool:
+        """A HIGHER-priority robot occupies the cell I'd enter by going straight."""
+        if self.my_priority == 0:
+            return False
+        hit = self._nearest_robot_ahead(self.higher_priority_markers)
+        return (hit is not None
+                and hit[0] <= OTHER_ROBOT_BLOCK_DISTANCE_M
+                and abs(hit[1]) <= OTHER_ROBOT_AHEAD_BEARING)
 
     # === MAIN LOOP ====================================================================================================
     def run(self):
@@ -353,6 +446,7 @@ class ArtProjectAgent:
 
         shape_printed = False
         last_aruco_log = 0.0
+        last_robot_hold_log = 0.0
 
         try:
             while True:
@@ -399,6 +493,26 @@ class ArtProjectAgent:
                     with self._stream_frame_lock:
                         self.frame_out = display_frame
                     break
+
+                # ---------------- EMERGENCY STOP (another robot dead ahead) ----------------
+                # Symmetric (ignores priority) - just don't hit each other. Only
+                # while driving forward in a corridor; the short in-place TURNING
+                # states are left alone so the psi PI controller isn't disturbed.
+                if self.state in ("FOLLOWING", "APPROACHING", "ADVANCING_TO_TURN",
+                                  "ADVANCING_FROM_TURN", "PARKING",
+                                  "SERVO_APPROACHING", "SERVO_ADVANCING") \
+                        and self._robot_emergency_ahead():
+                    frodo.control.setTrackSpeed(0.0, 0.0)
+                    cv2.putText(display_frame, "ROBOT AHEAD - HOLDING", (30, 150),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
+                    if time.time() - last_robot_hold_log > 1.0:
+                        last_robot_hold_log = time.time()
+                        print(f"[{last_robot_hold_log:.1f}] EMERGENCY HOLD - robot within "
+                              f"{OTHER_ROBOT_EMERGENCY_DISTANCE_M} m ahead")
+                    with self._stream_frame_lock:
+                        self.frame_out = display_frame
+                    time.sleep(0.05)
+                    continue
 
                 # ================= ARUCO DETECTION =================
                 # The camera can be configured for a gray output (image_format="gray"
@@ -565,17 +679,28 @@ class ArtProjectAgent:
                         # can't safely decide CONTINUE vs TURN. Wait for the second fix.
                         break
 
-                    dx = target_node[0] - current_coord[0]
-                    dy = target_node[1] - current_coord[1]
+                    # ---------------- NEXT STEP (shortest path, route around a blocking robot) ----------------
+                    # BFS over the grid gives a minimum-length path; if a
+                    # higher-priority robot is sitting in the cell I'd drive into
+                    # by going straight, drop that cell so BFS finds a detour.
+                    blocked_cells = set()
+                    if self._forward_cell_blocked():
+                        step = DIRECTIONS.get(ROBOT_HEADING, (0, 0))
+                        ahead_cell = (current_coord[0] + step[0], current_coord[1] + step[1])
+                        blocked_cells.add(ahead_cell)
+                        print(f"  [avoidance] higher-priority robot ahead - routing around {ahead_cell}")
 
-                    if dx > 0:
-                        desired_heading = "EAST"
-                    elif dx < 0:
-                        desired_heading = "WEST"
-                    elif dy > 0:
-                        desired_heading = "NORTH"
-                    else:
-                        desired_heading = "SOUTH"
+                    desired_heading = next_heading(current_coord, target_node, GRID_NODES,
+                                                   blocked=blocked_cells)
+                    if desired_heading is None and blocked_cells:
+                        # No detour exists (rare on an open grid). Fall back to the
+                        # unblocked shortest path - the EMERGENCY stop still keeps
+                        # the robots from actually touching.
+                        print("  [avoidance] no detour - holding to shortest path, emergency-stop will guard")
+                        desired_heading = next_heading(current_coord, target_node, GRID_NODES)
+                    if desired_heading is None:
+                        print(f"!!! No path from {current_coord} to {target_node} - staying put")
+                        break
 
                     print(f"Heading: {ROBOT_HEADING} -> Desired: {desired_heading}")
 

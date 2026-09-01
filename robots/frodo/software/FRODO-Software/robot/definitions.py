@@ -386,36 +386,43 @@ OPTITRACK_SETTINGS: Dict[str, FRODO_Optitrack_Settings] = {
 # what made marker 52 (allocated to FRODO3 here) undetectable when reused as
 # an art_project grid node under DICT_4X4_1000. Changing this requires
 # reprinting/remounting the physical body markers for all four robots.
+#
+# Body-marker IDs are in the 900s ON PURPOSE: the art_project floor grid uses
+# 0-53 (CITY_MAP) and the metronome servo triggers use 995-999. Keeping body
+# markers out of both ranges means one robot's camera never mistakes another
+# robot's body marker for a grid node (which produced bogus position fixes) or
+# a servo trigger. Generate the printable images with
+# applications/art_project/generate_body_markers.py.
 ARUCO_SETTINGS_FRODO1 = FRODO_Aruco_Settings(
     detection_rate=15,
     dictionary=cv2.aruco.DICT_4X4_1000,
     marker_size=0.08,
-    marker_front=18,
-    marker_back=19,
+    marker_front=900,
+    marker_back=901,
 )
 
 ARUCO_SETTINGS_FRODO2 = FRODO_Aruco_Settings(
     detection_rate=15,
     dictionary=cv2.aruco.DICT_4X4_1000,
     marker_size=0.08,
-    marker_front=50,
-    marker_back=51,
+    marker_front=902,
+    marker_back=903,
 )
 
 ARUCO_SETTINGS_FRODO3 = FRODO_Aruco_Settings(
     detection_rate=15,
     dictionary=cv2.aruco.DICT_4X4_1000,
     marker_size=0.08,
-    marker_front=52,
-    marker_back=53,
+    marker_front=904,
+    marker_back=905,
 )
 
 ARUCO_SETTINGS_FRODO4 = FRODO_Aruco_Settings(
     detection_rate=15,
     dictionary=cv2.aruco.DICT_4X4_1000,
     marker_size=0.08,
-    marker_front=14,
-    marker_back=15,
+    marker_front=906,
+    marker_back=907,
 )
 
 ARUCO_SETTINGS: Dict[str, FRODO_Aruco_Settings] = {
