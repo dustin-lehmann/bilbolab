@@ -86,20 +86,19 @@ SIGMA_MEAS_PER_M = 0.05        # [m/m] - mesafeyle ekstra hata
 # metre karsiligi - bkz. art_project_frodo.py).
 MAX_RELIABLE_DISTANCE_M = 1.2
 
-# marker_id -> (x_world_m, y_world_m). id0 orijin (0,0) kabul edilerek elle
-# mezurayla OLCULDU (santimetreden metreye cevrildi). Grid indeksleri:
-# id0:(0,0) id1:(1,0) id2:(2,0) id3:(0,1) id4:(1,1) id5:(2,1) id6:(0,2)
-# id7:(1,2) id8:(2,2) - CITY_MAP (art_project_frodo.py) ile ayni duzen.
+# marker_id -> (x_world_m, y_world_m). id0 orijin (0,0) kabul edilip, sahada
+# olculen 0.286m kare grid araligina gore TURETILDI (id -> (id % GRID_COLS,
+# id // GRID_COLS), ayni CITY_MAP (art_project_frodo.py) duzeni: 9 sutun,
+# satir-major, id0..8 satir0, id9..17 satir1, ... id45..53 satir5).
+# NOT: CITY_MAP'in grid boyutu (GRID_COLS) veya hucre araligi (GRID_CELL_M)
+# degisirse burasi da guncellenmeli - iki dosya birbirinden bagimsiz tutuluyor
+# (dongusel import'tan kacinmak icin), elle senkronize edin.
+GRID_COLS = 9
+GRID_CELL_M = 0.286  # saha olcumu: gridler her iki yonde de kare
+
 MARKER_WORLD_MAP: dict[int, tuple[float, float]] = {
-    0: (0.000, 0.000),
-    1: (0.380, 0.000),
-    2: (0.720, 0.000),
-    3: (0.000, 0.325),
-    4: (0.380, 0.373),
-    5: (0.720, 0.325),
-    6: (0.000, 0.720),
-    7: (0.368, 0.720),
-    8: (0.715, 0.720),
+    marker_id: ((marker_id % GRID_COLS) * GRID_CELL_M, (marker_id // GRID_COLS) * GRID_CELL_M)
+    for marker_id in range(54)
 }
 
 

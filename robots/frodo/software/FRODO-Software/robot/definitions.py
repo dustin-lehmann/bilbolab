@@ -329,7 +329,7 @@ FRODO_CAMERA_SETTINGS_FRODO4 = FRODO_Camera_Settings(
     gain=10,
     exposure_time=4000,
     frame_rate=60,
-    image_format="gray",
+    image_format="rgb",  # art_project line following needs color (pink/green HSV masks)
 )
 
 CAMERA_SETTINGS: Dict[str, FRODO_Camera_Settings] = {

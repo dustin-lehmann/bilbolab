@@ -70,7 +70,7 @@ class FRODO_Sensors:
     # === INIT =========================================================================================================
     def __init__(self, common: FRODO_Common):
         self.common = common
-        self.logger = Logger("SENSORS", "DEBUG")
+        self.logger = Logger("SENSORS", "INFO")
         self.callbacks = FRODO_Sensors_Callbacks()
         self.events = FRODO_Sensors_Events()
 

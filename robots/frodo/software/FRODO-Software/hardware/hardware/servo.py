@@ -5,6 +5,31 @@ import core.hardware.rpi_gpio as gpio
 
 
 # ======================================================================================================================
+class NullServo:
+    """No-op stand-in for when no servo is physically wired up yet (or the
+    hardware-PWM prerequisites - rpi_hardware_pwm / the config.txt overlay - are
+    missing). Accepts the same calls as Servo/HardwareServo and does nothing, so
+    the rest of the app runs unchanged."""
+
+    def __init__(self, *args, **kwargs):
+        self._current_angle = None
+
+    def setAngle(self, angle: float, settle_time: float = 0.3):
+        self._current_angle = angle
+        if settle_time > 0:
+            time.sleep(settle_time)
+
+    def getAngle(self) -> float | None:
+        return self._current_angle
+
+    def release(self):
+        ...
+
+    def stop(self):
+        ...
+
+
+# ======================================================================================================================
 class _ServoAngleMixin:
     """Aci (derece) <-> duty cycle (%) donusumunu paylasir. Alt siniflar
     frequency/min_pulse_ms/max_pulse_ms/min_angle/max_angle alanlarini set eder."""

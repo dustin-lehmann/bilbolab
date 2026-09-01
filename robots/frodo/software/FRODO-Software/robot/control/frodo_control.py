@@ -94,7 +94,10 @@ class FRODO_Control:
 
     # ------------------------------------------------------------------------------------------------------------------
     def close(self):
-        self._setTrackSpeedPrivate(0, 0)
+        # Directly write zero to the lowlevel board: _setTrackSpeedPrivate() is a no-op in
+        # EXTERNAL mode, and the SYNCHRONOUS setTrackSpeed() path depends on the main task loop
+        # still being alive to flush self.input, which is not guaranteed during shutdown.
+        self._setLowlevelTrackSpeed(0, 0)
         self.logger.info("Exit FRODO Control")
 
     # ------------------------------------------------------------------------------------------------------------------
