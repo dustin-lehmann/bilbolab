@@ -77,7 +77,7 @@ class ArucoDetector:
 
         # init Aruco
         # self.dictionary = arc.getPredefinedDictionary(arc.DICT_6X6_250)
-        self.dictionary = arc.getPredefinedDictionary(arc.DICT_4X4_100)
+        self.dictionary = arc.getPredefinedDictionary(arc.DICT_4X4_1000)
         self.detector_params = arc.DetectorParameters()
         self.detector = arc.ArucoDetector(self.dictionary, self.detector_params)
 
