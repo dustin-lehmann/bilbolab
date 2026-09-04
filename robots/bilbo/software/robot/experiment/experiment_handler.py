@@ -735,6 +735,23 @@ class BILBO_ExperimentHandler:
             'action_status': action_status,
         })
 
+    # === MARKERS ======================================================================================================
+    def set_marker(self, marker_id: str, marker_value: Any, hold: bool = False) -> None:
+        """Set a named marker that is written into the sample's ``markers_json``.
+
+        Non-hold markers are cleared again at the end of the current step, so they
+        appear in exactly one sample. Hold markers persist until removed.
+        """
+        if marker_id in self.markers:
+            self.markers[marker_id].value = marker_value
+            self.markers[marker_id].hold = hold
+        else:
+            self.markers[marker_id] = ExperimentMarker(id=marker_id, value=marker_value, hold=hold)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def remove_marker(self, marker_id: str) -> None:
+        self.markers.pop(marker_id, None)
+
     # === SAMPLE =======================================================================================================
     def get_sample_dict(self) -> dict:
         if self.active_experiment is not None:

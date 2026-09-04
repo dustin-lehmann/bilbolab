@@ -228,12 +228,13 @@ class Event:
     # ------------------------------------------------------------------------------------------------------------------
     def wait(self, predicate: Predicate = None, timeout: float = None,
              stale_event_time: float = None) -> tuple[Any | _TimeoutSentinel, SubscriberMatch | None]:
-        subscriber = Subscriber(events=(self, predicate),
-                                timeout=timeout,
-                                stale_event_time=stale_event_time,
-                                once=True,
-                                )
-        return subscriber.wait()
+        subscriber = Subscriber(
+            events=(self, predicate) if predicate is not None else self,
+            timeout=timeout,
+            stale_event_time=stale_event_time,
+            once=True,
+        )
+        return subscriber.wait(timeout=timeout, stale_event_time=stale_event_time)
 
     # ------------------------------------------------------------------------------------------------------------------
     def set(self, data=None, flags: dict = None) -> None:

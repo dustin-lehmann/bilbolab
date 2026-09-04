@@ -1,0 +1,114 @@
+# Step-input sequence (forward direction)
+#
+# Robot must already be in BALANCING mode and settled before starting.
+# Applies three increasing torque steps on the external input (forward axis),
+# each held for hold_time and separated by zero_time of zero input
+# (durations/steps are set in the variables block):
+#
+#   zero_time   : 0
+#   hold_time   : +step_1
+#   zero_time   : 0
+#   hold_time   : +step_2
+#   zero_time   : 0
+#   hold_time   : +step_3
+#   end_time    : 0   (settle, so the end of step 3 is fully logged)
+#
+# Inputs are raw torques in Nm (normalized: false), split to
+# left/right = forward +/- turn. Markers ("phase") are written into the log
+# at each transition for later segmentation.
+
+id: step_sequence_forward
+description: "2 s zero input, then 2 s steps of 0.05 / 0.1 / 0.2 Nm, each followed by 2 s zero input (BALANCING mode)"
+timeout: 60.0
+
+requirements:
+  - type: require_control_mode
+    mode: BALANCING
+
+guards:
+  - type: disable_external_input
+  - type: zero_input
+
+variables:
+  step_1: 0.05
+  step_2: 0.1
+  step_3: 0.2
+  hold_time: 2.0
+  zero_time: 4.0
+  end_time: 2.0
+
+actions:
+  # --- Phase 0: zero input ---
+  - type: set_marker
+    marker_id: phase
+    marker_value: zero_0
+  - type: set_input
+    input: [0.0, 0.0]
+    normalized: false
+  - type: wait_time
+    time: "${zero_time}"
+
+  # --- Step 1 ---
+  - type: set_marker
+    marker_id: phase
+    marker_value: step_1
+  - type: set_input
+    input: ["${step_1}", 0.0]
+    normalized: false
+  - type: wait_time
+    time: "${hold_time}"
+
+  - type: set_marker
+    marker_id: phase
+    marker_value: zero_1
+  - type: set_input
+    input: [0.0, 0.0]
+    normalized: false
+  - type: wait_time
+    time: "${zero_time}"
+
+  # --- Step 2 ---
+  - type: set_marker
+    marker_id: phase
+    marker_value: step_2
+  - type: set_input
+    input: ["${step_2}", 0.0]
+    normalized: false
+  - type: wait_time
+    time: "${hold_time}"
+
+  - type: set_marker
+    marker_id: phase
+    marker_value: zero_2
+  - type: set_input
+    input: [0.0, 0.0]
+    normalized: false
+  - type: wait_time
+    time: "${zero_time}"
+
+  # --- Step 3 ---
+  - type: set_marker
+    marker_id: phase
+    marker_value: step_3
+  - type: set_input
+    input: ["${step_3}", 0.0]
+    normalized: false
+  - type: wait_time
+    time: "${hold_time}"
+
+  # --- End: back to zero, then settle ---
+  - type: set_marker
+    marker_id: phase
+    marker_value: zero_3
+  - type: set_input
+    input: [0.0, 0.0]
+    normalized: false
+  - type: wait_time
+    time: "${end_time}"
+
+  - type: set_marker
+    marker_id: phase
+    marker_value: end
+  - type: beep
+    frequency: 400
+    time_ms: 300

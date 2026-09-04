@@ -1,1 +1,1 @@
-TESTBED_SIM_RESULTS_PATH = "/Users/lehmann/Seafile/work/output/publications/dissertation/document/content/testbed/figures/results-simulation"
+TESTBED_SIM_RESULTS_PATH = "/Users/lehmann/Seafile/work/publishing/publications/dissertation/document/content/testbed/figures/results-simulation"

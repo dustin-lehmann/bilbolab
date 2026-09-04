@@ -1,5 +1,6 @@
 import time
 
+from archive.robot_control.utils import elapsedTimer
 from core.utils.colors import color_to_255
 from robot.frodo import FRODO
 from robot.frodo_core.lowlevel_definitions import FRODO_LL_SAMPLE
@@ -19,6 +20,10 @@ def main():
     # frodo.core.lowlevel.events.sample.on(printData)
 
     frodo.core.lowlevel.board.setRGBLEDExtern(color_to_255([0, 1, 0]))
+
+
+    x = ElapsedTimer()
+
 
     # time.sleep(1)
     # frodo.control.setSpeed(0.2, 0.2)
